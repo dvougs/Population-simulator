@@ -181,7 +181,9 @@ function traceRivers(map, elev, wanted, rng) {
       }
     }
     if (candidates.length === 0) return; // no room for more rivers
-    let cur = candidates[rng.int(candidates.length)];
+    // Sources come from the higher half of the candidates, so rivers are long enough to see.
+    candidates.sort(byValueDesc(elev));
+    let cur = candidates[rng.int(Math.ceil(candidates.length / 2))];
     for (let steps = 0; steps < count; steps++) {
       river[cur] = 1;
       let next = -1;

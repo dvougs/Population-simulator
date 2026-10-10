@@ -31,7 +31,7 @@ All noise is value noise (random values on a grid, blended with smoothstep), sam
    - temperature = 0.7 × latitude + 0.3 × noise − 0.2 × elevation, where latitude is 1 on the middle row and 0 on the top and bottom rows;
    - moisture = noise (3 octaves, 2 + ⌊size ÷ 10⌋ cells).
    - The coldest 15% become tundra; then the driest 15% of that same starting number (dryness = 1 − moisture + 0.3 × temperature) become desert; then the wettest 30% become forest; the rest are plains.
-6. **Rivers.** Up to *river count* rivers. Each starts at a random hill or mountain hex that is not next to water or another river (any inland non-coast land hex if there is no such hill or mountain; fewer rivers if there is no room). It flows hex by hex to the lowest neighbour until it reaches water (sea or lake) or joins another river. Hollows are filled before tracing, so every river runs downhill to water.
+6. **Rivers.** Up to *river count* rivers. Each starts at a hill or mountain hex that is not next to water or another river (any inland non-coast land hex if there is no such hill or mountain; fewer rivers if there is no room), picked at random from the higher half of those hexes by elevation. It flows hex by hex to the lowest neighbour until it reaches water (sea or lake) or joins another river. Hollows are filled before tracing, so every river runs downhill to water.
 
 When several hexes tie on a value, the one with the lower index (row × size + column) comes first.
 
