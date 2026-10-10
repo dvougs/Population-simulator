@@ -1,0 +1,20 @@
+{
+  "name": "population-simulator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Browser population simulation game. Plain ES modules, no build step.",
+  "type": "module",
+  "scripts": {
+    "start": "node tools/serve.js",
+    "test": "node --test \"tests/*.test.js\"",
+    "headless": "node tools/headless.js",
+    "perf": "node tools/headless.js --ticks 2000 --size 100 --min-tps 150",
+    "e2e": "playwright test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.0"
+  }
+}
