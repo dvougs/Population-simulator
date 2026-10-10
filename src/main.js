@@ -4,7 +4,7 @@ import { LocalSimHost } from './host/simHost.js';
 import { Loop } from './loop.js';
 import { Camera } from './render/camera.js';
 import { Renderer } from './render/renderer.js';
-import { hexAtWorld, hexCentre, worldBounds } from './render/layout.js';
+import { hexAtWorld, hexCentre, worldBounds, HEX_SIZE } from './render/layout.js';
 import { attachGestures } from './input/gestures.js';
 import { MapgenScreen } from './ui/mapgenScreen.js';
 import { SetupScreen } from './ui/setupScreen.js';
@@ -118,8 +118,60 @@ function updatePanels() {
 function select(index) {
   selected = index;
   if (index < 0) renderInspector(ui.inspector, null);
-  else renderInspector(ui.inspector, host.inspect(index % map.cols, Math.floor(index / map.cols)), () => select(-1));
+  else {
+    renderInspector(ui.inspector, host.inspect(index % map.cols, Math.floor(index / map.cols)), () => select(-1));
+    placeInspector(true);
+  }
   dirty = true;
+}
+
+/** Screen box around the selected hex (CSS px, relative to the map canvas). */
+function selectedBox() {
+  const c = hexCentre(map.cols, selected);
+  const p = camera.worldToScreen(c.x, c.y);
+  const r = HEX_SIZE * camera.scale;
+  return { left: p.x - r, right: p.x + r, top: p.y - r, bottom: p.y + r };
+}
+
+const overlaps = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+
+/**
+ * Keep the inspector card off the selected hex so it stays visible and can be
+ * tapped again. The card tries its corners in turn (top-left, bottom-left,
+ * top-right, then bottom-right if the sheet leaves room) and takes the first that
+ * does not cover the hex. Only if every corner covers it (a tiny view) does a new
+ * selection pan the map, so the map does not jump in the usual case.
+ */
+function placeInspector(panIfCovered = false) {
+  if (selected < 0 || ui.inspector.hidden) return;
+  const el = ui.inspector;
+  const canvasRect = ui.canvas.getBoundingClientRect();
+  const cardRect = () => {
+    const r = el.getBoundingClientRect();
+    return { left: r.left - canvasRect.left, right: r.right - canvasRect.left, top: r.top - canvasRect.top, bottom: r.bottom - canvasRect.top };
+  };
+  const hex = selectedBox();
+  if (!overlaps(cardRect(), hex)) return;
+  const inset = sheetInsets();
+  const bottom = `${(inset.bottom ?? 0) + 10}px`;
+  const corners = [
+    { side: 'left', bottom: null },
+    { side: 'left', bottom },
+    { side: 'right', bottom: null },
+  ];
+  if (inset.right === undefined) corners.push({ side: 'right', bottom });
+  for (const c of corners) {
+    el.classList.toggle('at-bottom', c.bottom !== null);
+    el.classList.toggle('at-right', c.side === 'right');
+    el.style.bottom = c.bottom ?? '';
+    if (!overlaps(cardRect(), hex)) return;
+  }
+  el.classList.remove('at-bottom', 'at-right');
+  el.style.bottom = '';
+  if (!panIfCovered) return;
+  const card = cardRect();
+  camera.pan(0, card.bottom + 8 - hex.top);
+  userMovedCamera = true;
 }
 
 let toastTimer = 0;
@@ -149,14 +201,15 @@ function resize() {
   if (!userMovedCamera && map) fitCamera();
   else camera.clamp();
   dirty = true;
+  placeInspector();
 }
 
 new ResizeObserver(() => { if (!ui.game.hidden) resize(); }).observe(ui.canvas);
 window.addEventListener('orientationchange', () => setTimeout(resize, 200));
 
 attachGestures(ui.canvas, {
-  onPan: (dx, dy) => { camera.pan(dx, dy); userMovedCamera = true; dirty = true; },
-  onZoom: (f, x, y) => { camera.zoomAt(f, x, y); userMovedCamera = true; dirty = true; },
+  onPan: (dx, dy) => { camera.pan(dx, dy); userMovedCamera = true; dirty = true; placeInspector(); },
+  onZoom: (f, x, y) => { camera.zoomAt(f, x, y); userMovedCamera = true; dirty = true; placeInspector(); },
   onTap: (x, y) => {
     if (!map) return;
     const w = camera.screenToWorld(x, y);
@@ -167,7 +220,7 @@ attachGestures(ui.canvas, {
   },
 });
 
-$('btn-fit').addEventListener('click', () => { userMovedCamera = false; fitCamera(); });
+$('btn-fit').addEventListener('click', () => { userMovedCamera = false; fitCamera(); placeInspector(); });
 $('btn-setup').addEventListener('click', () => {
   controls.setPaused(true);
   setup.setParams(host.params);

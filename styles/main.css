@@ -103,6 +103,9 @@ input[type="range"] { width: 100%; height: var(--tap); accent-color: var(--accen
 
 .inspector { position: absolute; top: calc(64px + var(--safe-top)); left: calc(10px + var(--safe-left)); width: min(300px, calc(100% - 20px - var(--safe-left) - var(--safe-right)));
   background: rgba(27, 33, 43, 0.94); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; font-size: 0.9rem; box-shadow: 0 6px 24px rgba(0,0,0,0.4); }
+/* The card moves to another corner when it would cover the selected hex (main.js placeInspector); bottom offset set there. */
+.inspector.at-bottom { top: auto; }
+.inspector.at-right { left: auto; right: calc(10px + var(--safe-right)); }
 .inspector header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
 .inspector h3 { margin: 0; font-size: 1rem; }
 .inspector h3 small { color: var(--text-dim); font-weight: 400; font-variant-numeric: tabular-nums; }
