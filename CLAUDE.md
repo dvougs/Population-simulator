@@ -1,6 +1,6 @@
 # Population Simulator
 
-A mobile-first browser population simulator, run as a small autonomous studio: a director (the `director-cycle` skill) plans and delegates to three agents (`game-dev`, `unit-tester`, `functional-tester`) and opens release-candidate pull requests that the owner merges. Static files, served by GitHub Pages from `main`.
+A mobile-first browser population simulator, run as a small autonomous studio: a director (the `director-cycle` skill) plans and delegates to two agents (`game-dev`, `unit-tester`) and opens release-candidate pull requests that the owner merges. Static files, served by GitHub Pages from `main`.
 
 The game design and phases are in [project/ROADMAP.md](project/ROADMAP.md). The rules as implemented are in [RULES.md](RULES.md).
 
@@ -35,7 +35,7 @@ src/render/             PixiJS renderer, camera maths, palette
 src/input/              pointer pan, pinch and tap
 src/ui/                 screens (map generation, setup, end), bottom sheet, inspector, stats
 tests/unit/             node:test unit tests (pure logic only)
-tests/e2e/              Playwright specs at phone viewports
+tests/e2e/              Playwright specs at phone viewports (run by CI, not by an agent)
 tools/                  headless.js (CLI runner), serve.js (static server), make-icons.js
 project/                ROADMAP, TASKS, QUESTIONS, PROGRESS (director-owned)
 .claude/                agents, director-cycle skill, settings and hook
@@ -55,8 +55,7 @@ RULES.md                the player rulebook; always matches the code
 | Who | May change | Must not change |
 |---|---|---|
 | game-dev | `src/`, `index.html`, `styles/`, `icons/`, `manifest.webmanifest`, `vendor/`, `tools/`, `package.json`, `RULES.md`, and `.github/workflows/` when a code change needs it | `tests/`, `project/` |
-| unit-tester | `tests/unit/` | `src/`, `RULES.md`, `project/` |
-| functional-tester | `tests/e2e/`, `playwright.config.js` (paths only) | `src/`, `RULES.md`, `project/` |
+| unit-tester | `tests/unit/`; existing specs in `tests/e2e/` and `playwright.config.js` (paths only) when CI's e2e job fails | `src/`, `RULES.md`, `project/` |
 | director | `project/`, task and question bookkeeping; studio files (`CLAUDE.md`, `.claude/`, workflows) only through a pull request | game code and tests (delegates them) |
 
 - **RULES.md must always match the code.** Every rule and every number the game uses (rates, thresholds, capacities, ranges, defaults) appears in RULES.md with its value. A change to a rule or number updates RULES.md in the same commit. Tests treat RULES.md as the specification: code that contradicts it is a bug.
@@ -66,6 +65,7 @@ RULES.md                the player rulebook; always matches the code
 ## Workflow
 
 - Each cycle produces at most one "Release candidate: …" pull request. CI (`.github/workflows/ci.yml`) must be green before the owner merges it.
+- No agent plays the game in a browser during a cycle, to save time and credits. The Playwright specs in `tests/e2e/` run in CI on every pull request instead.
 - Merging to `main` deploys to GitHub Pages (`.github/workflows/pages.yml`).
 - The owner answers questions and adds requests in `project/QUESTIONS.md`; the director turns them into tasks in `project/TASKS.md`.
 - New sim features need a unit test, determinism preserved, and a headless run that looks sane.

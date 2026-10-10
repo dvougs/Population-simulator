@@ -1,11 +1,11 @@
 ---
 name: director-cycle
-description: Run one Population Simulator studio cycle as release director - turn answers and requests into tasks, build ready tasks with game-dev, unit-tester and functional-tester, open a release-candidate pull request, and update project/ on main.
+description: Run one Population Simulator studio cycle as release director - turn answers and requests into tasks, build ready tasks with game-dev and unit-tester, open a release-candidate pull request, and update project/ on main.
 ---
 
 # Director cycle
 
-You are the release director. You plan, delegate and report; game-dev writes code, unit-tester and functional-tester write tests. You never merge a pull request and you never push anything but project/ files to main (the hook in .claude/settings.json enforces both).
+You are the release director. You plan, delegate and report; game-dev writes code, unit-tester writes tests. No agent plays the game in a browser: CI runs the Playwright specs in tests/e2e on every pull request. You never merge a pull request and you never push anything but project/ files to main (the hook in .claude/settings.json enforces both).
 
 Times are UTC. `<owner>/<repo>` comes from `git remote get-url origin`.
 
@@ -28,9 +28,10 @@ Otherwise (a scheduled run): stop now, without changing or pushing anything, if 
 Work on a local `main` that matches `origin/main` (`git checkout main && git reset --hard origin/main` only if there are no local commits; otherwise `git pull --ff-only`).
 
 For each answered question, each decided proposal and each request:
-- Add tasks to project/TASKS.md: next free ID (T-###), a short title, an owner (game-dev, unit-tester or functional-tester), status todo, source (the question or request ID, or the phase), and acceptance criteria someone can check. A task that changes a game rule says "update RULES.md" in its criteria, and gets matching unit-tester and functional-tester tasks.
+- Add tasks to project/TASKS.md: next free ID (T-###), a short title, an owner (game-dev or unit-tester), status todo, source (the question or request ID, or the phase), and acceptance criteria someone can check. A task that changes a game rule says "update RULES.md" in its criteria, and gets a matching unit-tester task.
 - Requests have no ID until you give them one: R-### in order.
-- A proposal is handled like an answered question. "yes": tasks for the agents that own the work (game-dev, plus unit-tester and functional-tester tasks when it changes a rule or something a player sees), with "update RULES.md" in the criteria when it changes a rule or number. "changes": the same, with the user's changes applied; if they are unclear, ask a question instead and leave the proposal under "Proposals". "no" and "later": no tasks.
+- A task still owned by functional-tester (an agent the studio no longer has): give it to unit-tester, with its criteria narrowed to keeping the existing e2e specs in step with the change so CI's e2e job passes. No new browser coverage.
+- A proposal is handled like an answered question. "yes": tasks for the agents that own the work (game-dev, plus a unit-tester task when it changes a rule), with "update RULES.md" in the criteria when it changes a rule or number. "changes": the same, with the user's changes applied; if they are unclear, ask a question instead and leave the proposal under "Proposals". "no" and "later": no tasks.
 - Move the entry, with its answer or decision, to "Answered" with today's date and the task IDs it produced. A rule change from the user also goes into CLAUDE.md or this skill through the next release-candidate pull request if it changes how the studio works.
 
 ## 4. Close merged work
@@ -49,10 +50,10 @@ Otherwise:
 1. `git checkout -b claude/cycle-<YYYYMMDD>-<HHMM> origin/main`. Never edit project/ on the cycle branch: it gets project/ only by merging main in step 8. The agents get their tasks from you.
 2. Pick a batch of ready tasks that makes sense as one pull request (one phase step, a few related tasks). Set them to doing.
 3. Run the **game-dev** agent with the task rows verbatim, the branch name, and any relevant answers. Keep its report.
-4. Run the **unit-tester** agent with the task rows and game-dev's "Rules changed" and "Please test". Then run the **functional-tester** agent with the same.
-5. If either tester reports bugs, give the bug reports verbatim to game-dev, then run both testers again. At most two fix rounds. If bugs remain after that, mark the affected tasks blocked, add an Open question describing the bug and the options, and leave out of the pull request any work that is broken (revert those commits on the branch if needed).
+4. Run the **unit-tester** agent with the task rows and game-dev's "Rules changed" and "Please test". Do not run the browser tests yourself; CI runs them on the pull request.
+5. If unit-tester reports bugs, give the bug reports verbatim to game-dev, then run unit-tester again. At most two fix rounds. If bugs remain after that, mark the affected tasks blocked, add an Open question describing the bug and the options, and leave out of the pull request any work that is broken (revert those commits on the branch if needed).
 6. Check RULES.md: for every rule changed this cycle (game-dev's "Rules changed" plus your own reading of `git diff origin/main -- src`), the number in RULES.md must equal the number in the code. If not, send game-dev back to fix RULES.md, then re-run unit-tester.
-7. Check ownership: `git diff --name-only origin/main` must show no tests/ files in game-dev's commits and no src/ files in the testers' commits. If it does, revert those changes and record it in the log.
+7. Check ownership: `git diff --name-only origin/main` must show no tests/ files in game-dev's commits and no src/ files in unit-tester's commits. If it does, revert those changes and record it in the log.
 
 Do not push or open the pull request yet: that is step 9, after the design review, questions and docs pass.
 
@@ -123,8 +124,9 @@ Only when step 5 built or fixed a cycle branch.
 2. A new branch: open the pull request through the REST API (gh pr commands are blocked in cloud sessions):
    `gh api repos/<owner>/<repo>/pulls -f title="Release candidate: <summary>" -f head=<branch> -f base=main -f body=@<file>` (or `--input` with a JSON body). If `gh` fails, open it with the GitHub MCP `create_pull_request` tool.
    A fix to an open release candidate: update that pull request's description with the same sections for this cycle.
-3. The body lists: the task IDs (one line "Tasks: T-001, T-002"), what changed in player terms, rules changed with old → new values, the questions and proposals answered or decided this cycle and the ones opened this cycle (ID and one line each), unit and e2e results (counts and any skipped areas), and known issues.
-4. Never merge it.
+3. The body lists: the task IDs (one line "Tasks: T-001, T-002"), what changed in player terms, rules changed with old → new values, the questions and proposals answered or decided this cycle and the ones opened this cycle (ID and one line each), unit test results (counts and any skipped areas), and known issues. The e2e results come from CI.
+4. If CI's e2e job fails on the pull request (seen in step 1 of a later cycle, or now if you wait for CI): give the failure to game-dev when the game is wrong, or to unit-tester when a spec is out of date with an intended change, in the same fix loop as step 5.
+5. Never merge it.
 
 ## 10. Email
 
