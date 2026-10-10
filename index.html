@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#11151c">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="PopSim">
+  <meta name="description" content="Watch civilisations grow, starve and spread across a generated world.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles/main.css">
+  <title>Population Simulator</title>
+  <script type="module" src="src/main.js"></script>
+</head>
+<body>
+  <section id="setup" class="screen setup" aria-labelledby="setup-title">
+    <header class="setup-header">
+      <h1 id="setup-title">Population Simulator</h1>
+      <button id="btn-resume" class="btn ghost" type="button" hidden>Back to map</button>
+    </header>
+    <form id="setup-form" class="setup-form" novalidate></form>
+  </section>
+
+  <section id="game" class="screen game" hidden>
+    <canvas id="map" aria-label="Simulation map. Pinch to zoom, drag to pan, tap a cell to inspect it."></canvas>
+
+    <header class="hud">
+      <button id="btn-setup" class="btn hud-btn" type="button" aria-label="Back to setup">&#9776;</button>
+      <div class="hud-info">
+        <div id="hud-year" class="hud-year">Year 0</div>
+        <div id="hud-pop" class="hud-pop">0 people</div>
+      </div>
+      <button id="btn-fit" class="btn hud-btn" type="button" aria-label="Fit map to screen">&#x2922;</button>
+    </header>
+
+    <div id="inspector" class="inspector" role="dialog" aria-live="polite" hidden></div>
+    <div id="toast" class="toast" role="status" hidden></div>
+
+    <aside id="sheet" class="sheet" data-open="false" aria-label="Controls and statistics">
+      <button id="sheet-handle" class="sheet-handle" type="button" aria-expanded="false" aria-controls="sheet-body">
+        <span class="grip" aria-hidden="true"></span>
+        <span class="visually-hidden">Show statistics</span>
+      </button>
+      <div class="controls" role="toolbar" aria-label="Simulation speed">
+        <button id="btn-play" class="btn ctl play" type="button" aria-label="Pause">&#10074;&#10074;</button>
+        <button id="btn-step" class="btn ctl" type="button" aria-label="Step one year">&#9654;|</button>
+        <div id="speed" class="segmented" role="radiogroup" aria-label="Speed"></div>
+      </div>
+      <div id="sheet-body" class="sheet-body">
+        <h2 class="sheet-title">Civilisations</h2>
+        <ul id="stats" class="stats"></ul>
+      </div>
+    </aside>
+  </section>
+</body>
+</html>
