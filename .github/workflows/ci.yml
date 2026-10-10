@@ -23,7 +23,7 @@ jobs:
         with:
           node-version: 22
       - name: Unit, determinism and invariant tests
-        run: npm test
+        run: npm run test:unit
       - name: Headless run (100x100, 6 civs, 2000 years) with throughput floor
         run: npm run perf
       - name: Every preset runs headlessly
@@ -43,7 +43,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npx playwright test
+      - run: npm run test:e2e
         env:
           CI: 'true'
       - uses: actions/upload-artifact@v4
@@ -51,6 +51,5 @@ jobs:
         with:
           name: playwright-report
           path: |
-            playwright-report/
-            test-results/
+            test-artifacts/
           retention-days: 7
