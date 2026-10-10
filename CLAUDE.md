@@ -1,59 +1,72 @@
 # Population Simulator
 
-Browser population simulation game, mobile-first, deployed as static files to GitHub Pages.
+A mobile-first browser population simulator, run as a small autonomous studio: a director (the `director-cycle` skill) plans and delegates to three agents (`game-dev`, `unit-tester`, `functional-tester`) and opens release-candidate pull requests that the owner merges. Static files, served by GitHub Pages from `main`.
 
-## Hard rules
+The game design and phases are in [project/ROADMAP.md](project/ROADMAP.md). The rules as implemented are in [RULES.md](RULES.md).
 
-- **Plain HTML/CSS/JS with ES modules. No build step, no frameworks, no runtime dependencies.** What is in the repo is what ships. `package.json` exists only for scripts and the dev-only Playwright dependency.
-- **The sim (`src/sim/`) never touches the DOM, `window`, `document`, timers or `Date`.** It must run unchanged in Node (tests, `tools/headless.js`) and in a Web Worker.
-- **All randomness in the sim comes from `Rng` (`src/sim/rng.js`).** Never `Math.random()` in `src/sim/` (the only exceptions are `randomSeedString`/`randomParams`, which are UI helpers for picking a new setup, not used during a run). Each subsystem uses its own `rng.fork(label)` stream so adding draws in one place does not reshuffle another.
-- **Determinism:** same params + seed ⇒ identical `stateHash()` on every engine. Use only `+ - * /`, `Math.sqrt`, `Math.floor`/`round`/`min`/`max`/`abs` in sim maths. Avoid `Math.exp/pow/log/sin/cos` etc. (their precision is implementation-defined). Iterate cells in index order; decide-then-apply for anything that moves between cells (see migration in `step.js`) so iteration order never biases outcomes.
-- **Fixed timestep:** one sim tick = one year. `src/loop.js` runs whole ticks at `BASE_TPS × speed` regardless of frame rate, with a per-frame time budget. Rendering never drives sim time.
-- **Grid state lives in typed arrays** (struct-of-arrays in `src/sim/world.js`, index `i = y * width + x`). No per-cell objects. No allocation inside per-tick hot loops.
-- **The UI only talks to the sim through `SimHost`** (`src/host/simHost.js`). Keep that API message-shaped (plain data in, plain data/typed arrays out) so a Worker host can replace `LocalSimHost` without UI changes. Move the sim to a Worker only when measurements show main-thread frame drops.
+## Tech rules
+
+- **Plain HTML/CSS/JS with ES modules. No build step, no frameworks.** What is in the repo is what ships. `package.json` exists only for scripts and dev dependencies.
+- **Rendering uses PixiJS v8, vendored.** `pixi.js@^8` is a dev dependency; `npm run vendor:pixi` copies `node_modules/pixi.js/dist/pixi.min.mjs` to `vendor/pixi.mjs`, and that copied file is committed. Import it as `../vendor/pixi.mjs` (relative path), never from a CDN, so tests in the cloud and the Pages site load the same file. No other runtime libraries: pan and pinch-zoom are implemented directly with pointer events.
+- **The sim (`src/sim/`) is pure.** It never touches the DOM, `window`, `document`, PixiJS, timers or `Date`. It must run unchanged in Node (unit tests, `tools/headless.js`) and in a Web Worker.
+- **All randomness in the sim comes from `Rng` (`src/sim/rng.js`).** Never `Math.random()` in `src/sim/`, except UI helpers that pick a new setup (`randomSeedString`, `randomParams`), which are never used during a run. Each subsystem uses its own `rng.fork(label)` stream so adding draws in one place does not reshuffle another.
+- **Determinism:** same params + seed give the same state hash on every engine. Sim maths uses only `+ - * /`, `Math.sqrt`, `Math.floor`/`round`/`min`/`max`/`abs`; no `Math.exp/pow/log/sin/cos` (their precision is implementation-defined; noise uses smoothstep, not trigonometry). Iterate in index order; decide-then-apply for anything that moves between hexes so iteration order never biases outcomes.
+- **Fixed timestep:** one tick is one year. `src/loop.js` runs whole ticks at `BASE_TPS × speed` regardless of frame rate, with a per-frame time budget. Rendering never drives sim time.
+- **Performance:** smooth on a mid-range iPhone with a few thousand people. Hex and people state live in typed arrays (struct of arrays, people in a pool with free-list reuse), no per-person objects, no allocation inside per-tick loops. Draw people as sprites from one texture, only when zoomed in far enough to see them.
+- **Record stats as you go:** yearly per-civ stats (population, level, hexes held, deaths by cause, lifespans) are appended during the run, so the end screen costs nothing.
+- **The UI talks to the sim only through `SimHost`** (`src/host/simHost.js`). Keep that API message-shaped (plain data in, plain data and typed arrays out) so a Worker host can replace it without UI changes.
+- **Params are plain JSON**, normalised by `normalizeParams`; every setup option gets a default, validation, and a place in presets and randomise.
+
+## Mobile conventions
+
+- Touch first: pinch-zoom, pan, tap to inspect, bottom-sheet controls. Touch targets at least 44px; inputs at least 16px font (stops iOS focus zoom); `touch-action: none` on the map only.
+- Portrait and landscape both work; pad with `env(safe-area-inset-*)`; web app manifest kept current.
 
 ## Layout
 
 ```
-index.html, manifest.webmanifest, icons/, styles/main.css   static shell
-src/main.js            wiring: setup screen → SimHost → Loop → Renderer/UI
-src/loop.js            fixed-timestep driver and speed table
-src/sim/               pure simulation (rng, params, civTypes, constants, world, mapgen, placement, step, simulation)
-src/host/simHost.js    UI ↔ sim boundary
-src/render/            camera (zoom/pan maths), renderer (ImageData blit), palette
-src/input/gestures.js  pointer pinch/pan/tap + wheel
-src/ui/                setup screen, bottom sheet, controls, inspector, stats panel, dom helper
-tests/                 node:test unit, determinism and invariant tests
-e2e/                   Playwright smoke tests at phone viewports
-tools/                 headless.js (CLI runner), serve.js (static server), make-icons.js
+index.html, manifest.webmanifest, icons/, styles/   static shell
+vendor/                 vendored PixiJS ES module (committed, not edited by hand)
+src/main.js             wiring: screens → SimHost → Loop → renderer and UI
+src/loop.js             fixed-timestep driver and speed table
+src/sim/                pure simulation
+src/host/simHost.js     UI ↔ sim boundary
+src/render/             PixiJS renderer, camera maths, palette
+src/input/              pointer pan, pinch and tap
+src/ui/                 screens (map generation, setup, end), bottom sheet, inspector, stats
+tests/unit/             node:test unit tests (pure logic only)
+tests/e2e/              Playwright specs at phone viewports
+tools/                  headless.js (CLI runner), serve.js (static server), make-icons.js
+project/                ROADMAP, TASKS, QUESTIONS, PROGRESS (director-owned)
+.claude/                agents, director-cycle skill, settings and hook
+RULES.md                the player rulebook; always matches the code
 ```
 
 ## Commands
 
-- `npm test`: unit, determinism and invariant tests (no install needed).
-- `node tools/headless.js --seed foo --ticks 2000 [--preset name] [--every 100] [--json]`: run without a browser; prints per-civ results, state hash and ticks/sec.
-- `npm run perf`: 100×100, 6 civs, 2000 years, fails below 150 ticks/s.
-- `npm start`: static server on port 8080, bound to all interfaces (phone on the same Wi-Fi can open the printed network URL).
-- `npm ci && npx playwright test`: browser smoke tests. In environments with a preinstalled Chromium, set `PW_CHROMIUM_PATH` instead of running `playwright install`.
-- `node tools/make-icons.js`: regenerate app icons.
+- `npm run test:unit`: unit tests (`node --test "tests/unit/**/*.test.js"`; Node 22 does not accept a bare directory), no install needed. `npm test` is the same.
+- `npm run test:e2e`: Playwright smoke tests at iPhone portrait, iPhone landscape and desktop. Needs `npm ci` and a Chromium: set `PW_CHROMIUM_PATH` to a preinstalled one (in cloud sessions, under `/opt/pw-browsers`), otherwise `npx playwright install chromium`. Screenshots and results go to `test-artifacts/` (git-ignored).
+- `node tools/headless.js --seed foo --ticks 2000 [--preset name] [--every 100] [--json]`: run without a browser; prints per-civ results, state hash and ticks per second.
+- `npm run perf`: headless throughput check used by CI.
+- `npm start`: static server on port 8080, bound to all interfaces (a phone on the same Wi-Fi can open the printed URL).
 
-## Conventions
+## Ownership
 
-- Mobile first: touch targets ≥ 44px, `env(safe-area-inset-*)` padding, inputs ≥ 16px font (stops iOS focus zoom), `touch-action: none` on the map only. Check both portrait and landscape (the e2e suite runs iPhone portrait, landscape and desktop).
-- Sim tuning constants live in `src/sim/constants.js` and civ traits/behaviour in `src/sim/civTypes.js`. Traits are the numbers mutation will act on (Phase 2); behaviour is fixed per type.
-- New sim features need: a unit or invariant test, determinism preserved (`tests/determinism.test.js` stays green), and a headless run that looks sane.
-- Params are plain JSON, normalised by `normalizeParams`; every new setup option gets a default, validation and a place in presets/randomise.
-- Comments explain why, not what. Match the existing small-module style.
+| Who | May change | Must not change |
+|---|---|---|
+| game-dev | `src/`, `index.html`, `styles/`, `icons/`, `manifest.webmanifest`, `vendor/`, `tools/`, `package.json`, `RULES.md`, and `.github/workflows/` when a code change needs it | `tests/`, `project/` |
+| unit-tester | `tests/unit/` | `src/`, `RULES.md`, `project/` |
+| functional-tester | `tests/e2e/`, `playwright.config.js` (paths only) | `src/`, `RULES.md`, `project/` |
+| director | `project/`, task and question bookkeeping; studio files (`CLAUDE.md`, `.claude/`, workflows) only through a pull request | game code and tests (delegates them) |
+
+- **RULES.md must always match the code.** Every rule and every number the game uses (rates, thresholds, capacities, ranges, defaults) appears in RULES.md with its value. A change to a rule or number updates RULES.md in the same commit. Tests treat RULES.md as the specification: code that contradicts it is a bug.
+- **Code reaches `main` only through pull requests the owner merges.** Only `project/` files are pushed to `main` directly. The PreToolUse hook in `.claude/settings.json` (`.claude/hooks/guard-main.mjs`) blocks any push to `main` that changes other files, and blocks merging pull requests.
+- Cycle branches are named `claude/cycle-<YYYYMMDD>-<HHMM>` and never touch `project/`.
 
 ## Workflow
 
-- One branch and PR per phase or feature; CI (`.github/workflows/ci.yml`) must be green before merging.
-- Merging to `main` deploys to GitHub Pages (`.github/workflows/pages.yml`), which needs Settings → Pages → Source = GitHub Actions.
-
-## Roadmap
-
-1. ✅ Map gen, base civ types, growth/ageing/starvation/migration, rendering, speed controls, setup screen, mobile layout.
-2. Mutations and trait inheritance (trade-offs enforced; mutation rate 0 must reproduce Phase 1 results).
-3. Advancements and unlockable survival options (agriculture, shelter, migration waves, alliances, warfare).
-4. Conflict (borders are hard until then), alliances, climate events, balancing via headless batch runs.
-5. Population chart and full stats, save/load setups, offline service worker, polish.
+- Each cycle produces at most one "Release candidate: …" pull request. CI (`.github/workflows/ci.yml`) must be green before the owner merges it.
+- Merging to `main` deploys to GitHub Pages (`.github/workflows/pages.yml`).
+- The owner answers questions and adds requests in `project/QUESTIONS.md`; the director turns them into tasks in `project/TASKS.md`.
+- New sim features need a unit test, determinism preserved, and a headless run that looks sane.
+- Comments explain why, not what. Match the existing small-module style.

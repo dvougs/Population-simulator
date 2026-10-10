@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Rng, hashSeed } from '../src/sim/rng.js';
+import { Rng, hashSeed } from '../../src/sim/rng.js';
 
 test('same seed gives the same sequence', () => {
   const a = new Rng('hello');

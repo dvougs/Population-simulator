@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Rng } from '../src/sim/rng.js';
-import { createWorld } from '../src/sim/world.js';
-import { generateTerrain, countTerrain } from '../src/sim/mapgen.js';
-import { normalizeParams } from '../src/sim/params.js';
-import { WATER, MOUNTAIN, DESERT, FERTILE } from '../src/sim/constants.js';
+import { Rng } from '../../src/sim/rng.js';
+import { createWorld } from '../../src/sim/world.js';
+import { generateTerrain, countTerrain } from '../../src/sim/mapgen.js';
+import { normalizeParams } from '../../src/sim/params.js';
+import { WATER, MOUNTAIN, DESERT, FERTILE } from '../../src/sim/constants.js';
 
 function gen(params) {
   const p = normalizeParams(params);

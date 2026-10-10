@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Simulation } from '../src/sim/simulation.js';
-import { WATER, MIN_CELL_POP } from '../src/sim/constants.js';
+import { Simulation } from '../../src/sim/simulation.js';
+import { WATER, MIN_CELL_POP } from '../../src/sim/constants.js';
 
 function checkWorld(sim, label) {
   const w = sim.world;

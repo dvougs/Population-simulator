@@ -22,7 +22,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm test
+      - run: npm run test:unit
 
   deploy:
     needs: test
@@ -36,6 +36,7 @@ jobs:
         run: |
           mkdir _site
           cp -r index.html manifest.webmanifest icons styles src _site/
+          if [ -d vendor ]; then cp -r vendor _site/; fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

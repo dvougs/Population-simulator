@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Simulation } from '../src/sim/simulation.js';
-import { presetParams } from '../src/sim/params.js';
+import { Simulation } from '../../src/sim/simulation.js';
+import { presetParams } from '../../src/sim/params.js';
 
 test('same params and seed give an identical world after 1000 ticks', () => {
   const a = new Simulation({ seed: 'repro' });

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeParams, presetParams, randomParams, PRESETS, DEFAULT_PARAMS, MAX_CIVS } from '../src/sim/params.js';
-import { CIV_TYPE_IDS } from '../src/sim/civTypes.js';
+import { normalizeParams, presetParams, randomParams, PRESETS, DEFAULT_PARAMS, MAX_CIVS } from '../../src/sim/params.js';
+import { CIV_TYPE_IDS } from '../../src/sim/civTypes.js';
 
 const sum = (o) => Object.values(o).reduce((a, b) => a + b, 0);
 

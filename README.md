@@ -18,8 +18,15 @@ A browser game where civilisations grow, age, starve and spread across a generat
 
 ```sh
 npm start            # serves on http://localhost:8080 and prints a network URL for your phone
-npm test             # sim tests, no install needed
+npm run test:unit    # unit tests, no install needed
+npm run test:e2e     # browser tests at phone sizes (npm ci first)
 node tools/headless.js --seed pangaea --ticks 2000
 ```
 
-See [CLAUDE.md](CLAUDE.md) for architecture and conventions.
+Full rules, with every number the game uses: [RULES.md](RULES.md).
+
+## How it is built
+
+The repo runs as a small autonomous studio. A director cycle (`.claude/skills/director-cycle/`) plans work in [project/TASKS.md](project/TASKS.md), has the game-dev, unit-tester and functional-tester agents build and test it, and opens "Release candidate" pull requests that the owner reviews and merges. Questions for the owner, and the owner's own requests, live in [project/QUESTIONS.md](project/QUESTIONS.md); status is in [project/PROGRESS.md](project/PROGRESS.md) and the design in [project/ROADMAP.md](project/ROADMAP.md).
+
+See [CLAUDE.md](CLAUDE.md) for architecture, conventions and ownership rules.
