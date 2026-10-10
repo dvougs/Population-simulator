@@ -28,7 +28,23 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
 
 Ideas the director draws from headless simulation runs and the code. At most 6 wait here at a time.
 
-None yet.
+### P-001: Count the default water share against the whole map
+- Date: 2026-10-10
+- Category: scale
+- What: On the default 10 × 10 map, more than half the hexes are sea, leaving about 48 land hexes. Counting "water 25%" against all hexes (edge ring included), or making the default size larger, would give the first civs room to spread in Phase 2.
+- Evidence: Headless runs of seeds review-20261010-1 to -3 at commit 6d1e0d3 (cycle branch), default setup, 400 years: deep water 52 of 100 on every seed. That is 36 forced edge hexes (src/sim/mapgen.js:80-86) plus 25% of the 64 inner hexes. Desert and tundra are only 2–3 hexes each.
+- Effort: S
+- Phone performance risk: low: map generation only; a larger default size adds hexes to draw, still far below 50 × 50.
+- Decision:
+
+### P-002: Gentle water animation so the map is not frozen
+- Date: 2026-10-10
+- Category: animation
+- What: A slow shimmer or tide tint on sea and river hexes so the map visibly lives while time runs, even before people exist.
+- Evidence: The map is built once into static Graphics (src/render/renderer.js:1, 44-58). In 400-year headless runs of all three review seeds, the state hash changes only with the year and every hex keeps full food, so nothing on screen changes except the HUD year.
+- Effort: M
+- Phone performance risk: medium: an animated layer redraws every frame; it needs a single shader or tinted overlay, not per-hex Graphics updates.
+- Decision:
 
 ## Requests
 
