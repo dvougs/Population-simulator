@@ -12,7 +12,7 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
   2. Make coast shallow water, impassable until boats: smaller islands, sea travel matters more.
   3. Make coast shallow water that is walkable at a high movement cost: wading across narrow straits.
 - Recommendation: 1, because it matches the roadmap (only seas and lakes are impassable) and gives the first civs fertile starting land.
-- Answer:
+- Answer: yes (reading: option 1, keep coast as walkable land, as recommended)
 
 ### Q-002: Should the terrain mix be adjustable at map generation?
 - Date: 2026-10-10
