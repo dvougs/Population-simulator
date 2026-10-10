@@ -68,7 +68,7 @@ Run this on every full cycle, after the tests, even when nothing was built. Prop
 4. Write at most 2 new proposals, and none if 6 proposals under "Proposals" already have an empty "Decision:". Each one must point to something concrete in this run or the code, with numbers or a `file:line`: a civ that dies early on every seed, a stretch of years where nothing changes, a screen that looks flat because nothing on it varies, people that jump from hex to hex instead of moving. A hunch without evidence is not a proposal.
    - Vary the categories: two proposals in one cycle have different categories, and of the last three proposals ever written (by ID, including Answered), at least one is about visuals or animation. If the next proposal would break that, it must be visuals or animation, or you write none.
    - Never re-propose something the user answered "no" to, in any wording; check "Answered" first. A "later" proposal may come back once, with new evidence, citing its old ID. Do not propose what is already a task or an open question.
-5. Add each under "Proposals" in project/QUESTIONS.md, next free ID across the whole file:
+5. Back on local `main`, add each under "Proposals" in project/QUESTIONS.md, next free ID across the whole file:
 
 ```
 ### P-###: <short title>
