@@ -32,7 +32,7 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Date: 2026-10-10
 - Category: scale
 - What: On the default 10 × 10 map, more than half the hexes are sea, leaving about 48 land hexes. Counting "water 25%" against all hexes (edge ring included), or making the default size larger, would give the first civs room to spread in Phase 2.
-- Evidence: Headless runs of seeds review-20261010-1 to -3 at commit 6d1e0d3 (cycle branch), default setup, 400 years: deep water 52 of 100 on every seed. That is 36 forced edge hexes (src/sim/mapgen.js:80-86) plus 25% of the 64 inner hexes. Desert and tundra are only 2–3 hexes each.
+- Evidence: Headless runs of seeds review-20261010-1 to -3 at commit 7216673 (cycle branch), default setup, 400 years: deep water 52 of 100 on every seed. That is 36 forced edge hexes (src/sim/mapgen.js:80-86) plus 25% of the 64 inner hexes. Desert and tundra are only 2–3 hexes each.
 - Effort: S
 - Phone performance risk: low: map generation only; a larger default size adds hexes to draw, still far below 50 × 50.
 - Decision:
