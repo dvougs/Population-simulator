@@ -1,20 +1,23 @@
-// Boot: wires the setup screen, sim host, renderer, input and controls together.
+// Boot: wires the map-generation and setup screens, sim host, renderer, input and controls together.
 
 import { LocalSimHost } from './host/simHost.js';
 import { Loop } from './loop.js';
 import { Camera } from './render/camera.js';
 import { Renderer } from './render/renderer.js';
+import { hexAtWorld, hexCentre, worldBounds } from './render/layout.js';
 import { attachGestures } from './input/gestures.js';
+import { MapgenScreen } from './ui/mapgenScreen.js';
 import { SetupScreen } from './ui/setupScreen.js';
 import { initBottomSheet } from './ui/bottomSheet.js';
 import { initControls } from './ui/controls.js';
 import { renderInspector } from './ui/inspector.js';
 import { renderStats } from './ui/statsPanel.js';
-import { formatNumber } from './ui/dom.js';
+import { mapParams } from './sim/params.js';
+import { DEEP_WATER } from './sim/terrain.js';
 
 const $ = (id) => document.getElementById(id);
 const ui = {
-  setup: $('setup'), game: $('game'), form: $('setup-form'), resume: $('btn-resume'),
+  mapgen: $('mapgen'), setup: $('setup'), game: $('game'), resume: $('btn-resume'),
   canvas: $('map'), year: $('hud-year'), pop: $('hud-pop'), inspector: $('inspector'), toast: $('toast'),
   sheet: $('sheet'), handle: $('sheet-handle'), stats: $('stats'),
 };
@@ -22,9 +25,10 @@ const ui = {
 const host = new LocalSimHost();
 const camera = new Camera();
 const renderer = new Renderer(ui.canvas);
-let selected = null;
+let rendererReady = null;
+let map = null;
+let selected = -1;
 let dirty = true;
-let imageDirty = false;
 let userMovedCamera = false;
 let lastPanelUpdate = 0;
 let shownEnd = false;
@@ -32,12 +36,8 @@ let shownEnd = false;
 const loop = new Loop({
   tick: (n) => host.tick(n),
   frame: (ran, now) => {
-    if (ran > 0) imageDirty = true;
-    if (imageDirty) { renderer.updateImage(); imageDirty = false; dirty = true; }
     if (dirty) { renderer.draw(camera, selected); dirty = false; }
-    if (ran > 0 || now - lastPanelUpdate > 1000) {
-      if (now - lastPanelUpdate > 250) { updatePanels(); lastPanelUpdate = now; }
-    }
+    if (ran > 0 && now - lastPanelUpdate > 100) { updatePanels(); lastPanelUpdate = now; }
     if (host.finished && !shownEnd) {
       shownEnd = true;
       updatePanels();
@@ -50,20 +50,45 @@ const loop = new Loop({
 const controls = initControls({
   playBtn: $('btn-play'), stepBtn: $('btn-step'), speedEl: $('speed'), loop,
 });
-const sheet = initBottomSheet(ui.sheet, ui.handle);
+initBottomSheet(ui.sheet, ui.handle);
 
-const setup = new SetupScreen(ui.form, { onStart: startGame });
+const mapgen = new MapgenScreen(
+  { form: $('mapgen-form'), canvas: $('preview'), info: $('preview-info') },
+  {
+    preview: (params) => host.preview(params),
+    onContinue: (params) => {
+      setup.setParams(params);
+      showScreen('setup');
+    },
+  },
+);
+const setup = new SetupScreen($('setup-form'), {
+  onStart: (params) => startGame(params),
+  onChangeMap: (params) => {
+    mapgen.setParams(params, 'custom');
+    showScreen('mapgen');
+  },
+});
 
-function startGame(params) {
+async function startGame(params) {
+  showScreen('game');
+  try {
+    rendererReady ??= renderer.init();
+    await rendererReady;
+  } catch (err) {
+    showToast('This browser cannot draw the map (WebGL is unavailable).');
+    console.warn(err);
+    return;
+  }
   host.start(params);
-  renderer.setWorld(host.world, host.civs);
-  camera.setMap(host.world.width, host.world.height);
-  selected = null;
+  map = host.map();
+  renderer.setMap(map);
+  camera.setBounds(worldBounds(map.cols, map.rows));
+  selected = -1;
   shownEnd = false;
   userMovedCamera = false;
   renderInspector(ui.inspector, null);
   ui.toast.hidden = true;
-  showScreen('game');
   resize();
   fitCamera();
   loop.setPaused(false);
@@ -71,10 +96,11 @@ function startGame(params) {
   controls.sync();
   updatePanels();
   loop.start();
-  try { localStorage.setItem('popsim:lastParams', JSON.stringify(params)); } catch { /* storage unavailable */ }
+  try { localStorage.setItem('popsim:lastParams', JSON.stringify(host.params)); } catch { /* storage unavailable */ }
 }
 
 function showScreen(name) {
+  ui.mapgen.hidden = name !== 'mapgen';
   ui.setup.hidden = name !== 'setup';
   ui.game.hidden = name !== 'game';
   ui.resume.hidden = !(name === 'setup' && host.sim);
@@ -84,14 +110,15 @@ function updatePanels() {
   const stats = host.stats();
   if (!stats) return;
   ui.year.textContent = `Year ${stats.tick}${stats.finished ? ' (ended)' : ''}`;
-  ui.pop.textContent = `${formatNumber(stats.totalPop)} people · ${stats.civs.filter((c) => c.alive).length}/${stats.civs.length} civs`;
+  const land = map.cols * map.rows - stats.terrainCounts[DEEP_WATER];
+  ui.pop.textContent = `${map.cols} × ${map.rows} hexes · ${land} land · no people yet`;
   renderStats(ui.stats, stats);
-  if (selected) renderInspector(ui.inspector, host.inspect(selected.x, selected.y), clearSelection);
 }
 
-function clearSelection() {
-  selected = null;
-  renderInspector(ui.inspector, null);
+function select(index) {
+  selected = index;
+  if (index < 0) renderInspector(ui.inspector, null);
+  else renderInspector(ui.inspector, host.inspect(index % map.cols, Math.floor(index / map.cols)), () => select(-1));
   dirty = true;
 }
 
@@ -119,7 +146,7 @@ function resize() {
   const r = ui.canvas.getBoundingClientRect();
   renderer.resize(r.width, r.height, Math.min(3, window.devicePixelRatio || 1));
   camera.setView(r.width, r.height);
-  if (!userMovedCamera && host.world) fitCamera();
+  if (!userMovedCamera && map) fitCamera();
   else camera.clamp();
   dirty = true;
 }
@@ -131,28 +158,49 @@ attachGestures(ui.canvas, {
   onPan: (dx, dy) => { camera.pan(dx, dy); userMovedCamera = true; dirty = true; },
   onZoom: (f, x, y) => { camera.zoomAt(f, x, y); userMovedCamera = true; dirty = true; },
   onTap: (x, y) => {
-    const c = camera.screenToCell(x, y);
-    const cell = host.inspect(c.x, c.y);
-    if (!cell || (selected && selected.x === c.x && selected.y === c.y)) { clearSelection(); return; }
-    selected = c;
-    renderInspector(ui.inspector, cell, clearSelection);
-    dirty = true;
+    if (!map) return;
+    const w = camera.screenToWorld(x, y);
+    const hex = hexAtWorld(map.cols, map.rows, w.x, w.y);
+    // Water, off the map, or the selected hex again: close the inspector.
+    if (!hex || map.terrain[hex.index] === DEEP_WATER || hex.index === selected) { select(-1); return; }
+    select(hex.index);
   },
 });
 
 $('btn-fit').addEventListener('click', () => { userMovedCamera = false; fitCamera(); });
 $('btn-setup').addEventListener('click', () => {
   controls.setPaused(true);
-  setup.setParams(host.sim.params, 'custom');
+  setup.setParams(host.params);
   showScreen('setup');
 });
 ui.resume.addEventListener('click', () => { showScreen('game'); resize(); });
 
 try {
   const saved = JSON.parse(localStorage.getItem('popsim:lastParams') || 'null');
-  if (saved) setup.setParams(saved, 'custom');
+  if (saved) mapgen.setParams(saved, 'custom');
 } catch { /* ignore bad saved params */ }
-showScreen('setup');
+showScreen('mapgen');
 
-// Exposed for the browser smoke test and for poking at the sim from devtools.
-window.popsim = { host, loop, camera, startGame };
+// Exposed for the browser tests and for poking at the sim from devtools.
+window.popsim = {
+  host, loop, camera, startGame,
+  /** Current year of the running game (0 before a game starts). */
+  year: () => host.tickCount,
+  /** Map settings of the running game, or null. */
+  mapParams: () => (host.params ? mapParams(host.params) : null),
+  /** Hash of the running game's map, or null. */
+  mapHash: () => host.mapHash(),
+  /** Settings and map hash shown on the map-generation screen. */
+  previewParams: () => mapParams(mapgen.getParams()),
+  previewHash: () => mapgen.map?.hash ?? null,
+  /** Description of hex (col, row) in the running game (terrain id, values shown in the inspector), or null. */
+  hex: (col, row) => host.inspect(col, row),
+  terrainAt: (col, row) => host.inspect(col, row)?.terrain ?? null,
+  /** Screen position (CSS px, relative to the map canvas) of the centre of hex (col, row). */
+  hexToScreen: (col, row) => {
+    const c = hexCentre(map.cols, row * map.cols + col);
+    return camera.worldToScreen(c.x, c.y);
+  },
+  /** Index of the hex shown in the inspector, or -1. */
+  selected: () => selected,
+};

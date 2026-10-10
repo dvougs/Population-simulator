@@ -1,34 +1,29 @@
-// Floating card describing the tapped cell.
+// Floating card describing the tapped hex.
 
 import { h, formatNumber } from './dom.js';
-import { rgbCss } from '../render/palette.js';
 
-export function renderInspector(el, cell, onClose) {
-  if (!cell) {
+const MATERIAL_KIND = { forest: 'wood', hills: 'stone' };
+
+export function renderInspector(el, hex, onClose) {
+  if (!hex) {
     el.hidden = true;
+    el.removeAttribute('data-index');
     return;
   }
   el.hidden = false;
-  const owner = cell.owner
-    ? h('span', { class: 'owner-chip' }, h('span', { class: 'swatch', style: { background: rgbCss(cell.owner.color) } }), cell.owner.name)
-    : 'Unclaimed';
+  el.dataset.index = String(hex.index);
   const rows = [
-    ['Owner', owner],
-    ['People', formatNumber(cell.pop)],
+    ['Food', `${formatNumber(hex.food)} / ${formatNumber(hex.foodCap)}`],
+    ['Food capacity', formatNumber(hex.foodCap)],
+    ['Materials', hex.materials > 0 ? `${formatNumber(hex.materials)} (${MATERIAL_KIND[hex.terrain]})` : 'None'],
+    ['Movement cost', hex.moveCost === null ? 'Impassable' : String(hex.moveCost)],
+    ['Defence bonus', hex.defence > 0 ? `+${Math.round(hex.defence * 100)}%` : '0%'],
   ];
-  if (cell.pop > 0) {
-    rows.push(['Young / adult / old', `${formatNumber(cell.young)} / ${formatNumber(cell.adult)} / ${formatNumber(cell.elder)}`]);
-  }
-  if (cell.terrain !== 'water') {
-    rows.push(['Food', `${formatNumber(cell.food)} / ${formatNumber(cell.foodCap)}`]);
-    rows.push(['Feeds about', `${formatNumber(cell.capacity)} people`]);
-  } else {
-    rows.push(['Food', 'None (impassable)']);
-  }
+  if (hex.river) rows.splice(2, 0, ['River', 'Yes (fertile)']);
   el.replaceChildren(
     h('header', {},
-      h('h3', {}, `${cell.terrain} (${cell.x}, ${cell.y})`),
-      h('button', { type: 'button', class: 'btn small ghost', 'aria-label': 'Close cell details', onclick: onClose }, '✕')),
-    h('dl', {}, rows.flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)])),
+      h('h3', { id: 'inspector-title' }, hex.name, h('small', {}, ` (${hex.col}, ${hex.row})`)),
+      h('button', { type: 'button', class: 'btn ghost', 'aria-label': 'Close hex details', onclick: onClose }, '✕')),
+    h('dl', {}, rows.flatMap(([k, v]) => [h('dt', {}, k), h('dd', { 'data-field': k.toLowerCase().replace(/ /g, '-') }, v)])),
   );
 }

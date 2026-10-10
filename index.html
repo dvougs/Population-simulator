@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PopSim">
-  <meta name="description" content="Watch civilisations grow, starve and spread across a generated world.">
+  <meta name="description" content="Generate a hex world and watch civilisations grow, starve and spread across it.">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -17,22 +17,41 @@
   <script type="module" src="src/main.js"></script>
 </head>
 <body>
-  <section id="setup" class="screen setup" aria-labelledby="setup-title">
+  <section id="mapgen" class="screen setup" aria-labelledby="mapgen-title">
+    <header class="setup-header">
+      <h1 id="mapgen-title">New world</h1>
+    </header>
+    <div class="mapgen-layout">
+      <figure class="preview">
+        <canvas id="preview" aria-label="Map preview"></canvas>
+        <figcaption id="preview-info" aria-live="polite"></figcaption>
+      </figure>
+      <form id="mapgen-form" class="setup-form mapgen-form" novalidate></form>
+    </div>
+    <div class="start-bar"><div class="inner">
+      <button id="btn-continue" class="btn primary" type="submit" form="mapgen-form">Continue</button>
+    </div></div>
+  </section>
+
+  <section id="setup" class="screen setup" aria-labelledby="setup-title" hidden>
     <header class="setup-header">
       <h1 id="setup-title">Population Simulator</h1>
-      <button id="btn-resume" class="btn ghost" type="button" hidden>Back to map</button>
+      <button id="btn-resume" class="btn ghost" type="button" hidden>Back to game</button>
     </header>
     <form id="setup-form" class="setup-form" novalidate></form>
+    <div class="start-bar"><div class="inner">
+      <button id="btn-start" class="btn primary" type="submit" form="setup-form">Start simulation</button>
+    </div></div>
   </section>
 
   <section id="game" class="screen game" hidden>
-    <canvas id="map" aria-label="Simulation map. Pinch to zoom, drag to pan, tap a cell to inspect it."></canvas>
+    <canvas id="map" aria-label="Hex map. Pinch or scroll to zoom, drag to pan, tap a hex to inspect it."></canvas>
 
     <header class="hud">
       <button id="btn-setup" class="btn hud-btn" type="button" aria-label="Back to setup">&#9776;</button>
       <div class="hud-info">
         <div id="hud-year" class="hud-year">Year 0</div>
-        <div id="hud-pop" class="hud-pop">0 people</div>
+        <div id="hud-pop" class="hud-pop"></div>
       </div>
       <button id="btn-fit" class="btn hud-btn" type="button" aria-label="Fit map to screen">&#x2922;</button>
     </header>
@@ -51,7 +70,7 @@
         <div id="speed" class="segmented" role="radiogroup" aria-label="Speed"></div>
       </div>
       <div id="sheet-body" class="sheet-body">
-        <h2 class="sheet-title">Civilisations</h2>
+        <h2 class="sheet-title">Map</h2>
         <ul id="stats" class="stats"></ul>
       </div>
     </aside>

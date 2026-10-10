@@ -1,14 +1,16 @@
-// Per-civ population and territory list, sorted by population.
+// Map summary in the bottom sheet: hexes of each terrain. Per-civ population joins it in Phase 2.
 
 import { h, formatNumber } from './dom.js';
-import { rgbCss } from '../render/palette.js';
+import { rgbCss, TERRAIN_RGB } from '../render/palette.js';
+import { TERRAIN_NAMES } from '../sim/terrain.js';
 
 export function renderStats(listEl, stats) {
-  const civs = [...stats.civs].sort((a, b) => b.pop - a.pop || a.id - b.id);
-  listEl.replaceChildren(...civs.map((c) => h('li', { class: c.alive ? '' : 'dead', 'data-civ': c.id },
-    h('span', { class: 'swatch', style: { background: rgbCss(c.color) } }),
-    h('span', { class: 'name' }, c.name, c.alive ? '' : ` (died year ${c.extinctAt})`),
-    h('span', { class: 'num' }, formatNumber(c.pop), h('small', {}, 'people')),
-    h('span', { class: 'num' }, formatNumber(c.territory), h('small', {}, 'cells')),
+  const rows = TERRAIN_NAMES.map((name, t) => ({ name, t, n: stats.terrainCounts[t] }))
+    .filter((r) => r.n > 0)
+    .sort((a, b) => b.n - a.n || a.t - b.t);
+  listEl.replaceChildren(...rows.map((r) => h('li', { 'data-terrain': r.t },
+    h('span', { class: 'swatch', style: { background: rgbCss(TERRAIN_RGB[r.t]) } }),
+    h('span', { class: 'name' }, r.name),
+    h('span', { class: 'num' }, formatNumber(r.n), h('small', {}, 'hexes')),
   )));
 }

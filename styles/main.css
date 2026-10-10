@@ -56,7 +56,7 @@ button, input, select { font: inherit; color: inherit; }
 .row + .row { margin-top: 6px; }
 .row > label { flex: 0 0 auto; min-width: 6.5em; color: var(--text-dim); }
 .row > .grow { flex: 1 1 auto; min-width: 0; }
-.row output { min-width: 3.5em; text-align: right; font-variant-numeric: tabular-nums; }
+.row output { min-width: 3.5em; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 select, input[type="text"], input[type="number"] {
   min-height: var(--tap); border-radius: 10px; border: 1px solid var(--border);
   background: var(--surface-2); padding: 0 10px; width: 100%; font-size: 16px; /* 16px stops iOS zooming on focus */
@@ -67,6 +67,21 @@ input[type="range"] { width: 100%; height: var(--tap); accent-color: var(--accen
 .civ-list li { display: flex; align-items: center; gap: 10px; }
 .civ-list select { flex: 1 1 auto; }
 .civ-desc { margin: 8px 0 0; font-size: 0.85rem; color: var(--text-dim); }
+
+/* ---------- Map-generation screen ---------- */
+.mapgen-layout { max-width: 720px; margin: 0 auto; display: grid; gap: 14px; }
+.preview { margin: 0; display: grid; gap: 6px; min-width: 0; }
+#preview { display: block; width: 100%; aspect-ratio: 8 / 7; max-height: 44vh; border-radius: var(--radius);
+  border: 1px solid var(--border); background: #0b0e13; }
+.preview figcaption { text-align: center; color: var(--text-dim); font-size: 0.85rem; font-variant-numeric: tabular-nums; min-height: 1.2em; }
+.setup-form.mapgen-form { grid-template-columns: minmax(0, 1fr); }
+.map-summary { margin: 0 0 8px; }
+/* Landscape: preview on the left (kept in view), settings on the right. */
+@media (orientation: landscape) and (min-width: 560px) {
+  .mapgen-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); max-width: 1100px; align-items: start; }
+  .preview { position: sticky; top: 0; }
+  #preview { max-height: calc(100vh - 150px - var(--safe-top) - var(--safe-bottom)); }
+}
 
 .start-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
   padding: 10px calc(16px + var(--safe-right)) calc(10px + var(--safe-bottom)) calc(16px + var(--safe-left));
@@ -89,7 +104,8 @@ input[type="range"] { width: 100%; height: var(--tap); accent-color: var(--accen
 .inspector { position: absolute; top: calc(64px + var(--safe-top)); left: calc(10px + var(--safe-left)); width: min(300px, calc(100% - 20px - var(--safe-left) - var(--safe-right)));
   background: rgba(27, 33, 43, 0.94); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; font-size: 0.9rem; box-shadow: 0 6px 24px rgba(0,0,0,0.4); }
 .inspector header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
-.inspector h3 { margin: 0; font-size: 1rem; text-transform: capitalize; }
+.inspector h3 { margin: 0; font-size: 1rem; }
+.inspector h3 small { color: var(--text-dim); font-weight: 400; font-variant-numeric: tabular-nums; }
 .inspector dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0; }
 .inspector dt { color: var(--text-dim); }
 .inspector dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }

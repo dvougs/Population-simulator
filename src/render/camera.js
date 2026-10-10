@@ -1,17 +1,17 @@
-// Map camera: scale is screen CSS pixels per cell; (x, y) is where cell (0, 0)'s
-// top-left corner sits on screen.
+// Map camera. World coordinates are hex-layout pixels (see sim/hex.js and
+// HEX_SIZE); scale is screen CSS pixels per world unit and (x, y) is where the
+// world origin sits on screen.
 
 export class Camera {
   constructor() {
-    this.scale = 4;
+    this.scale = 1;
     this.x = 0;
     this.y = 0;
     this.viewW = 1;
     this.viewH = 1;
-    this.mapW = 1;
-    this.mapH = 1;
-    this.minScale = 1;
-    this.maxScale = 64;
+    this.bounds = { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+    this.minScale = 0.05;
+    this.maxScale = 8;
   }
 
   setView(w, h) {
@@ -19,20 +19,24 @@ export class Camera {
     this.viewH = Math.max(1, h);
   }
 
-  setMap(w, h) {
-    this.mapW = w;
-    this.mapH = h;
+  /** World-space bounding box of the map. */
+  setBounds(bounds) {
+    this.bounds = { ...bounds };
   }
+
+  get mapW() { return this.bounds.maxX - this.bounds.minX; }
+  get mapH() { return this.bounds.maxY - this.bounds.minY; }
 
   /** Fit the whole map inside the view, leaving room for overlays (insets in CSS px). */
   fit({ top = 0, bottom = 0, right = 0 } = {}) {
     const availW = Math.max(50, this.viewW - right);
     const availH = Math.max(50, this.viewH - top - bottom);
-    const s = Math.min((availW - 16) / this.mapW, (availH - 16) / this.mapH);
-    this.scale = Math.max(0.5, s);
+    this.scale = Math.max(0.01, Math.min((availW - 16) / this.mapW, (availH - 16) / this.mapH));
+    // Zoom out a little past the fit, and in far enough for a hex to fill much of the screen.
     this.minScale = this.scale * 0.6;
-    this.x = (availW - this.mapW * this.scale) / 2;
-    this.y = top + (availH - this.mapH * this.scale) / 2;
+    this.maxScale = Math.max(this.scale * 2, Math.min(this.viewW, this.viewH) / 80);
+    this.x = (availW - this.mapW * this.scale) / 2 - this.bounds.minX * this.scale;
+    this.y = top + (availH - this.mapH * this.scale) / 2 - this.bounds.minY * this.scale;
   }
 
   pan(dx, dy) {
@@ -54,13 +58,19 @@ export class Camera {
   /** Keep at least a margin of the map on screen. */
   clamp() {
     const margin = 48;
+    const left = this.x + this.bounds.minX * this.scale;
+    const top = this.y + this.bounds.minY * this.scale;
     const w = this.mapW * this.scale;
     const h = this.mapH * this.scale;
-    this.x = Math.min(this.viewW - margin, Math.max(margin - w, this.x));
-    this.y = Math.min(this.viewH - margin, Math.max(margin - h, this.y));
+    this.x += Math.min(this.viewW - margin, Math.max(margin - w, left)) - left;
+    this.y += Math.min(this.viewH - margin, Math.max(margin - h, top)) - top;
   }
 
-  screenToCell(sx, sy) {
-    return { x: Math.floor((sx - this.x) / this.scale), y: Math.floor((sy - this.y) / this.scale) };
+  screenToWorld(sx, sy) {
+    return { x: (sx - this.x) / this.scale, y: (sy - this.y) / this.scale };
+  }
+
+  worldToScreen(wx, wy) {
+    return { x: this.x + wx * this.scale, y: this.y + wy * this.scale };
   }
 }
