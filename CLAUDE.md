@@ -61,7 +61,7 @@ RULES.md                the player rulebook; always matches the code
 
 - **RULES.md must always match the code.** Every rule and every number the game uses (rates, thresholds, capacities, ranges, defaults) appears in RULES.md with its value. A change to a rule or number updates RULES.md in the same commit. Tests treat RULES.md as the specification: code that contradicts it is a bug.
 - **Code reaches `main` only through pull requests the owner merges.** Only `project/` files are pushed to `main` directly. The PreToolUse hook in `.claude/settings.json` (`.claude/hooks/guard-main.mjs`) blocks any push to `main` that changes other files, and blocks merging pull requests.
-- Cycle branches are named `claude/cycle-<YYYYMMDD>-<HHMM>` and never touch `project/`.
+- Cycle branches are named `claude/cycle-<YYYYMMDD>-<HHMM>` and never edit `project/` themselves: the director pushes `project/` to `main` and merges `main` into the cycle branch, so the pull request carries the latest project files.
 
 ## Workflow
 

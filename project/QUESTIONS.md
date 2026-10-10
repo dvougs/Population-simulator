@@ -1,6 +1,6 @@
 # Questions
 
-How to use this file: answer a question by writing after its "Answer:" line (a number, or anything in your own words). Add your own requests or rule changes under "Requests" at any time, one bullet each. The director picks both up on its next cycle, turns them into tasks, and moves them to "Answered".
+How to use this file: answer a question by writing after its "Answer:" line (a number, or anything in your own words). Decide a proposal by writing after its "Decision:" line: yes, no, later, or the changes you want. Add your own requests or rule changes under "Requests" at any time, one bullet each. The director picks all of these up on its next cycle, turns them into tasks, and moves them to "Answered".
 
 ## Open
 
@@ -23,6 +23,12 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
   3. Add separate sliders for forest, desert and tundra: full control, busier screen on a phone.
 - Recommendation: 2, one slider gives varied worlds without crowding the phone screen.
 - Answer:
+
+## Proposals
+
+Ideas the director draws from headless simulation runs and the code. At most 6 wait here at a time.
+
+None yet.
 
 ## Requests
 
