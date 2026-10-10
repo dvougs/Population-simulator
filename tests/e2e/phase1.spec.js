@@ -86,6 +86,34 @@ async function visibleSampleHexes(page, { water = false } = {}) {
   }, water);
 }
 
+/** True if the selected hex's centre is hidden under some other element (the inspector card). */
+async function hexCovered(page, col, row) {
+  return page.evaluate(([c, r]) => {
+    const map = document.getElementById('map');
+    const box = map.getBoundingClientRect();
+    const p = window.popsim.hexToScreen(c, r);
+    return document.elementFromPoint(box.left + p.x, box.top + p.y) !== map;
+  }, [col, row]);
+}
+
+/** Inspector card rectangle relative to the map canvas. */
+async function cardRect(page) {
+  return page.evaluate(() => {
+    const m = document.getElementById('map').getBoundingClientRect();
+    const r = document.getElementById('inspector').getBoundingClientRect();
+    return { left: r.left - m.left, top: r.top - m.top, right: r.right - m.left, bottom: r.bottom - m.top };
+  });
+}
+
+/** True if a point (canvas px) is on the map canvas itself, not under a card, HUD or sheet. */
+async function pointOnMap(page, x, y) {
+  return page.evaluate(([px, py]) => {
+    const map = document.getElementById('map');
+    const box = map.getBoundingClientRect();
+    return px > 0 && py > 0 && px < box.width && py < box.height && document.elementFromPoint(box.left + px, box.top + py) === map;
+  }, [x, y]);
+}
+
 async function expectInspectorMatchesRules(page, sample) {
   const insp = page.locator('#inspector');
   await expect(insp).toBeVisible();
@@ -377,13 +405,9 @@ test.describe('game', () => {
         await expect.poll(() => page.evaluate(() => window.popsim.selected())).toBe(s.row * PRESETS[preset].size + s.col);
         await expectInspectorMatchesRules(page, s);
         if (key === 'river' || key === 'forest') await shot(page, testInfo, `inspector-${preset}-${key}`);
-        // Tapping the same hex again closes the inspector, unless the card now covers it.
-        const covered = await page.evaluate(({ x, y }) => {
-          const r = document.getElementById('map').getBoundingClientRect();
-          return document.elementFromPoint(r.left + x, r.top + y) !== document.getElementById('map');
-        }, s);
-        if (covered) await page.locator('#inspector button[aria-label="Close hex details"]').click();
-        else await tapMap(page, s.x, s.y);
+        // The card never covers the tapped hex, and tapping it again closes the card (BUG-1).
+        expect(await hexCovered(page, s.col, s.row), `card covers hex (${s.col}, ${s.row})`).toBe(false);
+        await tapMap(page, s.x, s.y);
         await expect(page.locator('#inspector')).toBeHidden();
       }
       if (preset === 'default') expect(samples.river, 'default map should show a river hex').toBeTruthy();
@@ -519,6 +543,147 @@ test.describe('game', () => {
   });
 });
 
+test.describe('inspector placement', () => {
+  /** Select a visible land hex and return it with the card's rect, trying hexes until accept() likes one. */
+  async function selectHex(page, accept) {
+    const samples = Object.values(await visibleSampleHexes(page));
+    const all = await page.evaluate(() => {
+      const size = window.popsim.mapParams().size;
+      const out = [];
+      for (let row = 0; row < size; row++) for (let col = 0; col < size; col++) {
+        if (!window.popsim.hex(col, row).water) out.push({ col, row });
+      }
+      return out;
+    });
+    for (const { col, row } of [...samples, ...all]) {
+      const p = await page.evaluate(([c, r]) => window.popsim.hexToScreen(c, r), [col, row]);
+      if (!(await pointOnMap(page, p.x, p.y))) continue;
+      await tapMap(page, p.x, p.y);
+      await expect(page.locator('#inspector')).toBeVisible();
+      const card = await cardRect(page);
+      const extra = await accept({ col, row, ...p }, card);
+      if (extra) return { col, row, ...p, card, ...extra };
+      await page.locator('#inspector button[aria-label="Close hex details"]').click();
+      await expect(page.locator('#inspector')).toBeHidden();
+    }
+    return null;
+  }
+
+  test('panning the selected hex under the card moves the card to another corner', async ({ page }, testInfo) => {
+    await startGame(page);
+    await pause(page);
+    const sel = await selectHex(page, async () => ({}));
+    expect(sel).toBeTruthy();
+    const target = { x: (sel.card.left + sel.card.right) / 2, y: (sel.card.top + sel.card.bottom) / 2 };
+    const box = await page.locator('#map').boundingBox();
+    await page.mouse.move(box.x + sel.x, box.y + sel.y);
+    await page.mouse.down();
+    await page.mouse.move(box.x + target.x, box.y + target.y, { steps: 12 });
+    await page.mouse.up();
+    await expect(page.locator('#inspector')).toBeVisible();
+    expect(await page.evaluate(() => window.popsim.selected())).toBe(sel.row * 10 + sel.col);
+    const moved = await page.evaluate(([c, r]) => window.popsim.hexToScreen(c, r), [sel.col, sel.row]);
+    // The hex really went where the card was.
+    expect(moved.x).toBeGreaterThan(sel.card.left);
+    expect(moved.x).toBeLessThan(sel.card.right);
+    expect(moved.y).toBeGreaterThan(sel.card.top);
+    expect(moved.y).toBeLessThan(sel.card.bottom);
+    expect(await cardRect(page)).not.toEqual(sel.card);
+    expect(await hexCovered(page, sel.col, sel.row)).toBe(false);
+    await shot(page, testInfo, 'inspector-after-pan');
+    await tapMap(page, moved.x, moved.y);
+    await expect(page.locator('#inspector')).toBeHidden();
+  });
+
+  test('zooming the selected hex under the card moves the card to another corner', async ({ page }, testInfo) => {
+    await startGame(page);
+    await pause(page);
+    // Wheel zoom by k keeps the anchor A fixed: P' = A + (P − A)·k. With k = 2, anchoring at
+    // A = 2P − C lands the hex P on the card centre C. Fit allows zooming to 2× the fitted scale.
+    const k = 2;
+    const sel = await selectHex(page, async (p, card) => {
+      const c = { x: (card.left + card.right) / 2, y: (card.top + card.bottom) / 2 };
+      const a = { x: k * p.x - (k - 1) * c.x, y: k * p.y - (k - 1) * c.y };
+      return (await pointOnMap(page, a.x, a.y)) ? { anchor: a } : null;
+    });
+    test.skip(!sel, 'no hex where the zoom anchor falls on the open map at this viewport');
+    const scale0 = (await camera(page)).scale;
+    // One wheel event with an exact delta (emulated phones rescale page.mouse.wheel deltas).
+    await page.locator('#map').evaluate((el, { x, y, deltaY }) => {
+      const r = el.getBoundingClientRect();
+      el.dispatchEvent(new WheelEvent('wheel', { clientX: r.left + x, clientY: r.top + y, deltaY, bubbles: true, cancelable: true }));
+    }, { ...sel.anchor, deltaY: -Math.log(k) / 0.0015 });
+    await expect.poll(async () => (await camera(page)).scale).toBeGreaterThan(scale0 * 1.9);
+    await expect(page.locator('#inspector')).toBeVisible();
+    const moved = await page.evaluate(([c, r]) => window.popsim.hexToScreen(c, r), [sel.col, sel.row]);
+    expect(moved.x).toBeGreaterThan(sel.card.left);
+    expect(moved.x).toBeLessThan(sel.card.right);
+    expect(moved.y).toBeGreaterThan(sel.card.top);
+    expect(moved.y).toBeLessThan(sel.card.bottom);
+    expect(await cardRect(page)).not.toEqual(sel.card);
+    expect(await hexCovered(page, sel.col, sel.row)).toBe(false);
+    await shot(page, testInfo, 'inspector-after-zoom');
+    await tapMap(page, moved.x, moved.y);
+    await expect(page.locator('#inspector')).toBeHidden();
+  });
+});
+
+test.describe('narrow phones', () => {
+  const controlRects = (page) => page.evaluate(() => ['#btn-play', '#btn-step', ...[...document.querySelectorAll('#speed button')].map((_, i) => `#speed button:nth-child(${i + 1})`)]
+    .map((sel) => {
+      const el = document.querySelector(sel);
+      const r = el.getBoundingClientRect();
+      return { id: el.id || el.textContent.trim(), left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
+    }));
+
+  test('342 × 750: all five speed buttons fit on one row', async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 342, height: 750 });
+    await startGame(page);
+    const rects = await controlRects(page);
+    const speeds = rects.slice(2);
+    expect(speeds.map((r) => r.id)).toEqual(['1×', '2×', '5×', '20×', 'Max']);
+    for (const r of rects) {
+      expect(r.left, r.id).toBeGreaterThanOrEqual(0);
+      expect(r.right, r.id).toBeLessThanOrEqual(342);
+      expect(r.bottom, r.id).toBeLessThanOrEqual(750);
+      expect(r.width, r.id).toBeGreaterThanOrEqual(44);
+      expect(r.height, r.id).toBeGreaterThanOrEqual(44);
+    }
+    for (const r of speeds) expect(r.top, r.id).toBeCloseTo(speeds[0].top, 0);
+    await shot(page, testInfo, 'controls-342');
+    await page.locator('#speed button', { hasText: 'Max' }).click();
+    await expect(page.locator('#speed button', { hasText: 'Max' })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  test('320 × 568: the speed buttons wrap, Max is fully visible, every button is at least 44 × 44', async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 320, height: 568 });
+    await startGame(page);
+    const rects = await controlRects(page);
+    const [play, , ...speeds] = rects;
+    expect(speeds[0].top).toBeGreaterThanOrEqual(play.bottom - 1);
+    for (const r of rects) {
+      expect(r.left, r.id).toBeGreaterThanOrEqual(0);
+      expect(r.right, r.id).toBeLessThanOrEqual(320);
+      expect(r.top, r.id).toBeGreaterThanOrEqual(0);
+      expect(r.bottom, r.id).toBeLessThanOrEqual(568);
+      expect(r.width, r.id).toBeGreaterThanOrEqual(44);
+      expect(r.height, r.id).toBeGreaterThanOrEqual(44);
+    }
+    const max = page.locator('#speed button', { hasText: 'Max' });
+    const hit = await max.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return top === el || el.contains(top);
+    });
+    expect(hit).toBe(true);
+    await shot(page, testInfo, 'controls-320');
+    await max.click();
+    await expect(max).toHaveAttribute('aria-checked', 'true');
+    const handle = await page.locator('#sheet-handle').boundingBox();
+    expect(handle.height).toBeGreaterThanOrEqual(44);
+  });
+});
+
 test.describe('layout', () => {
   test('touch targets are at least 44px and inputs at least 16px', async ({ page }) => {
     const check = () => page.evaluate(() => {
@@ -546,7 +711,10 @@ test.describe('layout', () => {
     await tapMap(page, land.x, land.y);
     await expect(page.locator('#inspector')).toBeVisible();
     // The sheet handle is a full-width swipe strip; it is checked separately below.
-    problems.game = (await check()).filter((p) => !p.startsWith('sheet-handle'));
+    problems.game = await check();
+    const handle = await page.locator('#sheet-handle').boundingBox();
+    expect(handle.height).toBeGreaterThanOrEqual(44);
+    expect(handle.width).toBeGreaterThanOrEqual(44);
     expect(problems).toEqual({ mapgen: [], setup: [], game: [] });
   });
 
