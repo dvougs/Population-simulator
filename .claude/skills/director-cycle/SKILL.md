@@ -46,17 +46,15 @@ Ready tasks are status todo with no blocking open question. If there are none, g
 One release candidate at a time: if a "Release candidate:" pull request is still open, do not start new work on top of it. Only fix what its review comments or failing CI ask for, on its own branch, with the same test loop below; then go to step 6.
 
 Otherwise:
-1. `git checkout -b claude/cycle-<YYYYMMDD>-<HHMM> origin/main`. The cycle branch never touches project/; the agents get their tasks from you.
+1. `git checkout -b claude/cycle-<YYYYMMDD>-<HHMM> origin/main`. Never edit project/ on the cycle branch: it gets project/ only by merging main in step 8. The agents get their tasks from you.
 2. Pick a batch of ready tasks that makes sense as one pull request (one phase step, a few related tasks). Set them to doing.
 3. Run the **game-dev** agent with the task rows verbatim, the branch name, and any relevant answers. Keep its report.
 4. Run the **unit-tester** agent with the task rows and game-dev's "Rules changed" and "Please test". Then run the **functional-tester** agent with the same.
 5. If either tester reports bugs, give the bug reports verbatim to game-dev, then run both testers again. At most two fix rounds. If bugs remain after that, mark the affected tasks blocked, add an Open question describing the bug and the options, and leave out of the pull request any work that is broken (revert those commits on the branch if needed).
 6. Check RULES.md: for every rule changed this cycle (game-dev's "Rules changed" plus your own reading of `git diff origin/main -- src`), the number in RULES.md must equal the number in the code. If not, send game-dev back to fix RULES.md, then re-run unit-tester.
 7. Check ownership: `git diff --name-only origin/main` must show no tests/ files in game-dev's commits and no src/ files in the testers' commits. If it does, revert those changes and record it in the log.
-8. Push: `git push -u origin <branch>`.
-9. Open the pull request through the REST API (gh pr commands are blocked in cloud sessions):
-   `gh api repos/<owner>/<repo>/pulls -f title="Release candidate: <summary>" -f head=<branch> -f base=main -f body=@<file>` (or `--input` with a JSON body). The body lists: the task IDs (one line "Tasks: T-001, T-002"), what changed in player terms, rules changed with old → new values, unit and e2e results (counts and any skipped areas), and known issues. If `gh` fails, open it with the GitHub MCP `create_pull_request` tool.
-10. Never merge it.
+
+Do not push or open the pull request yet: that is step 9, after the design review, questions and docs pass.
 
 ## 6. Design review
 
@@ -101,17 +99,34 @@ Ask only about decisions that belong to the user (design, scope, trade-offs) or 
 
 Mark tasks a question blocks as blocked with the question ID as source, and keep working on anything it does not block.
 
-## 8. Record and publish project/
+## 8. Docs pass and publish
 
-On local `main`:
-- project/TASKS.md: final status of every task touched.
-- project/QUESTIONS.md: new questions and proposals; answered and decided entries moved.
-- project/PROGRESS.md: update the status block at the top (phase, "Last full cycle: <YYYY-MM-DD HH:MM> UTC", what is live on GitHub Pages, open release candidate, blockers), then add a cycle-log entry under "Cycle log", newest first: what was decided, built, tested, opened, merged, blocked.
-- A throttled run (step 2) writes nothing. A run that does steps 3-8 is a full cycle, even when nothing was ready to build.
+Run this after every agent has finished (build, fix rounds, design review, questions) and before the pull request opens. "The cycle branch" here is the branch step 5 built or fixed; if there is none this time, skip the steps marked *(branch)*.
 
-Commit ("Director cycle <YYYY-MM-DD HH:MM>") and `git push origin main`. Only project/ files may be in this push; if the hook blocks it, find the stray change instead of working around the hook.
+1. Bookkeeping, on local `main`:
+   - project/TASKS.md: final status of every task touched.
+   - project/QUESTIONS.md: new questions and proposals; answered and decided entries moved.
+   - project/PROGRESS.md: update the status block at the top (phase, "Last full cycle: <YYYY-MM-DD HH:MM> UTC", what is live on GitHub Pages, open release candidate, blockers), then add a cycle-log entry under "Cycle log", newest first: what was decided, built, tested, opened, merged, blocked.
+2. Review every Markdown file in the repo (`git ls-files '*.md'`: RULES.md, CLAUDE.md, README.md, everything in project/, the agents and skills under .claude/, any others) against the code on the cycle branch (or `origin/main` if there is none), and update each so it reflects the latest state of the code, rules, questions, tasks and progress. Edit project/ files on local `main`; edit every other file on the cycle branch (with no cycle branch, leave non-project files for the next one and note the drift in the cycle log).
+   - RULES.md describes intended behaviour. Where it and the code disagree: if a task or answer asked for the code's behaviour and RULES.md lagged, update RULES.md; if the code is wrong, that is a bug, so send it to game-dev and re-run the step 5 test loop, or, if you cannot tell which is intended, ask the user an Open question. Never change a rule to match buggy code.
+3. *(branch)* Commit the non-project docs on the cycle branch ("Docs pass <YYYY-MM-DD HH:MM>").
+4. Commit project/ on local `main` ("Director cycle <YYYY-MM-DD HH:MM>") and push it to `origin main` straight away, so the Questions chat sees new questions without waiting for a merge. Only project/ files may be in this push; if the hook blocks it, find the stray change instead of working around the hook. If the push is rejected because main moved (the owner answered meanwhile), `git pull --no-rebase origin main`, resolve any conflict by keeping both sides' entries, and push again until it lands.
+5. *(branch)* `git fetch origin main`, check out the cycle branch and `git merge --no-edit origin/main`, so the pull request carries exactly main's project/ files. The cycle branch never edits project/ itself, so this merge does not conflict there, and the owner's later answers on main merge cleanly with the pull request.
 
-## 9. Email
+A throttled run (step 2) writes nothing. A run that does steps 3-8 is a full cycle, even when nothing was ready to build.
+
+## 9. Open the pull request
+
+Only when step 5 built or fixed a cycle branch.
+
+1. Push the cycle branch: `git push -u origin <branch>`.
+2. A new branch: open the pull request through the REST API (gh pr commands are blocked in cloud sessions):
+   `gh api repos/<owner>/<repo>/pulls -f title="Release candidate: <summary>" -f head=<branch> -f base=main -f body=@<file>` (or `--input` with a JSON body). If `gh` fails, open it with the GitHub MCP `create_pull_request` tool.
+   A fix to an open release candidate: update that pull request's description with the same sections for this cycle.
+3. The body lists: the task IDs (one line "Tasks: T-001, T-002"), what changed in player terms, rules changed with old → new values, the questions and proposals answered or decided this cycle and the ones opened this cycle (ID and one line each), unit and e2e results (counts and any skipped areas), and known issues.
+4. Never merge it.
+
+## 10. Email
 
 Only when this cycle produced new questions, new proposals, a new pull request, or a blocker: send one short email with the Gmail connector to the connected account's own address and to no one else. Find that address from the From header of the latest message in `in:sent` (`search_threads`, then `get_message` or `get_thread`); if there is no sent mail to read it from, skip the email and say so in the cycle log.
 
