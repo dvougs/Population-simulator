@@ -10,12 +10,14 @@
     "test:unit": "node --test \"tests/unit/**/*.test.js\"",
     "test:e2e": "playwright test",
     "headless": "node tools/headless.js",
-    "perf": "node tools/headless.js --ticks 2000 --size 100 --min-tps 150"
+    "perf": "node tools/headless.js --ticks 2000 --size 50 --rivers 12 --min-tps 150",
+    "vendor:pixi": "node -e \"require('fs').mkdirSync('vendor',{recursive:true});require('fs').copyFileSync('node_modules/pixi.js/dist/pixi.min.mjs','vendor/pixi.mjs')\""
   },
   "engines": {
     "node": ">=22"
   },
   "devDependencies": {
-    "@playwright/test": "^1.64.0"
+    "@playwright/test": "^1.64.0",
+    "pixi.js": "^8.22.0"
   }
 }

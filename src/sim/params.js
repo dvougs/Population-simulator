@@ -1,125 +1,80 @@
 // Setup parameters: defaults, presets, randomise and validation.
 // Params are plain JSON so they can be saved, shared and sent to a worker.
+// The map parameters (seed, size, water, mountains, rivers) alone decide the map.
 
-import { CIV_TYPE_IDS } from './civTypes.js';
 import { randomSeedString } from './rng.js';
 
-export const GRID_SIZES = [50, 75, 100, 150];
-export const PLACEMENTS = ['spread', 'clustered', 'random'];
-export const END_CONDITIONS = ['none', 'ticks', 'lastStanding'];
-export const MAX_CIVS = 10;
-export const MIN_CIVS = 1;
+export const END_CONDITIONS = ['none', 'ticks'];
+export const MAP_KEYS = ['seed', 'size', 'water', 'mountains', 'rivers'];
+
+/** Valid ranges, shared by validation, the setup screens and RULES.md. */
+export const LIMITS = Object.freeze({
+  size: { min: 10, max: 50 },
+  water: { min: 0, max: 0.7 },
+  mountains: { min: 0, max: 0.4 },
+  rivers: { min: 0, max: 20 },
+  endTicks: { min: 10, max: 100000 },
+  seedLength: 64,
+});
 
 export const DEFAULT_PARAMS = Object.freeze({
   seed: 'pangaea',
-  width: 100,
-  height: 100,
-  terrainMix: { water: 0.22, desert: 0.13, plains: 0.33, fertile: 0.2, mountain: 0.12 },
-  civs: ['expansionist', 'cooperative', 'nomadic', 'isolationist', 'aggressive', 'expansionist'],
-  startPop: 300,
-  placement: 'spread',
-  abundance: 1,
+  size: 10,
+  water: 0.25,
+  mountains: 0.12,
+  rivers: 2,
   endCondition: 'none',
   endTicks: 1000,
 });
 
 export const PRESETS = {
-  balanced: { label: 'Balanced', params: {} },
-  archipelago: {
-    label: 'Archipelago',
-    params: {
-      seed: 'islands',
-      terrainMix: { water: 0.5, desert: 0.05, plains: 0.2, fertile: 0.17, mountain: 0.08 },
-    },
-  },
-  drylands: {
-    label: 'Drylands',
-    params: {
-      seed: 'dune',
-      terrainMix: { water: 0.08, desert: 0.45, plains: 0.25, fertile: 0.07, mountain: 0.15 },
-      abundance: 0.8,
-      civs: ['nomadic', 'nomadic', 'expansionist', 'isolationist', 'aggressive', 'cooperative'],
-    },
-  },
-  crowded: {
-    label: 'Crowded',
-    params: {
-      seed: 'crowd',
-      width: 75,
-      height: 75,
-      civs: ['expansionist', 'cooperative', 'nomadic', 'isolationist', 'aggressive',
-        'expansionist', 'cooperative', 'aggressive', 'nomadic', 'isolationist'],
-      startPop: 150,
-      placement: 'random',
-    },
-  },
+  default: { label: 'Small world', params: {} },
+  continent: { label: 'Continent', params: { seed: 'continent', size: 30, water: 0.2, mountains: 0.12, rivers: 6 } },
+  archipelago: { label: 'Archipelago', params: { seed: 'islands', size: 30, water: 0.6, mountains: 0.08, rivers: 2 } },
+  highlands: { label: 'Highlands', params: { seed: 'peaks', size: 20, water: 0.15, mountains: 0.3, rivers: 5 } },
+  large: { label: 'Large world', params: { seed: 'vast', size: 50, water: 0.3, mountains: 0.12, rivers: 12 } },
 };
 
 export function presetParams(key) {
   const preset = PRESETS[key];
   if (!preset) throw new Error(`Unknown preset: ${key}`);
-  return normalizeParams({ ...structuredClone(DEFAULT_PARAMS), ...structuredClone(preset.params) });
+  return normalizeParams({ ...DEFAULT_PARAMS, ...preset.params });
 }
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-const num = (v, fallback) => (Number.isFinite(Number(v)) ? Number(v) : fallback);
+const num = (v, fallback) => (v !== null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : fallback);
+const range = (v, key, fallback) => clamp(num(v, fallback), LIMITS[key].min, LIMITS[key].max);
 
 /** Returns a complete, valid copy of params. Unknown or bad values fall back to defaults. */
 export function normalizeParams(input = {}) {
   const d = DEFAULT_PARAMS;
   const p = {};
-  p.seed = String(input.seed ?? d.seed).slice(0, 64) || d.seed;
-  p.width = Math.round(clamp(num(input.width, d.width), 20, 200));
-  p.height = Math.round(clamp(num(input.height, d.height), 20, 200));
-
-  const mixIn = { ...d.terrainMix, ...(input.terrainMix || {}) };
-  const mix = {};
-  let total = 0;
-  for (const k of Object.keys(d.terrainMix)) {
-    mix[k] = clamp(num(mixIn[k], d.terrainMix[k]), 0, 1);
-    total += mix[k];
-  }
-  // Need some land, and shares must sum to 1.
-  if (total - mix.water <= 0.05) {
-    mix.plains += 0.3;
-    total += 0.3;
-  }
-  for (const k of Object.keys(mix)) mix[k] /= total;
-  p.terrainMix = mix;
-
-  const civs = Array.isArray(input.civs) ? input.civs.filter((t) => CIV_TYPE_IDS.includes(t)) : [...d.civs];
-  p.civs = civs.slice(0, MAX_CIVS);
-  if (p.civs.length < MIN_CIVS) p.civs = [...d.civs];
-
-  p.startPop = Math.round(clamp(num(input.startPop, d.startPop), 10, 5000));
-  p.placement = PLACEMENTS.includes(input.placement) ? input.placement : d.placement;
-  p.abundance = clamp(num(input.abundance, d.abundance), 0.2, 3);
+  p.seed = String(input.seed ?? d.seed).slice(0, LIMITS.seedLength) || d.seed;
+  p.size = Math.round(range(input.size, 'size', d.size));
+  // Shares are kept to whole percent so the same setting always gives the same map.
+  p.water = Math.round(range(input.water, 'water', d.water) * 100) / 100;
+  p.mountains = Math.round(range(input.mountains, 'mountains', d.mountains) * 100) / 100;
+  p.rivers = Math.round(range(input.rivers, 'rivers', d.rivers));
   p.endCondition = END_CONDITIONS.includes(input.endCondition) ? input.endCondition : d.endCondition;
-  p.endTicks = Math.round(clamp(num(input.endTicks, d.endTicks), 10, 100000));
+  p.endTicks = Math.round(range(input.endTicks, 'endTicks', d.endTicks));
   return p;
 }
 
-/** Random but sensible params. Uses Math.random (UI only); the sim itself stays seeded. */
+/** Just the parameters that decide the map. */
+export function mapParams(params) {
+  const p = normalizeParams(params);
+  return Object.fromEntries(MAP_KEYS.map((k) => [k, p[k]]));
+}
+
+/** Random but sensible map. Uses Math.random (UI only); the sim itself stays seeded. */
 export function randomParams(random = Math.random) {
-  const pick = (arr) => arr[Math.floor(random() * arr.length)];
-  const count = 3 + Math.floor(random() * 6);
-  const civs = Array.from({ length: count }, () => pick(CIV_TYPE_IDS));
-  const size = pick(GRID_SIZES.slice(0, 3));
+  const size = 10 + Math.floor(random() * 41);
   return normalizeParams({
     seed: randomSeedString(),
-    width: size,
-    height: size,
-    terrainMix: {
-      water: 0.05 + random() * 0.4,
-      desert: random() * 0.35,
-      plains: 0.15 + random() * 0.35,
-      fertile: 0.05 + random() * 0.25,
-      mountain: random() * 0.2,
-    },
-    civs,
-    startPop: 50 + Math.round(random() * 600),
-    placement: pick(PLACEMENTS),
-    abundance: 0.6 + random() * 1.2,
+    size,
+    water: 0.1 + random() * 0.5,
+    mountains: 0.05 + random() * 0.25,
+    rivers: Math.floor(random() * (Math.floor(size / 4) + 1)),
     endCondition: 'none',
   });
 }
