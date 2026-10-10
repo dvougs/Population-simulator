@@ -24,11 +24,11 @@ jobs:
           node-version: 22
       - name: Unit, determinism and invariant tests
         run: npm run test:unit
-      - name: Headless run (100x100, 6 civs, 2000 years) with throughput floor
+      - name: Headless run (50x50 hex map, 2000 years) with throughput floor
         run: npm run perf
       - name: Every preset runs headlessly
         run: |
-          for p in balanced archipelago drylands crowded; do
+          for p in default continent archipelago highlands large; do
             node tools/headless.js --preset "$p" --ticks 500
           done
 

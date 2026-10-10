@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 // Run the simulation without a browser.
 //
-//   node tools/headless.js [--seed s] [--ticks n] [--size n] [--civs a,b,c] [--preset name]
-//                          [--every n] [--min-tps n] [--json]
+//   node tools/headless.js [--seed s] [--ticks n] [--size n] [--water f] [--mountains f]
+//                          [--rivers n] [--preset name] [--every n] [--min-tps n] [--json]
 //
-// Prints per-civ results, the final state hash and ticks per second.
+// Prints the map summary, the map hash, the final state hash and ticks per second.
 // --min-tps makes it exit non-zero if throughput is below the floor (used in CI).
 
 import { Simulation } from '../src/sim/simulation.js';
 import { DEFAULT_PARAMS, presetParams } from '../src/sim/params.js';
+import { TERRAIN_NAMES } from '../src/sim/terrain.js';
 
 function parseArgs(argv) {
   const args = {};
@@ -24,57 +25,58 @@ function parseArgs(argv) {
 }
 
 const args = parseArgs(process.argv.slice(2));
-const params = structuredClone(args.preset ? presetParams(args.preset) : DEFAULT_PARAMS);
+const params = { ...(args.preset ? presetParams(args.preset) : DEFAULT_PARAMS) };
 if (args.seed) params.seed = String(args.seed);
-if (args.size) params.width = params.height = Number(args.size);
-if (args.civs) params.civs = String(args.civs).split(',');
+for (const key of ['size', 'water', 'mountains', 'rivers']) if (args[key] !== undefined) params[key] = Number(args[key]);
 const ticks = Number(args.ticks ?? 1000);
 const every = Number(args.every ?? 0);
 
+const g0 = performance.now();
 const sim = new Simulation(params);
-const fmt = (n) => Math.round(n).toLocaleString('en-US');
-
-function table(stats) {
-  return stats.civs
-    .map((c) => `  ${c.name.padEnd(16)} pop ${fmt(c.pop).padStart(9)}  cells ${String(c.territory).padStart(5)}  peak ${fmt(c.peakPop).padStart(9)}${c.alive ? '' : `  extinct@${c.extinctAt}`}`)
-    .join('\n');
-}
+const genMs = performance.now() - g0;
 
 const t0 = performance.now();
 let ran = 0;
 while (ran < ticks && !sim.finished) {
   const chunk = every > 0 ? Math.min(every, ticks - ran) : ticks - ran;
   ran += sim.tick(chunk);
-  if (every > 0 && !args.json) console.log(`year ${sim.tickCount}: total ${fmt(sim.stats().totalPop)}\n${table(sim.stats())}`);
+  if (every > 0 && !args.json) console.log(`year ${sim.tickCount}: hash ${sim.hash()}`);
 }
 const ms = performance.now() - t0;
-const tps = ran / (ms / 1000);
+const tps = ran / (Math.max(ms, 0.001) / 1000);
 
 const stats = sim.stats();
+const p = sim.params;
+const terrain = Object.fromEntries(TERRAIN_NAMES.map((name, t) => [name, stats.terrainCounts[t]]));
+const rivers = sim.map.river.reduce((s, v) => s + v, 0);
 const result = {
-  seed: sim.params.seed,
-  size: `${sim.params.width}x${sim.params.height}`,
+  seed: p.seed,
+  size: `${p.size}x${p.size}`,
+  water: p.water,
+  mountains: p.mountains,
+  rivers: p.rivers,
   ticks: sim.tickCount,
+  mapHash: sim.mapHash(),
   hash: sim.hash(),
+  generateMs: +genMs.toFixed(2),
   ticksPerSecond: Math.round(tps),
-  msPerTick: +(ms / Math.max(1, ran)).toFixed(3),
-  totalPop: Math.round(stats.totalPop),
+  terrain,
+  riverHexes: rivers,
   finished: stats.finished,
   endReason: stats.endReason,
-  civs: stats.civs.map((c) => ({ name: c.name, pop: Math.round(c.pop), territory: c.territory, extinctAt: c.extinctAt })),
 };
 
 if (args.json) {
   console.log(JSON.stringify(result, null, 2));
 } else {
-  console.log(`seed "${result.seed}"  ${result.size}  ${sim.params.civs.length} civs  ${result.ticks} years`);
-  console.log(table(stats));
-  console.log(`total pop ${fmt(stats.totalPop)}${stats.finished ? `  (ended: ${stats.endReason})` : ''}`);
-  console.log(`hash ${result.hash}  ${result.ticksPerSecond} ticks/s  ${result.msPerTick} ms/tick`);
+  console.log(`seed "${result.seed}"  ${result.size} hexes  water ${p.water}  mountains ${p.mountains}  rivers ${p.rivers}  ${result.ticks} years`);
+  console.log(`  ${Object.entries(terrain).map(([k, v]) => `${k} ${v}`).join(', ')}; ${rivers} river hexes`);
+  if (stats.finished) console.log(`  ended: ${stats.endReason}`);
+  console.log(`map ${result.mapHash}  hash ${result.hash}  generated in ${result.generateMs} ms  ${result.ticksPerSecond} ticks/s`);
 }
 
 const bad = [];
-if (!Number.isFinite(stats.totalPop)) bad.push('total population is not finite');
+if (stats.terrainCounts.reduce((s, v) => s + v, 0) !== p.size * p.size) bad.push('terrain counts do not add up to the map size');
 if (args['min-tps'] && tps < Number(args['min-tps'])) bad.push(`throughput ${Math.round(tps)} ticks/s is below the floor ${args['min-tps']}`);
 if (bad.length) {
   console.error(`FAIL: ${bad.join('; ')}`);
