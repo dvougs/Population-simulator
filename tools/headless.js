@@ -9,6 +9,7 @@
 //
 // Prints the map summary, per-civ population every --every years (with the state
 // hash), per-civ totals (births, deaths by cause, lifespans, extinction year),
+// the end-screen records, the end conditions and how the run ended,
 // the map hash, the final state hash and ticks per second. --json prints the
 // same plus the recorded year-by-year history per civ.
 // --min-tps makes it exit non-zero if throughput is below the floor (used in CI).
@@ -111,6 +112,7 @@ const result = {
   }),
   extinctions: stats.civs.filter((c) => c.extinctYear !== null).map((c) => ({ civ: c.name, year: c.extinctYear })),
   samples,
+  records: sim.report().records,
   history: historyJson(sim.history(), civNames),
 };
 
@@ -146,6 +148,13 @@ if (args.json) {
   console.log(result.extinctions.length
     ? `  extinctions: ${result.extinctions.map((e) => `${e.civ} in year ${e.year}`).join(', ')}`
     : '  extinctions: none');
+  const rec = result.records;
+  const who = (r) => `#${r.id} (Civ ${r.civ + 1})`;
+  console.log(`  records: oldest ever ${rec.oldestEver ? `${who(rec.oldestEver)} age ${rec.oldestEver.age}` : '-'}; `
+    + `longest line ${rec.longestLine.generations} generations; `
+    + `most descendants ${rec.mostDescendants ? `${who(rec.mostDescendants)} ${rec.mostDescendants.descendants}` : '-'}; `
+    + `worst famine ${rec.worstFamine ? `Civ ${rec.worstFamine.civ + 1} years ${rec.worstFamine.startYear}-${rec.worstFamine.endYear}, ${rec.worstFamine.deaths} starved` : 'none'}; `
+    + `${rec.events.length} events`);
   console.log(`  end conditions: ${p.endConditions.length ? p.endConditions.join(', ') : 'sandbox'}`);
   if (stats.finished) console.log(`  ended: ${stats.endReason}; winner: ${result.winner ?? 'none'}`);
   console.log(`map ${result.mapHash}  hash ${result.hash}  generated in ${result.generateMs} ms  ${result.ticksPerSecond} ticks/s`);
