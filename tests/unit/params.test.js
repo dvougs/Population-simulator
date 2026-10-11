@@ -13,7 +13,7 @@ function lcg(seed) {
 test('defaults match RULES.md "Map settings" and "Game settings"', () => {
   assert.deepEqual({ ...DEFAULT_PARAMS }, {
     seed: 'pangaea', size: 10, water: 0.25, mountains: 0.12, rivers: 2,
-    plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15, civCount: 3, startPop: 20,
+    plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15, civCount: 3, civTypes: ['expansionist', 'aggressive', 'cooperative'], startPop: 20, mutation: 0.03,
     endConditions: [], endTicks: 2500, dominanceShare: 0.6, dominanceYears: 300,
   });
   assert.deepEqual(normalizeParams(), { ...DEFAULT_PARAMS });
@@ -29,7 +29,10 @@ test('ranges match RULES.md', () => {
   for (const k of ['plains', 'forest', 'desert', 'tundra']) assert.deepEqual(LIMITS[k], { min: 0, max: 1 }, k);
   assert.deepEqual(LIMITS.endTicks, { min: 10, max: 100000 });
   assert.equal(LIMITS.seedLength, 64);
-  assert.deepEqual(END_CONDITIONS, ['lastCiv', 'dominance', 'years']);
+  assert.deepEqual(END_CONDITIONS, ['lastCiv', 'kingdom', 'dominance', 'years']);
+  assert.deepEqual(LIMITS.civCount, { min: 1, max: 8 });
+  assert.deepEqual(LIMITS.startPop, { min: 2, max: 200 });
+  assert.deepEqual(LIMITS.mutation, { min: 0, max: 0.1 });
   assert.deepEqual(LIMITS.dominanceShare, { min: 0.25, max: 1 });
   assert.deepEqual(LIMITS.dominanceYears, { min: 10, max: 10000 });
   assert.deepEqual(MAP_KEYS, ['seed', 'size', 'water', 'mountains', 'rivers', 'plains', 'forest', 'desert', 'tundra']);
@@ -134,7 +137,7 @@ test('end conditions: any combination, unknown ignored, duplicates once, non-lis
   const e = (v) => normalizeParams({ endConditions: v }).endConditions;
   assert.deepEqual(e([]), []);
   assert.deepEqual(e(['years']), ['years']);
-  assert.deepEqual(e(['years', 'lastCiv', 'dominance']), ['lastCiv', 'dominance', 'years']);
+  assert.deepEqual(e(['years', 'kingdom', 'lastCiv', 'dominance']), ['lastCiv', 'kingdom', 'dominance', 'years']);
   assert.deepEqual(e(['years', 'years', 'bogus', 'lastCiv']), ['lastCiv', 'years']);
   for (const bad of ['years', 'lastCiv', 5, null, undefined, {}, true]) assert.deepEqual(e(bad), [], String(bad));
   assert.deepEqual(normalizeParams({ endCondition: 'ticks' }).endConditions, ['years']);
@@ -217,7 +220,12 @@ test('randomise ranges match RULES.md (size 10–50, water 10–60%, mountains 5
   assert.equal(hi.mountains, 0.3);
   assert.equal(hi.rivers, 12);
   assert.deepEqual([hi.plains, hi.forest, hi.desert, hi.tundra], [0.6, 0.5, 0.3, 0.3]);
-  assert.deepEqual(lo.endConditions, ['lastCiv', 'dominance', 'years']);
+  // Every draw 0: all four end conditions ticked (First to Kingdom is drawn last), 2 civs, 10 people, 0% mutation.
+  assert.deepEqual(lo.endConditions, ['lastCiv', 'kingdom', 'dominance', 'years']);
+  assert.deepEqual([lo.civCount, lo.startPop, lo.mutation], [2, 10, 0]);
+  assert.deepEqual(lo.civTypes, ['expansionist', 'expansionist']);
+  assert.deepEqual([hi.civCount, hi.startPop, hi.mutation], [6, 50, 0.1]);
+  assert.deepEqual(hi.civTypes, Array(6).fill('nomadic'));
   assert.equal(lo.endTicks, 1000);
   assert.equal(lo.dominanceShare, 0.5);
   assert.equal(lo.dominanceYears, 100);
@@ -228,8 +236,9 @@ test('randomise ranges match RULES.md (size 10–50, water 10–60%, mountains 5
 
   const random = lcg(99);
   const sizes = new Set();
-  const ticked = [0, 0, 0, 0];
-  const each = { lastCiv: 0, dominance: 0, years: 0 };
+  const ticked = [0, 0, 0, 0, 0];
+  const each = { lastCiv: 0, kingdom: 0, dominance: 0, years: 0 };
+  const typeSeen = new Set();
   for (let k = 0; k < 300; k++) {
     const p = randomParams(random);
     assert.deepEqual(normalizeParams(p), p);
@@ -245,20 +254,26 @@ test('randomise ranges match RULES.md (size 10–50, water 10–60%, mountains 5
     assert.ok([1000, 2500, 5000, 10000].includes(p.endTicks), `endTicks ${p.endTicks}`);
     assert.ok(p.dominanceShare >= 0.5 && p.dominanceShare <= 0.8, `share ${p.dominanceShare}`);
     assert.ok([100, 200, 300, 500].includes(p.dominanceYears));
+    assert.ok(p.civCount >= 2 && p.civCount <= 6, `civs ${p.civCount}`);
+    assert.equal(p.civTypes.length, p.civCount);
+    for (const t of p.civTypes) typeSeen.add(t);
+    assert.ok(p.startPop >= 10 && p.startPop <= 50);
+    assert.ok(p.mutation >= 0 && p.mutation <= 0.1 && Math.abs(p.mutation * 100 - Math.round(p.mutation * 100)) < 1e-9, `mutation ${p.mutation}`);
     ticked[p.endConditions.length]++;
     for (const k of p.endConditions) each[k]++;
     assert.ok(typeof p.seed === 'string' && p.seed.length > 0 && p.seed.length <= 64);
     sizes.add(p.size);
   }
   assert.ok(sizes.size > 20, 'sizes spread over the range');
-  assert.ok(ticked.every((n) => n > 0), 'all of 0 to 3 ticked occur');
+  assert.ok(ticked.every((n) => n > 0), 'all of 0 to 4 ticked occur');
+  assert.equal(typeSeen.size, 5, 'all 5 civ types are drawn');
   for (const k of Object.keys(each)) assert.ok(each[k] > 90 && each[k] < 210, `${k} ticked about half the time: ${each[k]}`);
 });
 
 test('presets set the end conditions per RULES.md "Game settings"', () => {
   const ends = (k) => presetParams(k).endConditions;
   assert.deepEqual(ends('default'), []);
-  assert.deepEqual(ends('continent'), ['dominance', 'years']);
+  assert.deepEqual(ends('continent'), ['kingdom', 'dominance', 'years']);
   assert.equal(presetParams('continent').endTicks, 5000);
   assert.deepEqual(ends('archipelago'), ['lastCiv', 'years']);
   assert.equal(presetParams('archipelago').endTicks, 10000);
@@ -268,5 +283,43 @@ test('presets set the end conditions per RULES.md "Game settings"', () => {
   for (const k of Object.keys(PRESETS)) {
     assert.equal(presetParams(k).dominanceShare, 0.6, k);
     assert.equal(presetParams(k).dominanceYears, 300, k);
+  }
+});
+
+test('RULES.md "Game settings": civ count 1 to 8, starting population 2 to 200, mutation 0% to 10% whole percent', () => {
+  const c = (v) => normalizeParams({ civCount: v }).civCount;
+  assert.deepEqual([c(0), c(1), c(8), c(9), c(2.4), c('x'), c(undefined)], [1, 1, 8, 8, 2, 3, 3]);
+  const s = (v) => normalizeParams({ startPop: v }).startPop;
+  assert.deepEqual([s(1), s(2), s(200), s(201), s('x')], [2, 2, 200, 200, 20]);
+  const m = (v) => normalizeParams({ mutation: v }).mutation;
+  assert.deepEqual([m(-0.01), m(0), m(0.01), m(0.1), m(0.11), m(0.034), m('x'), m(null)], [0, 0, 0.01, 0.1, 0.1, 0.03, 0.03, 0.03]);
+});
+
+test('RULES.md "Game settings": civ types are padded and trimmed to the civ count, unknown take the default for that number', () => {
+  const t = (types, civCount) => normalizeParams({ civCount, civTypes: types }).civTypes;
+  const order = ['expansionist', 'aggressive', 'cooperative', 'isolationist', 'nomadic'];
+  assert.deepEqual(t(undefined, 8), [...order, 'expansionist', 'aggressive', 'cooperative']);
+  assert.deepEqual(t(['nomadic'], 3), ['nomadic', 'aggressive', 'cooperative']);
+  assert.deepEqual(t(['nomadic', 'nomadic', 'nomadic', 'nomadic'], 2), ['nomadic', 'nomadic']);
+  assert.deepEqual(t(['bogus', 5, null, 'isolationist'], 4), ['expansionist', 'aggressive', 'cooperative', 'isolationist']);
+  assert.deepEqual(t('nomadic', 2), ['expansionist', 'aggressive']);
+  assert.deepEqual(t(['Nomadic'], 1), ['expansionist']);
+  assert.deepEqual(t(['aggressive'], 1), ['aggressive']);
+});
+
+test('RULES.md "Game settings": every preset has its civs, types, people and mutation 3%', () => {
+  const want = {
+    default: [3, ['expansionist', 'aggressive', 'cooperative'], 20],
+    continent: [4, ['expansionist', 'aggressive', 'cooperative', 'isolationist'], 30],
+    archipelago: [5, ['nomadic', 'expansionist', 'isolationist', 'cooperative', 'aggressive'], 20],
+    highlands: [3, ['isolationist', 'aggressive', 'nomadic'], 20],
+    large: [6, ['expansionist', 'aggressive', 'cooperative', 'isolationist', 'nomadic', 'aggressive'], 40],
+  };
+  for (const [k, [n, types, pop]] of Object.entries(want)) {
+    const p = presetParams(k);
+    assert.equal(p.civCount, n, k);
+    assert.deepEqual(p.civTypes, types, k);
+    assert.equal(p.startPop, pop, k);
+    assert.equal(p.mutation, 0.03, k);
   }
 });

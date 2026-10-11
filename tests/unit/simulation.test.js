@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { MATERIAL_IDS } from '../../src/sim/materials.js';
 import { Simulation, describeHex } from '../../src/sim/simulation.js';
 import { generateMap, hashMap, countTerrain } from '../../src/sim/mapgen.js';
 import {
-  DEEP_WATER, FOREST, HILLS, MOUNTAIN, TERRAIN_IDS, TERRAIN_NAMES, FOOD_CAPACITY, MOVE_COST, DEFENCE_BONUS, MATERIALS,
+  DEEP_WATER, FOREST, HILLS, MOUNTAIN, TERRAIN_IDS, TERRAIN_NAMES, FOOD_CAPACITY, MOVE_COST, DEFENCE_BONUS,
 } from '../../src/sim/terrain.js';
 
 test('a new simulation starts at year 0 with the generated map', () => {
@@ -43,7 +44,7 @@ test('the map itself does not change as years pass; food stays between 0 and cap
 });
 
 test('year limit: the game ends when that year is reached', () => {
-  const sim = new Simulation({ seed: 'end', endCondition: 'ticks', endTicks: 25 });
+  const sim = new Simulation({ seed: 'end', endConditions: ['years'], endTicks: 25 });
   assert.equal(sim.tick(24), 24);
   assert.equal(sim.finished, false);
   assert.equal(sim.tick(100), 1);
@@ -55,16 +56,16 @@ test('year limit: the game ends when that year is reached', () => {
 });
 
 test('year limit boundaries: below 10 is clamped to 10; the limit only applies with end condition "ticks"', () => {
-  const low = new Simulation({ seed: 'end', endCondition: 'ticks', endTicks: 3 });
+  const low = new Simulation({ seed: 'end', endConditions: ['years'], endTicks: 3 });
   assert.equal(low.tick(100), 10);
   assert.ok(low.finished);
-  const none = new Simulation({ seed: 'end', endCondition: 'none', endTicks: 10 });
+  const none = new Simulation({ seed: 'end', endConditions: [], endTicks: 10 });
   assert.equal(none.tick(100), 100);
   assert.equal(none.finished, false);
 });
 
 test('stats report year, population, civs, terrain counts and end state', () => {
-  const sim = new Simulation({ seed: 'stats', endCondition: 'ticks', endTicks: 10 });
+  const sim = new Simulation({ seed: 'stats', endConditions: ['years'], endTicks: 10 });
   assert.equal(sim.stats().totalPop, 60, 'default 3 civs of 20 people');
   sim.tick(10);
   const s = sim.stats();
@@ -99,7 +100,7 @@ test('inspect returns the RULES.md terrain values for every hex', () => {
       assert.equal(h.name, t === DEEP_WATER && m.lake[i] ? 'Lake' : TERRAIN_NAMES[t]);
       assert.equal(h.foodCap, FOOD_CAPACITY[t] + (h.river ? 30 : 0));
       assert.equal(h.food, h.foodCap);
-      assert.equal(h.materials, MATERIALS[t]);
+      assert.deepEqual(h.deposits, MATERIAL_IDS.filter((_, k) => (m.deposits[i] >> k) & 1), 'deposits as ids in material order');
       assert.equal(h.defence, DEFENCE_BONUS[t]);
       assert.equal(h.moveCost, t === DEEP_WATER ? null : MOVE_COST[t]);
     }
@@ -113,11 +114,11 @@ test('inspect values for specific terrains match the RULES.md table', () => {
     return null;
   };
   const forest = find(FOREST);
-  assert.deepEqual([forest.foodCap, forest.moveCost, forest.defence, forest.materials], [40, 2, 0.25, 30]);
+  assert.deepEqual([forest.foodCap, forest.moveCost, forest.defence], [40, 2, 0.25]);
   const hills = find(HILLS);
-  assert.deepEqual([hills.foodCap, hills.moveCost, hills.defence, hills.materials], [30, 2, 0.5, 20]);
+  assert.deepEqual([hills.foodCap, hills.moveCost, hills.defence], [30, 2, 0.5]);
   const mountain = find(MOUNTAIN);
-  assert.deepEqual([mountain.foodCap, mountain.moveCost, mountain.defence, mountain.materials], [10, 3, 1, 0]);
+  assert.deepEqual([mountain.foodCap, mountain.moveCost, mountain.defence], [10, 3, 1]);
   const sea = sim.inspect(0, 0);
   assert.deepEqual([sea.name, sea.water, sea.foodCap, sea.moveCost], ['Deep water', true, 0, null]);
 });
