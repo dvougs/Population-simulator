@@ -190,7 +190,7 @@ Chosen on the setup screen, after the map.
 | Dominance years | 300 | 10 to 10000 |
 | Year limit | 2500 (choices 1000, 2500, 5000, 10000, or custom) | 10 to 100000 |
 
-Out-of-range values are clamped to the range; values that are not numbers fall back to the default.
+Out-of-range values are clamped to the range; values that are not numbers fall back to the default. Unknown end conditions are ignored, and anything that is not a list of end conditions means Sandbox.
 
 - Each map preset also sets the civs and the end conditions:
 
