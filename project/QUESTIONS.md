@@ -109,6 +109,25 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
   - Falling back: if population stays below the current level's minimum for 100 years, the civ drops one level and keeps its stockpile.
   - All numbers are starting values. Tune them from the headless sims, and ask the owner before changing any requirement by more than half.
   - (reading: this replaces the RULES.md Terrain table's "Materials" column (forest 30 wood, hills 20 stone, others 0). In RULES.md a river is not a terrain but runs through a land hex; "river" chances are read as applying to river hexes in addition to their terrain's own chances. Owner confirmed 2026-10-11 07:35 UTC: "that's right", so a river hex rolls both its terrain's chances and the river chances.)
+- R-007: End conditions and end screen, replacing the current end-condition and end-screen rules (owner, 2026-10-11 07:44 UTC). Owner's spec:
+  - END CONDITIONS (setup screen; tick any combination, the first one met ends the run):
+    - Last civ standing.
+    - First to Kingdom: a civ reaches L5 and stays at L5 for 200 years.
+    - Dominance: one civ holds at least X% of land hexes for Y years (defaults 60% and 300 years, both settable).
+    - Year limit: 1,000 / 2,500 / 5,000 / 10,000 or custom, default 2,500. No score and no winner: the run simply ends.
+    - Sandbox: no end.
+    - Total extinction always ends the run.
+    - The pause menu has an "End now" button that goes straight to the end screen.
+  - END SCREEN (mobile, scrollable). Header: winner (or none), end reason, years run. Buttons: Keep watching (continues as sandbox), Same settings again, New map, Back to setup.
+  - Cards:
+    - Civs, listed by final population: peak population and year, average lifespan, highest level and year reached, peak hexes held, materials gathered by type, wars fought and won, people gained and lost by switching civ, extinction year.
+    - Charts: population over time per civ, level over time per civ, trait drift (each trait's average over time, per civ).
+    - People: oldest person ever, oldest alive at the end.
+    - Deaths: old age, starvation, war, disaster, plus god powers as a separate category when they were used.
+    - Records: longest family line, person with the most descendants, deadliest war, worst famine, most fought-over hex.
+    - History log: key events with their year (first contact, level-ups and drops, wars, absorptions, famines, extinctions). Key events only, not every death.
+  - Nothing is saved between sessions. "Same settings again" reuses the settings held in memory. Record yearly stats and events during the run so the end screen opens instantly.
+  - (reading: part of 1.0, alongside levels and fighting. It replaces RULES.md "End of the game" (end condition options None and Year limit, default None, no end screen) and the roadmap's "year limit with score". Which conditions are ticked by default is not stated, so the current default, no end (sandbox), stays. Disaster deaths and the god-power category appear only once those features exist.)
 
 ## Answered
 
