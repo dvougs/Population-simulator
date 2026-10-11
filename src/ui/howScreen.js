@@ -8,7 +8,7 @@
 import { h, formatNumber } from './dom.js';
 import { emblem } from './inspector.js';
 import { renderLevels } from './levelsPanel.js';
-import { chartCard, eventText } from './endScreen.js';
+import { chartCard, eventText, warText } from './endScreen.js';
 import { howText } from './howText.js';
 import { DemoWorld, DEMO } from './demoWorld.js';
 import { drawWorld } from '../render/miniMap.js';
@@ -218,17 +218,18 @@ function traitFigure(stats, year) {
       ...civs.map((c) => chip(c.id))));
 }
 
-/** A few lines of this world's history log: the first meeting and the first fights. */
+/** This world's first meeting (from the end screen's History) and its deadliest war (from the War card). */
 function historyFigure(report) {
-  const events = report.records.events;
+  const { events, wars = [] } = report.records;
   const firstContact = events.find((e) => e.type === 'contact');
-  const fights = events.filter((e) => e.type === 'fight').slice(0, 3);
-  const lines = [firstContact, ...fights].filter(Boolean).sort((a, b) => a.year - b.year);
-  if (!lines.length) return null;
+  const war = wars[0];
+  if (!firstContact && !war) return null;
+  const warYears = war && (war.firstYear === war.lastYear ? `Year ${war.firstYear}` : `Years ${war.firstYear}–${war.lastYear}`);
   return h('figure', { class: 'how-fig' },
-    h('ol', { class: 'end-log' }, lines.map((e) => h('li', {},
-      h('span', { class: 'log-year' }, `Year ${e.year}`), emblem(e.civ, 12), h('span', {}, eventText(e))))),
-    h('figcaption', {}, 'From this world\'s history log, as the end screen shows it.'));
+    h('ol', { class: 'end-log' },
+      firstContact ? h('li', {}, h('span', { class: 'log-year' }, `Year ${firstContact.year}`), emblem(firstContact.civ, 12), h('span', {}, eventText(firstContact))) : null,
+      war ? h('li', {}, h('span', { class: 'log-year' }, warYears), emblem(war.civs[0], 12), h('span', {}, warText(war))) : null),
+    h('figcaption', {}, 'This world\'s first meeting and its deadliest war, as the end screen shows them.'));
 }
 
 /** The in-game Levels panel for the first two civs. */
