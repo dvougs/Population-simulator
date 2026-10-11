@@ -463,15 +463,49 @@ test('a seeded crowded run: the population identity holds with war deaths and sw
   assert.ok(sawSwitch, 'and civ switching');
 });
 
-test('a seeded run with fights: same params and seed give the same state hash and history', () => {
+test('a seeded run with fights: same params and seed give the same state hash and wars', () => {
   const run1 = () => {
     const sim = new Simulation({ seed: 'warhash', size: 10, civCount: 4, water: 0.5, civTypes: ['aggressive', 'aggressive', 'cooperative', 'nomadic'] });
     sim.tick(300);
-    return [sim.hash(), JSON.stringify(sim.report().records.events)];
+    return [sim.hash(), JSON.stringify(sim.report().records.wars), JSON.stringify(sim.report().records.chronicle)];
   };
-  const [a, ea] = run1();
-  const [b, eb] = run1();
+  const [a, wa, ca] = run1();
+  const [b, wb, cb] = run1();
   assert.equal(a, b);
-  assert.equal(ea, eb);
-  assert.ok(JSON.parse(ea).some((e) => e.type === 'fight'), 'fights were logged');
+  assert.equal(wa, wb);
+  assert.equal(ca, cb);
+  assert.ok(JSON.parse(wa).length > 0, 'wars were recorded');
+});
+
+test('RULES.md Wars: in seeded runs the per-pair kills add up to each civ\'s war deaths and the fights to each civ\'s fight count', () => {
+  let sawWar = false;
+  for (const seed of ['war1', 'war2', 'war3']) {
+    const sim = new Simulation({ seed, size: 10, civCount: 4, startPop: 40, water: 0.5, civTypes: ['aggressive', 'expansionist', 'cooperative', 'nomadic'] });
+    sim.tick(250);
+    const civs = sim.stats().civs;
+    const wars = sim.report().records.wars;
+    const killedBy = new Array(civs.length).fill(0);   // people of civ c killed, by the other side of each war
+    const fights = new Array(civs.length).fill(0);
+    const won = new Array(civs.length).fill(0);
+    for (const w of wars) {
+      const [a, b] = w.civs;
+      assert.ok(a < b);
+      assert.ok(w.firstYear <= w.lastYear);
+      assert.equal(w.won[0] + w.won[1], w.fights, `${seed}: every fight has a winner`);
+      killedBy[b] += w.killed[0]; killedBy[a] += w.killed[1];
+      fights[a] += w.fights; fights[b] += w.fights;
+      won[a] += w.won[0]; won[b] += w.won[1];
+    }
+    for (const c of civs) {
+      assert.equal(killedBy[c.id], c.deaths.war, `${seed} civ ${c.id} war deaths`);
+      assert.equal(fights[c.id], c.fights, `${seed} civ ${c.id} fights`);
+      assert.equal(won[c.id], c.fightsWon, `${seed} civ ${c.id} fights won`);
+      if (c.deaths.war > 0) sawWar = true;
+    }
+    for (let i = 1; i < wars.length; i++) {
+      const t = (w) => w.killed[0] + w.killed[1];
+      assert.ok(t(wars[i - 1]) >= t(wars[i]), 'deadliest first');
+    }
+  }
+  assert.ok(sawWar);
 });

@@ -14,7 +14,7 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
   3. Keep the rule as it is: levels 4 and 5 stay very rare.
 - Recommendation: 1. It is the smallest change, keeps "food first" in spirit, and makes your 1.0 level ladder reachable.
 - Priority: P1 (suggested; stands unless the owner changes it)
-- Answer:
+- Answer: 2026-10-11 21:10 Greek, in the "Level-2 ceiling" project thread: neither option as written. Headless 10,000-year runs showed the 5% rule is not enough, because the starvation and 1.2-food checks also fail almost every year once the map is full. Agreed fix: food is secure when at most 10% of the civ's people went hungry last year, with no starvation or food-per-person check. Built in that thread's own pull request (with Kingdom borders and hex minimums from land per civ), not by the director. Director: do not build Q-009.
 
 ### Q-010: The hunger and crowding fight triggers almost never fire. Change them?
 - Date: 2026-10-11
@@ -50,17 +50,9 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Effort: S
 - Phone performance risk: low: one open war per pair of civs, updated once a year; a shorter log to draw.
 - Priority: P2 (suggested; stands unless the owner changes it)
-- Decision: yes, as part of the shorter History in the request below (reading: the war grouping is built, but only the 3 deadliest wars are listed in History).
+- Decision: superseded (owner, 2026-10-11 17:54 UTC: the end screen's History, War section and scrolling rework is being built outside the director cycle, in a separate pull request from a project thread; no task for the director).
 
 ## Requests
-
-- [P2] Rethink the end screen's History section: it "has WAY too many details" (owner, 2026-10-11 16:38 UTC; agreed 16:42 UTC to the shape below; on two 500-year headless runs History had about 1,400 and 1,600 lines, 98% single fights). Make it a short chronicle of turning points, at most about 12 lines, oldest first:
-  1. Fights between the same two civs are grouped into wars (as P-011); only the 3 deadliest wars are listed, e.g. "Years 120–185: Civ 1 vs Civ 2, 340 killed, Civ 1 took 6 hexes".
-  2. Only famines that killed at least 10% of the civ, at most 3.
-  3. Keep first contacts, the 100/500/1,000 people milestones and extinctions.
-  4. Add level-ups ("Civ 2 became a Town").
-  5. Drop the peak and most-hexes lines (the Civs card already shows them).
-  The full raw log goes away (no "show everything" toggle). This supersedes P-011's separate log change and narrows P-008. RULES.md "Records" and "End screen" change to match; How to play's pictures that read the first contact and first three fights from the log need checking.
 
 ## Answered
 
