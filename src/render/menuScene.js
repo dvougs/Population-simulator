@@ -20,6 +20,7 @@
 // their Canvas 2D drawing (live stays false).
 
 import { Application, Container, Graphics, Sprite, Texture, CanvasSource } from '../../vendor/pixi.mjs';
+import { isSoftwareGl } from './gpu.js';
 import { hexPolygon, hexCentre, riverSegments, worldBounds, HEX_SIZE } from './layout.js';
 import { rgbToHex, RIVER_RGB } from './palette.js';
 import { CIV_STYLES, EMBLEM_SHAPES, civStyle } from './civStyle.js';
@@ -32,7 +33,6 @@ const PAGE_DPR = 1.5; // the pages only show soft shapes behind cards
 const PAGE_FPS = 30; // the pages' backdrop moves slowly; half the frames is plenty
 const PAGE_START_MS = 2500; // how long a page opened first waits before its backdrop starts
 const LITE_MS = 1000; // software renderer: at most one still redraw a second
-const SOFTWARE_GL = /swiftshader|llvmpipe|softpipe|software|basic render/i;
 const FADE_MS = 150; // year-to-year crossfade, shorter than a year at 6 a second
 const ENTER_MS = 900; // the board rising in when the home page opens
 const CASING = 0x0b0e13;
@@ -167,7 +167,7 @@ export class MenuScene {
         if (kind !== 'webgl') { try { app.destroy(); } catch { /* half-made app */ } throw new Error(`no WebGL (got ${kind})`); }
         app.stage.eventMode = 'none';
         this.app = app;
-        this.lite = isSoftware(app.renderer.gl);
+        this.lite = isSoftwareGl(app.renderer.gl);
         this.tex = buildTextures();
         this.build();
         app.ticker.add((tk) => this.update(tk.deltaMS));
@@ -601,16 +601,5 @@ export class MenuScene {
       c.s.y = c.y;
       c.s.alpha = c.a * Math.sin(Math.PI * u);
     }
-  }
-}
-
-/** Whether a WebGL context is drawn in software (no GPU), from the driver's renderer string where the browser shares it. */
-function isSoftware(gl) {
-  try {
-    const info = gl?.getExtension('WEBGL_debug_renderer_info');
-    const name = info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl?.getParameter(gl.RENDERER);
-    return SOFTWARE_GL.test(String(name ?? ''));
-  } catch {
-    return false;
   }
 }
