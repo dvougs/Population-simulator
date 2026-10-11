@@ -17,7 +17,7 @@ const dist = (map, a, b) => { const p = indexToAxial(a, map.cols); const q = ind
 
 test('RULES.md "Migration" numbers', () => {
   assert.equal(MIGRATION.movePoints, 3);
-  assert.equal(MIGRATION.crowdedShare, 0.8);
+  assert.equal(MIGRATION.crowdedShare, 0.5);
   assert.equal(MIGRATION.hungryChance, 0.5);
   assert.equal(MIGRATION.crowdedChance, 0.2);
   assert.equal(MIGRATION.ownCivWeight, 2);
@@ -104,12 +104,12 @@ test('RULES.md "Migration": a hungry person sets out with chance 50%', () => {
 });
 
 test('RULES.md "Migration": a fed person in an uncrowded hex stays', () => {
-  const { map, people, reach, s } = setup(48, { hunger: 0 }); // 48 is exactly 80% of 60: not crowded
+  const { map, people, reach, s } = setup(30, { hunger: 0 }); // 30 is exactly 50% of 60: not crowded
   for (let t = 0; t < 30; t++) assert.equal(migrate(people, map, reach, new Rng(`calm${t}`), s.pop, s.spare, s.dest), 0);
 });
 
-test('RULES.md "Migration": a fed person in a crowded hex (more than 80% of capacity) sets out with chance 20%', () => {
-  const { map, people, reach, s } = setup(49, { hunger: 0 });
+test('RULES.md "Migration": a fed person in a crowded hex (more than 50% of capacity) sets out with chance 20%', () => {
+  const { map, people, reach, s } = setup(31, { hunger: 0 });
   map.food[C] = 60;
   let moved = 0;
   const trials = 200;
@@ -118,7 +118,7 @@ test('RULES.md "Migration": a fed person in a crowded hex (more than 80% of capa
     for (let i = 0; i < people.high; i++) people.hex[i] = C;
     moved += migrate(people, map, reach, new Rng(`crowd${t}`), s.pop, s.spare, s.dest);
   }
-  const share = moved / (trials * 49);
+  const share = moved / (trials * 31);
   assert.ok(share > 0.17 && share < 0.23, `share ${share}`);
 });
 

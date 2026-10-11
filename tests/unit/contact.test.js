@@ -14,7 +14,7 @@ const SIZE = 5;
 const HEX = 12; // the middle of a 5 × 5 map; its neighbours are 6, 7, 11, 13, 17, 18 (row 2 is even)
 
 /**
- * groups: [hex, civ, n, { agg, str, coop }]. Everything else is plain: age 25, other traits 0.5.
+ * groups: [hex, civ, n, { agg, str, coop, hunger }]. Everything else is plain: age 25, other traits 0.5, fed (hunger 0).
  * Capacity and food default to plenty, so crowding and hunger do not trigger unless a test sets them.
  */
 function scene(types, groups, { terrain = PLAINS, cap = 1e6, food = cap } = {}) {
@@ -25,6 +25,7 @@ function scene(types, groups, { terrain = PLAINS, cap = 1e6, food = cap } = {}) 
   for (const [hex, civ, n, t = {}] of groups) {
     for (let k = 0; k < n; k++) {
       const i = people.add(hex, civ, 25, 100, 0);
+      people.hunger[i] = t.hunger ?? 0;
       people.traits[AGGRESSION][i] = t.agg ?? 0.5;
       people.traits[STRENGTH][i] = t.str ?? 0.5;
       people.traits[COOPERATION][i] = t.coop ?? 0.5;
@@ -83,7 +84,7 @@ test('(a) Aggressive: always attacks any civ it shares a hex with, whatever its 
 });
 
 test('Cooperative never starts a fight, even at aggression 1, hungry, crowded and outnumbering; it can still be attacked', () => {
-  const make = () => scene(['cooperative', 'expansionist'], [[HEX, 0, 30, { agg: 1 }], [HEX, 1, 3, { agg: 0 }]], { cap: 33, food: 0 });
+  const make = () => scene(['cooperative', 'expansionist'], [[HEX, 0, 30, { agg: 1, hunger: 1 }], [HEX, 1, 3, { agg: 0 }]], { cap: 33, food: 0 });
   for (let t = 0; t < 60; t++) assert.equal(run(make(), { seed: `n${t}` }).n, 0);
   const attacked = scene(['cooperative', 'aggressive'], [[HEX, 0, 8, { agg: 1 }], [HEX, 1, 8, { agg: 0 }]]);
   const r = run(attacked);
@@ -101,23 +102,24 @@ test('civs sharing no hex never fight; a single civ alone in a hex never does', 
   assert.deepEqual(w.contact.fightWinner.every((v) => v === -1), true);
 });
 
-test('(b) Hunger: food below the people\'s total need and average aggression above 0.5; chance = the average aggression', () => {
-  // 10 + 10 people, need 20. Food 19.99 is short; 20 is not.
-  const mk = (agg, food) => () => scene(['expansionist', 'expansionist'], [[HEX, 0, 10, { agg }], [HEX, 1, 10, { agg: 0 }]], { cap: 1e6, food });
+test('(b) Hunger: someone in the hex went hungry this year and average aggression above 0.5; chance = the average aggression', () => {
+  // 10 + 10 people; `hungry` of civ 1's people went hungry this year. The hex's food does not matter.
+  const mk = (agg, hungry, food = 1e6) => () => scene(['expansionist', 'expansionist'],
+    [[HEX, 0, 10, { agg }], [HEX, 1, 10 - hungry, { agg: 0 }], [HEX, 1, hungry, { agg: 0, hunger: 1 }]], { cap: 1e6, food });
   assert.equal(fightRate(mk(0.5, 5), 60), 0, 'aggression exactly 0.5 does not qualify');
-  assert.equal(fightRate(mk(0.6, 20), 60), 0, 'food equal to the need is not short');
-  near(fightRate(mk(0.6, 19.9)), 0.6, 0.08);
-  near(fightRate(mk(0.9, 0)), 0.9, 0.06);
-  near(fightRate(mk(0.51, 0)), 0.51, 0.08);
+  assert.equal(fightRate(mk(0.6, 0, 0), 60), 0, 'nobody hungry: an empty larder after the year is not hunger');
+  near(fightRate(mk(0.6, 1)), 0.6, 0.08);
+  near(fightRate(mk(0.9, 10)), 0.9, 0.06);
+  near(fightRate(mk(0.51, 3)), 0.51, 0.08);
 });
 
-test('(c) Crowding: people at least the food capacity and average aggression above 0.4', () => {
-  // Capacity 20 with food 20 (so not hungry): 10 + 10 is exactly crowded, 10 + 9 is not.
-  const mk = (agg, b) => () => scene(['expansionist', 'expansionist'], [[HEX, 0, 10, { agg }], [HEX, 1, b, { agg: 0 }]], { cap: 20, food: 20 });
-  assert.equal(fightRate(mk(0.4 - 0.01, 10), 60), 0, 'aggression below 0.4');
-  assert.equal(fightRate(mk(0.9, 9), 60), 0, '19 people on capacity 20');
-  near(fightRate(mk(0.7, 10)), 0.7, 0.08);
-  near(fightRate(mk(0.41, 10)), 0.41, 0.08);
+test('(c) Crowding: more people than 50% of the food capacity (crowded, as in Migration) and average aggression above 0.4', () => {
+  // Capacity 40, nobody hungry: 10 + 11 is crowded, 10 + 10 (exactly 50%) is not.
+  const mk = (agg, b) => () => scene(['expansionist', 'expansionist'], [[HEX, 0, 10, { agg }], [HEX, 1, b, { agg: 0 }]], { cap: 40, food: 40 });
+  assert.equal(fightRate(mk(0.4 - 0.01, 11), 60), 0, 'aggression below 0.4');
+  assert.equal(fightRate(mk(0.9, 10), 60), 0, '20 people on capacity 40');
+  near(fightRate(mk(0.7, 11)), 0.7, 0.08);
+  near(fightRate(mk(0.41, 11)), 0.41, 0.08);
 });
 
 test('(d) Numbers: at least 3 times as many people as the other civ and average aggression above 0.45', () => {

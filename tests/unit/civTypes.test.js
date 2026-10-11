@@ -24,7 +24,7 @@ test('RULES.md "Civ types": five types in the default order, which repeats', () 
 });
 
 test('RULES.md "Civ types": the type table numbers', () => {
-  assert.deepEqual({ ...TYPE_RULES.expansionist }, { crowdedShare: 0.5 });
+  assert.deepEqual({ ...TYPE_RULES.expansionist }, { crowdedShare: 0.3 });
   assert.deepEqual({ ...TYPE_RULES.aggressive }, { alwaysFights: true });
   assert.deepEqual({ ...TYPE_RULES.cooperative }, { neverStartsFights: true, switchAwayFactor: 0.5 });
   assert.deepEqual({ ...TYPE_RULES.isolationist }, { fedNeverSetsOut: true });
@@ -33,7 +33,8 @@ test('RULES.md "Civ types": the type table numbers', () => {
 
 test('RULES.md "Civ types": the setup screen text is the type\'s sentence, then "Starts with" its traits and "other traits 0.5"', () => {
   assert.equal(civTypeText('expansionist'),
-    'Moves on early: its people set out once their hex is half full, long before it is crowded. Starts with fertility 0.58; other traits 0.5.');
+    'Moves on early: its people set out once their hex holds 30% of its food capacity, long before it is crowded at 50%. '
+    + 'Starts with heat tolerance 0.55, cold tolerance 0.55; other traits 0.5.');
   assert.equal(civTypeText('aggressive'), 'Always fights any civ it shares a hex with. Starts with aggression 0.7, strength 0.65; other traits 0.5.');
   assert.equal(civTypeText('cooperative'),
     'Never starts a fight, and its people leave it for another civ half as often as others do. Starts with cooperation 0.7; other traits 0.5.');
@@ -46,19 +47,19 @@ test('RULES.md "Civ types": the setup screen text is the type\'s sentence, then 
 
 test('RULES.md "Migration" by civ type: the per-civ migration table', () => {
   assert.equal(MIGRATION.movePoints, 3);
-  assert.equal(MIGRATION.crowdedShare, 0.8);
+  assert.equal(MIGRATION.crowdedShare, 0.5);
   assert.equal(MIGRATION.hungryChance, 0.5);
   assert.equal(MIGRATION.crowdedChance, 0.2);
   const map = makeMap(10, 10, () => PLAINS);
   const rules = migrationRules(CIV_TYPES.concat('nonsense'), map, buildReach(map));
   //                          hungry  fed+crowded  crowded above  movement points (0: one hex a year)
   const want = {
-    expansionist: [0.5, 0.2, 0.5, 0],
-    aggressive: [0.5, 0.2, 0.8, 0],
-    cooperative: [0.5, 0.2, 0.8, 0],
-    isolationist: [0.5, 0, 0.8, 0],
-    nomadic: [1, 0.4, 0.8, 5],
-    nonsense: [0.5, 0.2, 0.8, 0],
+    expansionist: [0.5, 0.2, 0.3, 0],
+    aggressive: [0.5, 0.2, 0.5, 0],
+    cooperative: [0.5, 0.2, 0.5, 0],
+    isolationist: [0.5, 0, 0.5, 0],
+    nomadic: [1, 0.4, 0.5, 5],
+    nonsense: [0.5, 0.2, 0.5, 0],
   };
   CIV_TYPES.concat('nonsense').forEach((t, c) => {
     assert.deepEqual([rules.hungryChance[c], rules.crowdedChance[c], rules.crowdedShare[c], rules.movePoints[c]], want[t], t);
@@ -91,24 +92,24 @@ test('RULES.md "Migration" by type: hungry people set out 50% (Nomadic 100%)', (
 });
 
 test('RULES.md "Migration" by type: fed people in a crowded hex set out 20% (Nomadic 40%, Isolationist never)', () => {
-  // 49 of 60 is more than 80% for everyone.
+  // 49 of 60 is more than 50% for everyone.
   for (const t of ['expansionist', 'aggressive', 'cooperative']) near(moveShare(t, 49), 0.2, 0.035);
   near(moveShare('nomadic', 49), 0.4, 0.04);
   assert.equal(moveShare('isolationist', 49), 0, 'a fed Isolationist never sets out');
   assert.equal(moveShare('isolationist', 59), 0);
 });
 
-test('RULES.md "Migration" by type: crowded means above 80% of capacity, above 50% for Expansionist (boundaries)', () => {
-  // Capacity 60: 80% is 48 people, 50% is 30.
+test('RULES.md "Migration" by type: crowded means above 50% of capacity, above 30% for Expansionist (boundaries)', () => {
+  // Capacity 60: 50% is 30 people, 30% is 18.
   for (const t of ['aggressive', 'cooperative', 'nomadic']) {
-    assert.equal(moveShare(t, 48), 0, `${t} at exactly 80%`);
-    assert.ok(moveShare(t, 49) > 0, `${t} above 80%`);
-    assert.equal(moveShare(t, 31), 0, `${t} at 31`);
+    assert.equal(moveShare(t, 30), 0, `${t} at exactly 50%`);
+    assert.ok(moveShare(t, 31) > 0, `${t} above 50%`);
+    assert.equal(moveShare(t, 19), 0, `${t} at 19`);
   }
-  assert.equal(moveShare('expansionist', 30), 0, 'exactly 50% is not crowded');
+  assert.equal(moveShare('expansionist', 18), 0, 'exactly 30% is not crowded');
+  near(moveShare('expansionist', 19), 0.2, 0.06);
+  near(moveShare('expansionist', 30), 0.2, 0.05);
   near(moveShare('expansionist', 31), 0.2, 0.05);
-  near(moveShare('expansionist', 48), 0.2, 0.04);
-  near(moveShare('expansionist', 49), 0.2, 0.035);
 });
 
 test('RULES.md "Migration" by type: Nomadic people have 5 movement points, the others move one hex', () => {
@@ -153,7 +154,9 @@ test('founders of each civ start at their type\'s traits (civ averages at year 0
   const sim = new Simulation({ seed: 'foundtypes', civCount: 5, startPop: 200, civTypes: CIV_TYPES });
   const s = sim.stats().civs;
   const mean = (c, k) => c.startTraits[k];
-  assert.ok(Math.abs(mean(s[0], 'fertility') - 0.58) < 0.02);
+  assert.ok(Math.abs(mean(s[0], 'heatTolerance') - 0.55) < 0.02);
+  assert.ok(Math.abs(mean(s[0], 'coldTolerance') - 0.55) < 0.02);
+  assert.ok(Math.abs(mean(s[0], 'fertility') - 0.5) < 0.02);
   assert.ok(Math.abs(mean(s[1], 'aggression') - 0.7) < 0.02);
   assert.ok(Math.abs(mean(s[1], 'strength') - 0.65) < 0.02);
   assert.ok(Math.abs(mean(s[2], 'cooperation') - 0.7) < 0.02);

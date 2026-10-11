@@ -54,7 +54,7 @@ export const CIV_TYPE_TRAITS = Object.freeze({
   none: Object.freeze({}),
   aggressive: Object.freeze({ aggression: 0.7, strength: 0.65 }),
   cooperative: Object.freeze({ cooperation: 0.7 }),
-  expansionist: Object.freeze({ fertility: 0.58 }),
+  expansionist: Object.freeze({ heatTolerance: 0.55, coldTolerance: 0.55 }),
   isolationist: Object.freeze({ lifeExpectancy: 0.6 }),
   nomadic: Object.freeze({ metabolism: 0.45, heatTolerance: 0.6, coldTolerance: 0.6 }),
 });

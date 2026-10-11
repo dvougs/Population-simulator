@@ -11,11 +11,15 @@ import { STRENGTH, AGGRESSION, COOPERATION } from './traits.js';
 import { TYPE_RULES } from './civTypes.js';
 import { DEATH_WAR } from './life.js';
 import { LEVEL_EFFECTS, MAX_LEVEL } from './levels.js';
+import { MIGRATION } from './migration.js';
 
 export const CONTACT = Object.freeze({
-  /** (b) Hunger: the hex's food is below its people's total need and the attacker's average aggression is above this. */
+  /**
+   * (b) Hunger: someone in the hex went hungry this year and the attacker's average aggression is
+   * above this. (Contact runs after food regrows, so the hex's food then says nothing about this year's famine.)
+   */
   hungerAggression: 0.5,
-  /** (c) Crowding: the hex holds at least as many people as its food capacity and the attacker's average aggression is above this. */
+  /** (c) Crowding: the hex is crowded as migration counts it (MIGRATION.crowdedShare) and the attacker's average aggression is above this. */
   crowdAggression: 0.4,
   /** (d) Numbers: the attacker has at least numbersRatio × the other civ's people in the hex and average aggression above numbersAggression. */
   numbersRatio: 3,
@@ -41,7 +45,8 @@ export class Contact {
     this.str = new Float64Array(n * civs);
     this.agg = new Float64Array(n * civs);
     this.pop = new Int32Array(n);
-    this.needSum = new Float64Array(n);
+    /** 1 where someone in the hex went hungry this year (shared hexes only). */
+    this.hungry = new Uint8Array(n);
     this.shared = new Uint8Array(n);
     /** Winner of this year's fight in each hex, or −1 (none); read by gathering later. */
     this.fightWinner = new Int8Array(n).fill(-1);
@@ -85,8 +90,8 @@ export class Contact {
   year(people, map, lastPop, year, warRng, switchRng, onDeath, onFight, onSwitch) {
     const civs = this.civs;
     const n = map.count;
-    const { cnt, str, agg, pop, needSum, shared, fightWinner } = this;
-    const { alive, hex, civ, need } = people;
+    const { cnt, str, agg, pop, hungry, shared, fightWinner } = this;
+    const { alive, hex, civ } = people;
     const strength = people.traits[STRENGTH];
     const aggression = people.traits[AGGRESSION];
     const cooperation = people.traits[COOPERATION];
@@ -108,8 +113,8 @@ export class Contact {
       if (present >= 2) { shared[h] = 1; anyShared = true; }
     }
     if (!anyShared) return 0;
-    // Strength, aggression and food need are only needed where civs meet.
-    str.fill(0); agg.fill(0); needSum.fill(0);
+    // Strength, aggression and hunger are only needed where civs meet.
+    str.fill(0); agg.fill(0); hungry.fill(0);
     for (let i = 0; i < people.high; i++) {
       if (!alive[i]) continue;
       const h = hex[i];
@@ -117,7 +122,7 @@ export class Contact {
       const k = h * civs + civ[i];
       str[k] += strength[i];
       agg[k] += aggression[i];
-      needSum[h] += need[i];
+      if (people.hunger[i] > 0) hungry[h] = 1;
     }
 
     // Decide the fights, hex by hex.
@@ -125,8 +130,8 @@ export class Contact {
     for (let h = 0; h < n; h++) {
       if (!shared[h]) continue;
       const b0 = h * civs;
-      const short = map.food[h] < needSum[h];
-      const crowded = pop[h] >= map.foodCap[h];
+      const short = hungry[h] === 1;
+      const crowded = pop[h] > MIGRATION.crowdedShare * map.foodCap[h];
       // The chosen pair: the one holding the largest civ there, then the next largest.
       let x = -1;
       let y = -1;

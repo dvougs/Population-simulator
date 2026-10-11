@@ -137,7 +137,7 @@ Every person has 8 traits, each a number from 0 to 1: fertility (f), life expect
   - the tolerance T(x) = 2 − 2 × x for x up to 0.5, and 1.5 − x above (2 at 0, 1 at 0.5, 0.5 at 1);
   - climate = T(h) × (0.5 + c) in desert, T(c) × (0.5 + h) in tundra and mountain, and 1 on any other terrain.
   For example, with every trait at 0.5 the loss is 35 everywhere; with f = 0.7 and the rest 0.5 it is round(35 × 1.56) = 55.
-- **Founders** start at their civ type's values, each plus a random amount from −0.1 to +0.1 (uniform), kept between 0 and 1. Starting values: Aggressive aggression 0.7 and strength 0.65; Cooperative cooperation 0.7; Expansionist fertility 0.58; Isolationist life expectancy 0.6; Nomadic metabolism 0.45, heat tolerance 0.6 and cold tolerance 0.6; every other trait 0.5.
+- **Founders** start at their civ type's values, each plus a random amount from −0.1 to +0.1 (uniform), kept between 0 and 1. Starting values: Aggressive aggression 0.7 and strength 0.65; Cooperative cooperation 0.7; Expansionist heat tolerance 0.55 and cold tolerance 0.55; Isolationist life expectancy 0.6; Nomadic metabolism 0.45, heat tolerance 0.6 and cold tolerance 0.6; every other trait 0.5.
 - **Inheritance and mutation.** A child gets each of its parent's traits plus a random amount from −*mutation* to +*mutation* (uniform, drawn separately for each trait), kept between 0 and 1. *Mutation* is a game setting (default 3%, that is ±0.03; see "Game settings"); at 0% children copy their parent exactly.
 
 ## Civ types
@@ -146,14 +146,14 @@ Each civ has one of 5 types, picked per civ on the setup screen. A type biases t
 
 | Type | What it does differently | Starting traits (others 0.5) |
 |---|---|---|
-| Expansionist | Moves on early: a fed person sets out (20% a year) once their hex holds more people than 50% of its food capacity, instead of 80%. | fertility 0.58 |
+| Expansionist | Moves on early: a fed person sets out (20% a year) once their hex holds more people than 30% of its food capacity, instead of 50%. | heat tolerance 0.55, cold tolerance 0.55 |
 | Aggressive | Always fights any civ it shares a hex with (trigger (a) in "Contact"). | aggression 0.7, strength 0.65 |
 | Cooperative | Never starts a fight. Its people switch away to another civ half as often (× 0.5). | cooperation 0.7 |
 | Isolationist | Stays home: its people set out only in a year they went hungry (50%), never because the hex is crowded. | life expectancy 0.6 |
 | Nomadic | Wanders far: 5 movement points a year instead of 3, and sets out at twice the usual chance (100% when hungry, 40% when fed in a crowded hex). | metabolism 0.45, heat tolerance 0.6, cold tolerance 0.6 |
 
 - The setup screen shows, next to each civ's type picker, the type's explanation: the sentence for that type below, then "Starts with" its starting traits and "other traits 0.5".
-  - Expansionist: "Moves on early: its people set out once their hex is half full, long before it is crowded."
+  - Expansionist: "Moves on early: its people set out once their hex holds 30% of its food capacity, long before it is crowded at 50%."
   - Aggressive: "Always fights any civ it shares a hex with."
   - Cooperative: "Never starts a fight, and its people leave it for another civ half as often as others do."
   - Isolationist: "Stays home: its people only set out when they go hungry, never because the hex is crowded."
@@ -184,8 +184,8 @@ Each year (tick) runs these steps in order. Within a step everyone decides first
 ## Migration
 
 - A person who went hungry this year sets out with chance 50%.
-- A person who ate, in a crowded hex, sets out with chance 20%. A hex is crowded when it holds more people (all civs) than 80% of its food capacity.
-- **By civ type** (see "Civ types"): for Expansionist people a hex is already crowded above 50% of its food capacity; Isolationist people who ate never set out; Nomadic people set out at twice the chance (100% hungry, 40% fed in a crowded hex) and have 5 movement points. Aggressive and Cooperative people use the usual numbers.
+- A person who ate, in a crowded hex, sets out with chance 20%. A hex is crowded when it holds more people (all civs) than 50% of its food capacity. Food regrows by 50% of the capacity a year, so 50% is about as many people as a hex feeds year after year: above it the stored food runs down until people go hungry.
+- **By civ type** (see "Civ types"): for Expansionist people a hex is already crowded above 30% of its food capacity; Isolationist people who ate never set out; Nomadic people set out at twice the chance (100% hungry, 40% fed in a crowded hex) and have 5 movement points. Aggressive and Cooperative people use the usual numbers.
 - **Reach.** People move one hex a year: the hexes in reach are the land hexes next to theirs, whatever the terrain. Nomadic people walk instead, with 5 movement points a year: entering a hex costs its movement cost (coast and plains 1, desert and tundra 1.5, forest and hills 2, mountain 3), and the hexes in reach are the land hexes that can be reached along a path of land hexes costing no more than 5 in total (6 with a Horse Paddock standing; see "Buildings and wonders"). Seas and lakes cannot be entered or crossed, except by boat.
 - **Boats** (civs at level 4 or higher): the land hexes next to a sea or lake hex that is next to theirs are in reach too (one water hex crossed). For Nomadic people a path may cross one sea or lake hex, which costs 1 movement point. Only one water hex in the whole path, and the path must end on land (a person never stops on water). Any water hex counts, a lake or the sea, the ocean ring at the map's edge included; since the map does not wrap, crossing a ring hex only leads to land that also touches it. So a lake or strait one hex wide can be crossed, but not two water hexes in a row.
 - **Spare food** of a hex = the food it will hold after this year's regrowth (food + 50% of capacity, at most the capacity) − the people in it now (after this year's births).
@@ -207,8 +207,8 @@ Checked once a year, after food regrowth, in every land hex where people of 2 or
 
 - **Who starts a fight.** For each pair of civs A and B in the hex, civ A attacks B if one of these triggers holds. Cooperative civs never start a fight (they can still be attacked).
   - (a) *Aggressive:* A is Aggressive. It always attacks.
-  - (b) *Hunger:* the hex's food is below the total yearly need of the people in it, and A's average aggression there is above 0.5.
-  - (c) *Crowding:* the hex holds at least as many people (all civs) as its food capacity, and A's average aggression there is above 0.4.
+  - (b) *Hunger:* someone in the hex (any civ) went hungry this year, and A's average aggression there is above 0.5.
+  - (c) *Crowding:* the hex is crowded (more people, all civs, than 50% of its food capacity, as in "Migration"), and A's average aggression there is above 0.4.
   - (d) *Numbers:* A has at least 3 times as many people in the hex as B, and A's average aggression there is above 0.45.
   - (e) *Revenge:* A lost a fight to B in the last 20 years (this year minus that year is 20 or less).
   If any of (b) to (e) holds (and A is not Aggressive), A attacks with a chance equal to its average aggression in the hex: one roll per pair, however many of those triggers hold.

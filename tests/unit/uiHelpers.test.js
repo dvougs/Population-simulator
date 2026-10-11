@@ -52,7 +52,7 @@ test('How to play text: has the sections in the RULES.md order and every number 
     'costs 1 movement point', 'desert or tundra 1.5', 'forest or hills 2', 'mountain 3', '+25% in forest, +50% in hills and +100% in mountain',
     'health from 0 to 100', 'they gain 25 health', 'they lose about 35', 'Between 16 and 40', 'about a 5% chance', 'From about 45', 'past about 85',
     '8 years every second', '2×, 5×, 20× or Max',
-    'hungry sets out with a 50% chance', 'more people than 80% of its food', 'sets out with a 20% chance',
+    'hungry sets out with a 50% chance', 'more people than 50% of its food', 'sets out with a 20% chance',
     'People move one hex a year', 'with 5 movement points a year', 'needs counts × 3', 'cannot beat, × 0.25', 'can beat, × 2', '+20% for each neighbouring hex', 'counted twice',
     '1 to 8 civilisations', '2 to 200 people (20 by default)', 'at least 3 steps',
     'up to ±3%', '0% to 10%',
