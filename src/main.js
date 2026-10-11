@@ -114,7 +114,6 @@ async function startGame(params) {
   controls.sync();
   updatePanels();
   loop.start();
-  try { localStorage.setItem('popsim:lastParams', JSON.stringify(host.params)); } catch { /* storage unavailable */ }
 }
 
 function showScreen(name) {
@@ -380,10 +379,6 @@ ui.endNow.addEventListener('click', () => {
   showEnd();
 });
 
-try {
-  const saved = JSON.parse(localStorage.getItem('popsim:lastParams') || 'null');
-  if (saved) mapgen.setParams(saved, 'custom');
-} catch { /* ignore bad saved params */ }
 showScreen('mapgen');
 
 // Exposed for the browser tests and for poking at the sim from devtools.

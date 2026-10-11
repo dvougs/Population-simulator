@@ -4,6 +4,10 @@ How the game works, as currently implemented. Every number here is the value the
 
 This describes the current build (Phase 2, in progress): a generated hex map where civilisations of individual people eat, have children, grow old, starve and migrate, year by year, until an end condition you chose is met. All people share the same base values for now; inherited traits and civ types come later. The full design is in [project/ROADMAP.md](project/ROADMAP.md); this file changes as each part of it ships.
 
+## Saving
+
+- Nothing is saved between sessions: no settings, no games. A fresh page load always starts from the default settings. Within a session, *Same settings again* and *Back to setup* (see "End screen") reuse the settings held in memory.
+
 ## Time
 
 - One tick is one year. The game starts at year 0.
