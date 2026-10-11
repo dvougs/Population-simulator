@@ -208,8 +208,8 @@ Checked once a year, after food regrowth, in every land hex where people of 2 or
 - **The hex holder** is the civ of the two that had more people in the hex at the end of last year; on a tie (for example both just arrived), the one with more people now, then the lower civ number. The holder may be the attacker or the attacked.
 - **Strength** of each side = the sum of its people's strength in the hex. The holder's strength is multiplied by 1 + the hex's defence bonus (forest +25%, hills +50%, mountain +100%, otherwise 0%; see "Terrain").
 - **Result.** The side with more strength wins; on equal strength the holder wins.
-  - The loser loses ⌈20%⌉ of its people in the hex (rounded up, so at least 1), picked at random among them: these are **war deaths**. The rest of the loser's people there flee together to the neighbouring land hex with the most food left over for its people (food − people, counted when the step starts; on a tie the lower index). With no land neighbour they stay.
-  - The winner loses 5% of its people in the hex, rounded to the nearest whole person (half rounds up), picked at random: also war deaths.
+  - The loser loses ⌈20%⌉ of its people in the hex (rounded up, so at least 1), picked at random among them: these are **war deaths**. The rest of the loser's people there flee together to a neighbouring land hex where the winner has no people, the one with the most food left over for its people (food − people, counted when the step starts; on a tie the lower index); if the winner has people in every land neighbour, to the one of them with the most food left over. With no land neighbour they stay.
+  - The winner loses 5% of its people in the hex, rounded down (a winning group of fewer than 20 loses nobody), picked at random: also war deaths.
   - Other civs in the hex are not involved.
 - The winner of each hex's fight this year is kept until the next year's gathering, where it takes the hex's whole yield and stops Kingdoms absorbing there (see "Gathering and levels"). Fleeing never uses boats.
 

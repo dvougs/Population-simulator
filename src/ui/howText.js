@@ -266,8 +266,8 @@ export function howText() {
             + `${cooperative.neverStartsFights ? 'Cooperative civs never start a fight, though they can be attacked. ' : ''}`
             + 'Each hex sees at most one fight a year.',
           'Each side adds up its people\'s strength, and the civ that held the hex adds the terrain\'s defence bonus. '
-            + `The stronger side wins. The loser loses ${C.loserDeathPct}% of its people there and the rest flee to the best hex next door; `
-            + `the winner loses ${C.winnerDeathPct}%.`,
+            + `The stronger side wins. The loser loses ${C.loserDeathPct}% of its people there and the rest flee to the best hex next door the winner is not in; `
+            + `the winner loses ${C.winnerDeathPct}%, rounded down.`,
           `Where nobody fights, people may simply change sides: about ${pct(switchAverage)} a year at average cooperation `
             + `(${pct(C.switchPerCooperation)} × cooperation), and half as often away from a Cooperative civ.`,
         ],

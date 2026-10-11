@@ -21,7 +21,7 @@ export const CONTACT = Object.freeze({
   numbersAggression: 0.45,
   /** (e) Revenge: a civ that lost a fight to another within this many years attacks it. */
   revengeYears: 20,
-  /** The loser loses ⌈20%⌉ of its people in the hex, the winner round(5%), in whole percent so the maths stays integer. */
+  /** The loser loses ⌈20%⌉ of its people in the hex, the winner ⌊5%⌋ (rounding down so a small winning group does not trade a person a year for lone migrants), in whole percent so the maths stays integer. */
   loserDeathPct: 20,
   winnerDeathPct: 5,
   /** Yearly chance a person in a shared hex without a fight switches civ = this × their cooperation (× the type's switchAwayFactor). */
@@ -167,8 +167,8 @@ export class Contact {
       this.defender[h] = att === x ? y : x;
       this.holder[h] = def;
       this.killLoser[h] = Math.floor((cnt[b0 + lose] * CONTACT.loserDeathPct + 99) / 100);
-      this.killWinner[h] = Math.floor((cnt[b0 + win] * CONTACT.winnerDeathPct + 50) / 100);
-      this.fleeTo[h] = fleeHex(map, h, pop);
+      this.killWinner[h] = Math.floor(cnt[b0 + win] * CONTACT.winnerDeathPct / 100);
+      this.fleeTo[h] = fleeHex(map, h, pop, cnt, civs, win);
       this.seenL[h] = 0; this.pickL[h] = 0; this.seenW[h] = 0; this.pickW[h] = 0;
       fights++;
     }
@@ -229,17 +229,25 @@ function ahead(cnt, b0, a, b) {
 }
 
 /**
- * Where a fight's losers flee: the neighbouring land hex with the most food
- * left over for its current people (food − people), lowest index on ties; −1 if none.
+ * Where a fight's losers flee: a neighbouring land hex where the winner had no
+ * people at the start of the step (so they are not attacked again next year),
+ * the one with the most food left over for its current people (food − people),
+ * lowest index on ties; if the winner is in every land neighbour, the best of
+ * those by the same measure; −1 if there is no land neighbour.
  */
-function fleeHex(map, h, pop) {
+function fleeHex(map, h, pop, cnt, civs, win) {
   let best = -1;
   let bestSpare = 0;
+  let bestFree = false;
   for (let d = 0; d < 6; d++) {
     const t = map.neighbours[h * 6 + d];
     if (t < 0 || map.terrain[t] === DEEP_WATER) continue;
+    const free = cnt[t * civs + win] === 0;
+    if (bestFree && !free) continue;
     const s = map.food[t] - pop[t];
-    if (best < 0 || s > bestSpare || (s === bestSpare && t < best)) { best = t; bestSpare = s; }
+    if (best < 0 || (free && !bestFree) || s > bestSpare || (s === bestSpare && t < best)) {
+      best = t; bestSpare = s; bestFree = free;
+    }
   }
   return best;
 }
