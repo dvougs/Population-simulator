@@ -8,10 +8,10 @@ import { generateMap, countTerrain, hashMap, fnv } from './mapgen.js';
 import { indexToAxial } from './hex.js';
 import { Rng } from './rng.js';
 import { People, NO_PARENT } from './people.js';
-import { pickStarts, found, eat, deaths, births, regrow, DEATH_STARVATION } from './life.js';
+import { pickStarts, found, eat, deaths, births, regrow } from './life.js';
 import { buildReach, migrate, migrationRules, setReach } from './migration.js';
 import { Contact } from './contact.js';
-import { Levels, LEVEL_EFFECTS } from './levels.js';
+import { Levels, LEVEL_EFFECTS, GATHER } from './levels.js';
 import { CIV_TYPE_NAMES } from './civTypes.js';
 import { CivStats } from './civStats.js';
 import { Records, FAMINE } from './records.js';
@@ -19,7 +19,7 @@ import {
   DEEP_WATER, TERRAIN_IDS, TERRAIN_NAMES, MOVE_COST, DEFENCE_BONUS,
 } from './terrain.js';
 import { MATERIAL_COUNT, MATERIAL_IDS } from './materials.js';
-import { TRAITS, TRAIT_COUNT } from './traits.js';
+import { TRAITS, TRAIT_COUNT, COOPERATION } from './traits.js';
 
 export class Simulation {
   constructor(params) {
@@ -51,8 +51,6 @@ export class Simulation {
     // Fights and civ switching (also forked after the older streams).
     this.rng.war = rng.fork('war');
     this.rng.switch = rng.fork('switch');
-    // Kingdoms absorbing smaller civs.
-    this.rng.absorb = rng.fork('absorb');
     this.starts = pickStarts(map, civs, placement);
     this.civCount = civs;
     this.civTypes = this.params.civTypes.slice();
@@ -65,6 +63,10 @@ export class Simulation {
     this.migrationRules = migrationRules(this.civTypes, map, this.reach);
     this.contact = new Contact(map, this.civTypes);
     this.levels = new Levels(map, this.civTypes);
+    // Kingdoms close their enclosed hexes to other civs and fight harder (see levels.js).
+    this.migrationRules.inside = this.levels.inside;
+    this.contact.inside = this.levels.inside;
+    this.contact.level = this.levels.level;
 
     // Scratch arrays, allocated once (per-person ones again only if the pool grows).
     const n = map.count;
@@ -106,8 +108,6 @@ export class Simulation {
       const boats = to >= LEVEL_EFFECTS.boatLevel;
       if (boats !== (this.migrationRules.boats[c] === 1)) setReach(this.migrationRules, c, map, boats, LEVEL_EFFECTS.boatCost);
     };
-    /** Starvation deaths per civ in the year last recorded (for food security). */
-    this.lastStarved = new Int32Array(civs);
     this.recordYear();
   }
 
@@ -122,8 +122,7 @@ export class Simulation {
     const { alive, age } = people;
     const lv = this.levels;
     // From the counts at the end of last year, so before anyone ages, eats or moves.
-    lv.year(people, this.map, this.tickCount, this.hexCivPop, this.lastStarved, this.contact.fightWinner, this.rng.absorb,
-      this.onLevel, this.onSwitch);
+    lv.year(people, this.map, this.tickCount, this.hexCivPop, this.contact.fightWinner, this.onLevel, this.onSwitch);
     for (let i = 0; i < people.high; i++) if (alive[i] && age[i] < 65535) age[i]++;
     eat(people, this.map, this.rng.eat, this.hexPop, this.seen, this.picked, this.needSum, this.eaten, lv.shelter);
     deaths(people, this.rng.death, this.onDeath, lv.oldAgeDelay);
@@ -157,14 +156,22 @@ export class Simulation {
     const civs = this.civCount;
     // Gathering next year reads each civ's hungry people.
     const hungry = this.levels.hungry;
+    this.levels.effortGiven = true;
     hungry.fill(0);
+    // And its gatherers' effort, counted here rather than in another pass over everyone.
+    const effort = this.levels.effort;
+    effort.fill(0);
+    const coop = p.traits[COOPERATION];
+    const { adultAge, personBase } = GATHER;
     for (let i = 0; i < p.high; i++) {
       if (!alive[i]) continue;
       const c = civ[i];
       civPop[c]++;
+      const k = hex[i] * civs + c;
       // A civ's first person in a hex adds the hex to those it holds.
-      if (hexCivPop[hex[i] * civs + c]++ === 0) civHexes[c]++;
+      if (hexCivPop[k]++ === 0) civHexes[c]++;
       if (hunger[i] > 0) hungry[c]++;
+      if (age[i] >= adultAge) effort[k] += personBase + coop[i];
       if (age[i] > civOldest[c]) civOldest[c] = age[i];
       const b = c * TRAIT_COUNT;
       ct[b] += t0[i]; ct[b + 1] += t1[i]; ct[b + 2] += t2[i]; ct[b + 3] += t3[i];
@@ -173,7 +180,6 @@ export class Simulation {
     for (let c = 0; c < civs; c++) {
       for (let t = 0; t < TRAIT_COUNT; t++) ct[c * TRAIT_COUNT + t] = this.civPop[c] > 0 ? ct[c * TRAIT_COUNT + t] / this.civPop[c] : NaN;
     }
-    for (let c = 0; c < civs; c++) this.lastStarved[c] = this.civStats.yearDeaths[c * 3 + DEATH_STARVATION];
     this.civStats.endYear(this.tickCount, this.civPop, this.civHexes, this.civOldest, ct, this.levels.level);
     this.records.endYear(this.tickCount, this.civPop, this.civHexes, this.hexCivPop);
   }

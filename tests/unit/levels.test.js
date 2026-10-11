@@ -4,14 +4,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   Levels, REQUIREMENTS, GATHER, LEVEL_EFFECTS, LEVEL_NAMES, MAX_LEVEL, TYPE_LEVEL_RULES,
-  scaledMinimum, yearsNeeded, materialsNeeded, capacityFactor,
+  levelMinimums, yearsNeeded, materialsNeeded, capacityFactor,
 } from '../../src/sim/levels.js';
 import {
   WOOD, STONE, CLAY, COPPER, IRON, SALT, GOLD, GEMSTONES, SPICES, MATERIAL_COUNT, MATERIAL_IDS,
 } from '../../src/sim/materials.js';
 import { buildReach } from '../../src/sim/migration.js';
 import { People } from '../../src/sim/people.js';
-import { Rng } from '../../src/sim/rng.js';
 import { Simulation } from '../../src/sim/simulation.js';
 import { PLAINS, FOREST, DESERT, HILLS, DEEP_WATER, MOUNTAIN } from '../../src/sim/terrain.js';
 import { COOPERATION } from '../../src/sim/traits.js';
@@ -20,7 +19,7 @@ import { makeMap } from './helpers.js';
 const RULES = readFileSync(new URL('../../RULES.md', import.meta.url), 'utf8');
 const near = (got, want, eps = 1e-9) => assert.ok(Math.abs(got - want) <= eps, `${got} vs ${want}`);
 
-/** Rows of the "Levelling up" table: [years, people, hexes, {material: amount}]. */
+/** Rows of the "Levelling up" table: [years, % of land per civ, people per hex, {material: amount}]. */
 function ruleRows() {
   const start = RULES.indexOf('| From → to |');
   const lines = RULES.slice(start).split('\n').slice(2);
@@ -30,7 +29,7 @@ function ruleRows() {
     const c = l.split('|').slice(1, -1).map((x) => x.trim());
     const mats = {};
     for (const part of c[4].split(',')) { const [n, name] = part.trim().split(' '); mats[name] = Number(n); }
-    out.push([Number(c[1]), Number(c[2]), Number(c[3]), mats]);
+    out.push([Number(c[1]), Number(c[2].replace('%', '')), Number(c[3]), mats]);
   }
   return out;
 }
@@ -38,18 +37,20 @@ function ruleRows() {
 test('RULES.md "Levelling up": the requirement table equals the code, row by row', () => {
   const rows = ruleRows();
   assert.equal(rows.length, 4);
-  rows.forEach(([years, pop, hexes, mats], k) => {
+  rows.forEach(([years, landPct, perHex, mats], k) => {
     assert.equal(REQUIREMENTS[k].years, years);
-    assert.equal(REQUIREMENTS[k].pop, pop);
-    assert.equal(REQUIREMENTS[k].hexes, hexes);
+    assert.equal(REQUIREMENTS[k].landPct, landPct);
+    assert.equal(REQUIREMENTS[k].perHex, perHex);
     MATERIAL_IDS.forEach((id, m) => assert.equal(REQUIREMENTS[k].materials[m], mats[id] ?? 0, `level ${k + 2} ${id}`));
   });
+  assert.deepEqual(REQUIREMENTS.map((r) => [r.landPct, r.perHex]), [[15, 10], [30, 12], [50, 14], [75, 16]]);
   assert.deepEqual(LEVEL_NAMES, ['Foragers', 'Farmers', 'Builders', 'Organised', 'Kingdom']);
   assert.equal(MAX_LEVEL, 5);
 });
 
 test('RULES.md "Gathering": the numbers', () => {
-  assert.equal(GATHER.secureFoodPerPerson, 1.2);
+  assert.equal(GATHER.secureHungryPct, 20);
+  assert.equal(GATHER.secureFoodPerPerson, undefined, 'no food-per-person check any more');
   assert.equal(GATHER.gatherShare, 0.2);
   assert.equal(GATHER.adultAge, 16);
   assert.equal(GATHER.personBase, 0.5);
@@ -61,7 +62,8 @@ test('RULES.md "Gathering": the numbers', () => {
   assert.equal(LEVEL_EFFECTS.oldAgeDelay, 5);
   assert.equal(LEVEL_EFFECTS.shelterFactor, 0.5);
   assert.equal(LEVEL_EFFECTS.fallBackYears, 100);
-  assert.equal(LEVEL_EFFECTS.absorbPct, 10);
+  assert.equal(LEVEL_EFFECTS.kingdomStrength, 5);
+  assert.equal(LEVEL_EFFECTS.absorbPct, undefined, 'Kingdoms absorb enclosed hexes whole');
   assert.equal(LEVEL_EFFECTS.boatCost, 1);
   assert.deepEqual([LEVEL_EFFECTS.farmLevel, LEVEL_EFFECTS.shelterLevel, LEVEL_EFFECTS.boatLevel], [2, 3, 4]);
   assert.deepEqual({ ...TYPE_LEVEL_RULES.nomadic }, { yearsPct: 125 });
@@ -89,16 +91,35 @@ test('RULES.md "Levelling up" by type: Isolationist materials x1.25 rounded up',
   assert.equal(materialsNeeded(5, 'isolationist'), null);
 });
 
-test('RULES.md "Levelling up": people and hexes scale with the map, rounded to the nearest (half up)', () => {
-  assert.equal(scaledMinimum(40, 10, 10), 40);
-  assert.deepEqual([scaledMinimum(40, 20, 20), scaledMinimum(4, 20, 20)], [160, 16]);
-  assert.deepEqual([scaledMinimum(40, 30, 30), scaledMinimum(4, 30, 30)], [360, 36]);
-  assert.deepEqual([scaledMinimum(350, 50, 50), scaledMinimum(22, 50, 50)], [8750, 550]);
-  assert.equal(scaledMinimum(40, 11, 11), 48, '48.4 rounds down');
-  assert.equal(scaledMinimum(4, 11, 11), 5, '4.84 rounds up');
-  assert.equal(scaledMinimum(3, 15, 10), 5, '4.5 rounds up (half up)');
-  assert.equal(scaledMinimum(1, 15, 10), 2, '1.5');
-  assert.equal(scaledMinimum(1, 14, 10), 1, '1.4');
+test('RULES.md "Levelling up": hexes are a share of the land per civ (half up, at least 1); people are so many per hex', () => {
+  const both = (land, civs) => [2, 3, 4, 5].map((L) => { const m = levelMinimums(L, land, civs); return [m.hexes, m.pop]; });
+  // The RULES.md examples.
+  assert.deepEqual(both(64, 3), [[3, 30], [6, 72], [11, 154], [16, 256]], 'Small world');
+  assert.deepEqual(both(630, 4), [[24, 240], [47, 564], [79, 1106], [118, 1888]], '30 x 30, 4 civs');
+  assert.deepEqual(both(1750, 6), [[44, 440], [88, 1056], [146, 2044], [219, 3504]], 'Large world, 6 civs');
+  assert.deepEqual(both(1750, 8), [[33, 330], [66, 792], [109, 1526], [164, 2624]], 'Large world, 8 civs');
+  assert.deepEqual(both(100, 1), [[15, 150], [30, 360], [50, 700], [75, 1200]]);
+  // Rounding: 15% of 50 is 7.5, half up to 8; 75% of 50 is 37.5 -> 38.
+  assert.deepEqual(levelMinimums(2, 100, 2), { hexes: 8, pop: 80 });
+  assert.deepEqual(levelMinimums(5, 100, 2), { hexes: 38, pop: 608 });
+  assert.equal(levelMinimums(2, 70, 3).hexes, 4, '3.5 rounds up');
+  assert.equal(levelMinimums(2, 60, 3).hexes, 3, '3');
+  assert.equal(levelMinimums(2, 62, 3).hexes, 3, '3.1 rounds down');
+  // Never below 1 hex (and 10 people at level 2).
+  assert.deepEqual(levelMinimums(2, 3, 1), { hexes: 1, pop: 10 }, '0.45 is still 1 hex');
+  assert.deepEqual(levelMinimums(2, 0, 8), { hexes: 1, pop: 10 });
+  assert.deepEqual(levelMinimums(1, 100, 1), { hexes: 0, pop: 0 }, 'level 1 needs nothing');
+});
+
+test('RULES.md "Levelling up": land per civ counts every hex that is not deep water, over the civs the game started with', () => {
+  const half = makeMap(10, 10, (i) => (i < 50 ? PLAINS : DEEP_WATER));
+  const lv = new Levels(half, ['expansionist', 'aggressive']);
+  assert.equal(lv.land, 50);
+  assert.deepEqual([2, 3, 4, 5].map((L) => lv.minHexes(L)), [4, 8, 13, 19], '15/30/50/75% of 25, half up');
+  assert.deepEqual([2, 3, 4, 5].map((L) => lv.minPop(L)), [40, 96, 182, 304]);
+  assert.deepEqual([lv.minHexes(1), lv.minPop(1)], [0, 0]);
+  const mixed = makeMap(10, 10, (i) => [PLAINS, FOREST, DESERT, HILLS, MOUNTAIN][i % 5]);
+  assert.equal(new Levels(mixed, ['expansionist']).land, 100, 'every land terrain counts');
 });
 
 test('RULES.md "What levels do": food capacity factor', () => {
@@ -131,23 +152,25 @@ function world(types, groups, { size = 10, deposits = {}, terrain = () => PLAINS
   const levels = new Levels(map, types);
   return { map, people, levels, types, civs: types.length };
 }
-function step(w, { year = 1, starved = null, fightWinner = null, hungry = null, rng = new Rng('lv') } = {}) {
+function step(w, { year = 1, fightWinner = null, hungry = null } = {}) {
   const cnt = new Int32Array(w.map.count * w.civs);
   for (let i = 0; i < w.people.high; i++) if (w.people.alive[i]) cnt[w.people.hex[i] * w.civs + w.people.civ[i]]++;
   if (hungry) w.levels.hungry.set(hungry); else w.levels.hungry.fill(0);
   const ev = { levels: [], switches: [], first: false };
-  ev.first = w.levels.year(w.people, w.map, year, cnt, starved ?? new Int32Array(w.civs), fightWinner ?? new Int8Array(w.map.count).fill(-1), rng,
+  ev.first = w.levels.year(w.people, w.map, year, cnt, fightWinner ?? new Int8Array(w.map.count).fill(-1),
     (c, from, to, y) => ev.levels.push([c, from, to, y]), (from, to) => ev.switches.push([from, to]));
   ev.cnt = cnt;
   return ev;
 }
 const stockOf = (w, c, m) => w.levels.stock[c * MATERIAL_COUNT + m];
 const setStock = (w, c, mats) => { for (const [m, v] of Object.entries(mats)) w.levels.stock[c * MATERIAL_COUNT + Number(m)] = v; };
-/** 4 hexes with 10 people each, the minimum for level 2 on a 10 × 10 map. */
-const fourHexes = (civ = 0) => [[11, civ, 10], [12, civ, 10], [13, civ, 10], [14, civ, 10]];
+/** `hexes` hexes from hex 11 on with `total` people spread over them (the first ones get the extra). */
+const spread = (hexes, total, civ = 0) => Array.from({ length: hexes }, (_, k) => [11 + k, civ, Math.floor(total / hexes) + (k < total % hexes ? 1 : 0)]);
+/** 15 hexes with 10 people each: the minimum for level 2 for one civ on an all-land 10 × 10 map (15% of 100 hexes). */
+const l2Land = (civ = 0) => spread(15, 150, civ);
 
 test('RULES.md "Levelling up": every civ starts at level 1 with an empty stockpile', () => {
-  const w = world(['expansionist', 'nomadic'], fourHexes());
+  const w = world(['expansionist', 'nomadic'], l2Land());
   assert.deepEqual([...w.levels.level], [1, 1]);
   assert.ok(w.levels.stock.every((v) => v === 0));
   assert.equal(w.levels.reached[0 * 6 + 1], 0, 'level 1 reached in year 0');
@@ -155,7 +178,7 @@ test('RULES.md "Levelling up": every civ starts at level 1 with an empty stockpi
 
 test('RULES.md "Levelling up" 1 to 2: level up exactly when years, people, hexes and materials are all met; materials are spent', () => {
   const ready = () => {
-    const w = world(['expansionist'], fourHexes());
+    const w = world(['expansionist'], l2Land());
     setStock(w, 0, { [WOOD]: 85, [STONE]: 30, [CLAY]: 31.5 });
     w.levels.yearsAt[0] = 149; // this year makes 150
     return w;
@@ -176,39 +199,35 @@ test('RULES.md "Levelling up" 1 to 2: level up exactly when years, people, hexes
     ['stone', (x) => setStock(x, 0, { [STONE]: 29.99 })],
     ['clay', (x) => setStock(x, 0, { [CLAY]: 29.99 })],
     ['people', (x) => x.people.remove(0)],
-    ['hexes', () => {}],
+    ['hexes', (x) => x.people.hex.fill(24, 140, 150)], // the last ten join the 14th hex: 14 hexes
   ]) {
     w = ready(); fix(w);
-    if (name === 'hexes') w.people.hex.fill(13, 30, 40); // the last ten join the third hex: 3 hexes
     assert.equal(step(w).levels.length, 0, `short of ${name}`);
     assert.equal(w.levels.level[0], 1);
   }
-  // 39 people on 4 hexes: remove one of the 40.
-  w = ready(); w.people.remove(39);
-  assert.equal(step(w).levels.length, 0, '39 people');
   w = ready();
-  assert.equal(step(w).levels.length, 1, '40 people, 4 hexes, 150 years');
+  assert.equal(step(w).levels.length, 1, '150 people, 15 hexes, 150 years');
 });
 
-test('RULES.md "Levelling up": 3 hexes is one short of 4; the civ must hold the hexes (people there), not just own people', () => {
-  const w = world(['expansionist'], [[11, 0, 14], [12, 0, 13], [13, 0, 13]]);
+test('RULES.md "Levelling up": 14 hexes is one short of 15; the civ must hold the hexes (people there), not just own people', () => {
+  const w = world(['expansionist'], spread(14, 150));
   setStock(w, 0, { [WOOD]: 80, [STONE]: 30, [CLAY]: 30 });
   w.levels.yearsAt[0] = 500;
   const ev = step(w);
-  assert.equal(ev.levels.length, 0, '40 people but 3 hexes');
-  w.people.hex[0] = 14;
-  assert.equal(step(w, { year: 2 }).levels.length, 1, '4 hexes');
+  assert.equal(ev.levels.length, 0, '150 people but 14 hexes');
+  w.people.hex[0] = 25;
+  assert.equal(step(w, { year: 2 }).levels.length, 1, '15 hexes');
 });
 
 test('RULES.md "Levelling up": only one level a year, however much the civ has', () => {
-  const w = world(['expansionist'], [...fourHexes(), [15, 0, 400]]);
+  const w = world(['expansionist'], spread(80, 1600)); // enough land and people for Kingdom (75 hexes, 1200 people)
   setStock(w, 0, { [WOOD]: 1000, [STONE]: 1000, [CLAY]: 1000, [COPPER]: 100, [IRON]: 1000, [SALT]: 100, [GOLD]: 100, [GEMSTONES]: 100, [SPICES]: 100 });
   w.levels.yearsAt[0] = 5000;
   step(w, { year: 1 });
   assert.equal(w.levels.level[0], 2);
 });
 
-test('RULES.md "Levelling up": 20 x 20 map: level 2 needs 160 people and 16 hexes', () => {
+test('RULES.md "Levelling up": 20 x 20 all-land map, one civ: level 2 needs 60 hexes and 600 people', () => {
   const groups = (hexes, each) => Array.from({ length: hexes }, (_, k) => [21 + k, 0, each]);
   const ready = (hexes, each) => {
     const w = world(['aggressive'], groups(hexes, each), { size: 20 });
@@ -216,23 +235,23 @@ test('RULES.md "Levelling up": 20 x 20 map: level 2 needs 160 people and 16 hexe
     w.levels.yearsAt[0] = 149;
     return w;
   };
-  assert.equal(step(ready(16, 10)).levels.length, 1, '160 people on 16 hexes');
-  assert.equal(step(ready(16, 9)).levels.length, 0, '144 people');
-  assert.equal(step(ready(15, 11)).levels.length, 0, '15 hexes (165 people)');
-  const w = ready(16, 10); w.people.remove(0);
-  assert.equal(step(w).levels.length, 0, '159 people');
+  assert.equal(step(ready(60, 10)).levels.length, 1, '600 people on 60 hexes');
+  assert.equal(step(ready(60, 9)).levels.length, 0, '540 people');
+  assert.equal(step(ready(59, 11)).levels.length, 0, '59 hexes (649 people)');
+  const w = ready(60, 10); w.people.remove(0);
+  assert.equal(step(w).levels.length, 0, '599 people');
 });
 
 test('RULES.md "Levelling up" by type: Nomadic needs 188 years at level 1; Isolationist 120 years and 100 wood, 38 stone, 38 clay', () => {
   const nomad = (years) => {
-    const w = world(['nomadic'], fourHexes());
+    const w = world(['nomadic'], l2Land());
     setStock(w, 0, { [WOOD]: 80, [STONE]: 30, [CLAY]: 30 });
     w.levels.yearsAt[0] = years - 1;
     return step(w).levels.length;
   };
   assert.deepEqual([nomad(187), nomad(188)], [0, 1]);
   const iso = (years, wood, stone, clay) => {
-    const w = world(['isolationist'], fourHexes());
+    const w = world(['isolationist'], l2Land());
     setStock(w, 0, { [WOOD]: wood, [STONE]: stone, [CLAY]: clay });
     w.levels.yearsAt[0] = years - 1;
     return step(w).levels.length;
@@ -243,12 +262,12 @@ test('RULES.md "Levelling up" by type: Nomadic needs 188 years at level 1; Isola
   assert.equal(iso(120, 100, 38, 37.9), 0);
   assert.equal(iso(120, 80, 30, 30), 0, 'the usual materials are not enough');
   // Higher steps: Nomadic 375 for level 3.
-  const w = world(['nomadic'], [[11, 0, 50], [12, 0, 50], [13, 0, 50], [14, 0, 50], [15, 0, 50], [16, 0, 50], [17, 0, 50], [18, 0, 50]]);
+  const w = world(['nomadic'], spread(30, 360));
   w.levels.level[0] = 2;
   setStock(w, 0, { [WOOD]: 200, [STONE]: 150, [CLAY]: 100, [COPPER]: 30 });
   w.levels.yearsAt[0] = 373;
   assert.equal(step(w).levels.length, 0);
-  assert.equal(step(w, { year: 2 }).levels.length, 1, '375 years at level 2 (100 people, 8 hexes)');
+  assert.equal(step(w, { year: 2 }).levels.length, 1, '375 years at level 2 (360 people, 30 hexes)');
 });
 
 test('RULES.md "Levelling up" 2 to 3 and 3 to 4 and 4 to 5 numbers (people, hexes, materials)', () => {
@@ -259,28 +278,28 @@ test('RULES.md "Levelling up" 2 to 3 and 3 to 4 and 4 to 5 numbers (people, hexe
     w.levels.yearsAt[0] = years - 1;
     return step(w).levels.length;
   };
-  const spread = (hexes, total) => Array.from({ length: hexes }, (_, k) => [11 + k, 0, Math.floor(total / hexes) + (k < total % hexes ? 1 : 0)]);
+  // One civ on 100 land hexes: 30 hexes and 360 people, 50 and 700, 75 and 1200.
   const s3 = { [WOOD]: 200, [STONE]: 150, [CLAY]: 100, [COPPER]: 30 };
-  assert.equal(tryStep(2, spread(8, 100), s3, 300), 1);
-  assert.equal(tryStep(2, spread(8, 99), s3, 300), 0);
-  assert.equal(tryStep(2, spread(7, 100), s3, 300), 0);
-  assert.equal(tryStep(2, spread(8, 100), { ...s3, [COPPER]: 29 }, 300), 0);
-  assert.equal(tryStep(2, spread(8, 100), s3, 299), 0);
+  assert.equal(tryStep(2, spread(30, 360), s3, 300), 1);
+  assert.equal(tryStep(2, spread(30, 359), s3, 300), 0);
+  assert.equal(tryStep(2, spread(29, 360), s3, 300), 0);
+  assert.equal(tryStep(2, spread(30, 360), { ...s3, [COPPER]: 29 }, 300), 0);
+  assert.equal(tryStep(2, spread(30, 360), s3, 299), 0);
   const s4 = { [STONE]: 300, [COPPER]: 80, [IRON]: 60, [SALT]: 40 };
-  assert.equal(tryStep(3, spread(14, 200), s4, 500), 1);
-  assert.equal(tryStep(3, spread(14, 199), s4, 500), 0);
-  assert.equal(tryStep(3, spread(13, 200), s4, 500), 0);
-  assert.equal(tryStep(3, spread(14, 200), { ...s4, [SALT]: 39 }, 500), 0);
+  assert.equal(tryStep(3, spread(50, 700), s4, 500), 1);
+  assert.equal(tryStep(3, spread(50, 699), s4, 500), 0);
+  assert.equal(tryStep(3, spread(49, 700), s4, 500), 0);
+  assert.equal(tryStep(3, spread(50, 700), { ...s4, [SALT]: 39 }, 500), 0);
   const s5 = { [IRON]: 150, [GOLD]: 30, [GEMSTONES]: 15, [SPICES]: 20 };
-  assert.equal(tryStep(4, spread(22, 350), s5, 800), 1);
-  assert.equal(tryStep(4, spread(22, 349), s5, 800), 0);
-  assert.equal(tryStep(4, spread(21, 350), s5, 800), 0);
-  assert.equal(tryStep(4, spread(22, 350), { ...s5, [SPICES]: 19.9 }, 800), 0);
-  assert.equal(tryStep(4, spread(22, 350), s5, 799), 0);
+  assert.equal(tryStep(4, spread(75, 1200), s5, 800), 1);
+  assert.equal(tryStep(4, spread(75, 1199), s5, 800), 0);
+  assert.equal(tryStep(4, spread(74, 1200), s5, 800), 0);
+  assert.equal(tryStep(4, spread(75, 1200), { ...s5, [SPICES]: 19.9 }, 800), 0);
+  assert.equal(tryStep(4, spread(75, 1200), s5, 799), 0);
 });
 
 test('RULES.md "Levelling up": a civ with nobody does not count years or level up', () => {
-  const w = world(['expansionist', 'expansionist'], fourHexes(0));
+  const w = world(['expansionist', 'expansionist'], l2Land(0));
   w.levels.yearsAt[1] = 1000;
   setStock(w, 1, { [WOOD]: 80, [STONE]: 30, [CLAY]: 30 });
   step(w);
@@ -290,7 +309,7 @@ test('RULES.md "Levelling up": a civ with nobody does not count years or level u
 });
 
 test('RULES.md "Falling back": below the level\'s people for 100 years in a row drops one level, keeping the stockpile', () => {
-  const w = world(['expansionist'], [[11, 0, 39]]); // level 2 needs 40
+  const w = world(['expansionist'], [[11, 0, 149]]); // level 2 needs 150
   w.levels.level[0] = 2;
   setStock(w, 0, { [WOOD]: 7 });
   for (let y = 1; y <= 99; y++) step(w, { year: y });
@@ -307,14 +326,14 @@ test('RULES.md "Falling back": below the level\'s people for 100 years in a row 
   assert.equal(w.levels.level[0], 1);
 });
 
-test('RULES.md "Falling back": reaching the minimum again resets the count to 0; 40 people is not below 40', () => {
-  const w = world(['expansionist'], [[11, 0, 39]]);
+test('RULES.md "Falling back": reaching the minimum again resets the count to 0; 150 people is not below 150', () => {
+  const w = world(['expansionist'], [[11, 0, 149]]);
   w.levels.level[0] = 2;
   for (let y = 1; y <= 60; y++) step(w, { year: y });
   assert.equal(w.levels.belowYears[0], 60);
   w.people.add(11, 0, 25, 100, 0);
   step(w, { year: 61 });
-  assert.equal(w.levels.belowYears[0], 0, '40 people is the minimum itself');
+  assert.equal(w.levels.belowYears[0], 0, '150 people is the minimum itself');
   w.people.remove(39);
   for (let y = 62; y <= 160; y++) step(w, { year: y });
   assert.equal(w.levels.level[0], 2, 'the count started again at 0: 99 years');
@@ -322,26 +341,30 @@ test('RULES.md "Falling back": reaching the minimum again resets the count to 0;
   assert.equal(w.levels.level[0], 1);
 });
 
-test('RULES.md "Falling back": the minimum is scaled to the map and is the people needed for the current level', () => {
-  const w = world(['expansionist'], [[21, 0, 159]], { size: 20 });
+test('RULES.md "Falling back": the minimum follows the land per civ and is the people needed for the current level', () => {
+  const w = world(['expansionist'], [[21, 0, 599]], { size: 20 });
   w.levels.level[0] = 2;
   step(w);
-  assert.equal(w.levels.belowYears[0], 1, '160 needed on 20 × 20');
-  const v = world(['expansionist'], [[21, 0, 160]], { size: 20 });
+  assert.equal(w.levels.belowYears[0], 1, '600 needed on a 20 × 20 all-land map with one civ');
+  const v = world(['expansionist'], [[21, 0, 600]], { size: 20 });
   v.levels.level[0] = 2;
   step(v);
   assert.equal(v.levels.belowYears[0], 0);
-  const u = world(['expansionist'], [[21, 0, 99]]);
+  const two = world(['expansionist', 'aggressive'], [[21, 0, 299], [30, 1, 300]], { size: 20 });
+  two.levels.level[0] = 2; two.levels.level[1] = 2;
+  step(two);
+  assert.deepEqual([...two.levels.belowYears], [1, 0], 'two civs: 30 hexes, 300 people each');
+  const u = world(['expansionist'], [[21, 0, 359]]);
   u.levels.level[0] = 3;
   step(u);
-  assert.equal(u.levels.belowYears[0], 1, 'level 3 needs 100');
-  assert.equal(u.levels.minPop(5), 350);
-  assert.equal(u.levels.minHexes(5), 22);
+  assert.equal(u.levels.belowYears[0], 1, 'level 3 needs 360');
+  assert.equal(u.levels.minPop(5), 1200);
+  assert.equal(u.levels.minHexes(5), 75);
   assert.equal(u.levels.minPop(1), 0);
 });
 
 test('RULES.md "Falling back": to climb back it must meet the requirements and spend the materials again', () => {
-  const w = world(['expansionist'], fourHexes());
+  const w = world(['expansionist'], l2Land());
   w.levels.level[0] = 2;
   w.levels.yearsAt[0] = 0;
   setStock(w, 0, { [WOOD]: 80, [STONE]: 30, [CLAY]: 30 });
@@ -353,7 +376,7 @@ test('RULES.md "Falling back": to climb back it must meet the requirements and s
 });
 
 test('RULES.md "What levels do": per-level effects on birth, shelter, boats and old age', () => {
-  const w = world(['expansionist'], fourHexes());
+  const w = world(['expansionist'], l2Land());
   const effects = () => {
     w.levels.setEffects();
     return [w.levels.birthBonus[0], w.levels.shelter[0], w.levels.boats[0], w.levels.oldAgeDelay[0]];
@@ -531,33 +554,23 @@ test('RULES.md "Gathering": only the hexes it holds are worked, and only hexes w
   assert.ok(w.levels.gatherMask.every((v) => v === 0));
 });
 
-test('RULES.md "Gathering": food is secure only with nobody hungry, nobody starved, and at least 1.2 food per person', () => {
+test('RULES.md "Gathering": food is secure while at most 20% of the civ went hungry last year', () => {
   const run = (mod) => {
     const w = world(['expansionist'], [adults(55, 0, 50)], { deposits: { 55: [WOOD] } });
     const opt = mod(w) ?? {};
     step(w, opt);
     return [w.levels.secure[0], stockOf(w, 0, WOOD)];
   };
-  assert.deepEqual(run(() => {}), [1, 5], 'secure: 60 food for 50 people is 1.2 each');
-  assert.deepEqual(run((w) => { w.map.food[55] = 59.9; }), [0, 0], 'a hundredth under 1.2 per person');
-  assert.deepEqual(run((w) => { w.map.food[55] = 60; w.people.add(55, 0, 25, 100, 0); }), [0, 0], '51 people on 60 food');
-  assert.deepEqual(run(() => ({ hungry: [1] })), [0, 0], 'one hungry person');
-  assert.deepEqual(run(() => ({ starved: Int32Array.of(1) })), [0, 0], 'one starvation death');
-  // Other civs in the hexes count as mouths.
-  const w = world(['expansionist', 'aggressive'], [adults(55, 0, 40), adults(55, 1, 11)], { deposits: { 55: [WOOD] } });
-  step(w);
-  assert.equal(w.levels.secure[0], 0, '51 people of all civs on 60 food');
-  assert.equal(w.levels.secure[1], 0);
-});
-
-test('RULES.md "Gathering": food security adds up all the hexes the civ holds', () => {
-  const w = world(['expansionist'], [adults(55, 0, 50), adults(66, 0, 10)], { deposits: { 55: [WOOD] } });
-  w.map.food[66] = 12; // 60 + 12 = 72 = 1.2 × 60
-  step(w);
-  assert.equal(w.levels.secure[0], 1);
-  w.map.food[66] = 11.9;
-  step(w, { year: 2 });
-  assert.equal(w.levels.secure[0], 0);
+  assert.deepEqual(run(() => {}), [1, 5], 'nobody hungry');
+  assert.deepEqual(run(() => ({ hungry: [1] })), [1, 5], 'one hungry person');
+  assert.deepEqual(run(() => ({ hungry: [10] })), [1, 5], '10 of 50 is exactly 20%');
+  assert.deepEqual(run(() => ({ hungry: [11] })), [0, 0], '11 of 50 is over 20%');
+  // Food in the hexes and starvation no longer matter.
+  assert.deepEqual(run((w) => { w.map.food[55] = 0; }), [1, 5], 'an empty larder');
+  // Only the civ's own people count: a crowd of another civ in the hex changes nothing.
+  const w = world(['expansionist', 'aggressive'], [adults(55, 0, 40), adults(55, 1, 200)], { deposits: { 55: [WOOD] } });
+  step(w, { hungry: [8, 100] });
+  assert.deepEqual([...w.levels.secure], [1, 0], '8 of 40 is 20%; 100 of 200 is 50%');
 });
 
 test('RULES.md "Shared hexes": a deposit\'s yield is split among the civs working it by their people in the hex', () => {
@@ -609,73 +622,87 @@ test('RULES.md "Shared hexes": last year\'s fight winner takes the whole yield, 
 
 // ---- absorbing --------------------------------------------------------------------------------
 
-test('RULES.md "Absorbing": a Kingdom takes ceil(10%) of each smaller civ\'s people in a shared hex without a fight', () => {
-  const take = (n) => {
-    const w = world(['expansionist', 'aggressive'], [adults(55, 0, 300), adults(55, 1, n), adults(66, 1, 5)]);
-    w.levels.level[0] = 5;
-    const ev = step(w);
-    return [ev.switches.length, w.people.civ.slice(300, 300 + n).filter((c) => c === 0).length, ev.switches.every(([f, t]) => f === 1 && t === 0)];
-  };
-  assert.deepEqual([1, 5, 10, 11, 25, 99].map((n) => take(n)[0]), [1, 1, 1, 2, 3, 10]);
-  assert.equal(take(25)[1], 3);
-  assert.ok(take(25)[2]);
-  // The 5 of civ 1 elsewhere stay.
-  const w = world(['expansionist', 'aggressive'], [adults(55, 0, 100), adults(55, 1, 20), adults(66, 1, 5)]);
-  w.levels.level[0] = 5;
-  step(w);
-  assert.equal(w.people.civ.slice(120, 125).filter((c) => c === 1).length, 5);
-});
+/** World with civ `k` (a Kingdom) in every neighbour of hex `h` (5 people each) and the given extra groups. */
+function ring(types, h, k, extra, opts = {}) {
+  const map = makeMap(10, 10, opts.terrain ?? (() => PLAINS));
+  const groups = [];
+  for (let d = 0; d < 6; d++) {
+    const t = map.neighbours[h * 6 + d];
+    if (t >= 0 && map.terrain[t] !== DEEP_WATER && !(opts.skip ?? []).includes(t)) groups.push([t, k, 5]);
+  }
+  const w = world(types, [...groups, ...extra], opts);
+  w.levels.level[k] = 5;
+  return w;
+}
 
-test('RULES.md "Absorbing": only civs with fewer people (civ-wide) than the Kingdom, and not in a hex with a fight', () => {
-  // Civ 1 is bigger civ-wide than the Kingdom (spread over other hexes): not absorbed.
-  const w = world(['expansionist', 'aggressive'], [adults(55, 0, 20), adults(55, 1, 10), adults(66, 1, 11)]);
-  w.levels.level[0] = 5;
-  assert.equal(step(w).switches.length, 0, 'civ-wide 21 v 20');
-  // Equal civ-wide is not fewer.
-  const e = world(['expansionist', 'aggressive'], [adults(55, 0, 20), adults(55, 1, 10), adults(66, 1, 10)]);
-  e.levels.level[0] = 5;
-  assert.equal(step(e).switches.length, 0);
-  const f = world(['expansionist', 'aggressive'], [adults(55, 0, 20), adults(55, 1, 10), adults(66, 1, 9)]);
-  f.levels.level[0] = 5;
-  assert.equal(step(f).switches.length, 1, '19 v 20');
-  // A fight in the hex last year stops it.
-  const g = world(['expansionist', 'aggressive'], [adults(55, 0, 50), adults(55, 1, 10)]);
-  g.levels.level[0] = 5;
-  const fw = new Int8Array(g.map.count).fill(-1);
-  fw[55] = 1;
-  assert.equal(step(g, { fightWinner: fw }).switches.length, 0);
-  // A civ that is not a Kingdom absorbs nobody.
-  const h = world(['expansionist', 'aggressive'], [adults(55, 0, 50), adults(55, 1, 10)]);
-  h.levels.level[0] = 4;
-  assert.equal(step(h).switches.length, 0);
-});
-
-test('RULES.md "Absorbing": several Kingdoms there: the one with the most people takes them (tie: lower civ); a Kingdom can absorb a smaller Kingdom', () => {
-  const w = world(['expansionist', 'aggressive', 'cooperative'], [adults(55, 0, 50), adults(55, 1, 80), adults(55, 2, 20)]);
-  w.levels.level[0] = 5; w.levels.level[1] = 5;
+test('RULES.md "Enclosed hexes" and "Absorbing": every person of other civs in a hex a Kingdom encloses joins it at once', () => {
+  const w = ring(['expansionist', 'aggressive'], 55, 0, [adults(55, 1, 7), adults(77, 1, 5)]);
   const ev = step(w);
-  const into = (to) => ev.switches.filter(([, t]) => t === to).length;
-  assert.equal(ev.switches.filter(([f]) => f === 1).length, 0, 'the biggest Kingdom is absorbed by nobody');
-  assert.equal(ev.switches.filter(([f, t]) => f === 0 && t === 1).length, 5, 'the smaller Kingdom is absorbed: ceil(10% of 50)');
-  assert.equal(ev.switches.filter(([f, t]) => f === 2 && t === 1).length, 2, 'ceil(10% of 20) to the biggest');
-  assert.equal(into(0), 0);
-  // Tie in size: the lower civ number takes them.
-  const t = world(['expansionist', 'aggressive', 'cooperative'], [adults(55, 0, 50), adults(55, 1, 50), adults(55, 2, 20)]);
-  t.levels.level[0] = 5; t.levels.level[1] = 5;
-  const et = step(t);
-  assert.equal(et.switches.filter(([f, to]) => f === 2 && to === 0).length, 2);
-  assert.equal(et.switches.filter(([f]) => f < 2).length, 0, 'equal Kingdoms do not absorb each other');
+  assert.equal(w.levels.inside[55], 0, 'every land neighbour holds the Kingdom');
+  assert.equal(w.levels.inside[77], -1);
+  assert.equal(ev.switches.length, 7);
+  assert.ok(ev.switches.every(([f, t]) => f === 1 && t === 0));
+  const civ1 = [];
+  for (let i = 0; i < w.people.high; i++) if (w.people.civ[i] === 1) civ1.push(w.people.hex[i]);
+  assert.deepEqual(civ1, [77, 77, 77, 77, 77], 'people outside the enclosure stay');
+  // The hex itself need not hold the Kingdom, and size does not matter: a crowd bigger than the Kingdom joins too.
+  const big = ring(['expansionist', 'aggressive'], 55, 0, [adults(55, 1, 100)]);
+  assert.equal(step(big).switches.length, 100);
+});
+
+test('RULES.md "Enclosed hexes": one land neighbour without the Kingdom, no enclosure; sea neighbours do not count', () => {
+  const map = makeMap(10, 10, () => PLAINS);
+  const gap = map.neighbours[55 * 6 + 2];
+  const w = ring(['expansionist', 'aggressive'], 55, 0, [adults(55, 1, 7)], { skip: [gap] });
+  assert.equal(step(w).switches.length, 0);
+  assert.equal(w.levels.inside[55], -1);
+  // The same gap made deep water: the five land neighbours are enough.
+  const wet = ring(['expansionist', 'aggressive'], 55, 0, [adults(55, 1, 7)], { terrain: (i) => (i === gap ? DEEP_WATER : PLAINS) });
+  assert.equal(step(wet).switches.length, 7);
+  assert.equal(wet.levels.inside[55], 0);
+  // A land hex with no land neighbour is never enclosed.
+  const isle = world(['expansionist', 'aggressive'], [adults(55, 0, 5), adults(55, 1, 5)], { terrain: (i) => (i === 55 ? PLAINS : DEEP_WATER) });
+  isle.levels.level[0] = 5;
+  assert.equal(step(isle).switches.length, 0);
+  assert.equal(isle.levels.inside[55], -1);
+});
+
+test('RULES.md "Absorbing": only Kingdoms enclose; other Kingdoms\' people are never absorbed', () => {
+  const w = ring(['expansionist', 'aggressive'], 55, 0, [adults(55, 1, 7)]);
+  w.levels.level[0] = 4;
+  assert.equal(step(w).switches.length, 0, 'level 4 encloses nothing');
+  assert.ok(w.levels.inside.every((v) => v === -1));
+  const k = ring(['expansionist', 'aggressive', 'cooperative'], 55, 0, [adults(55, 1, 7), adults(55, 2, 4), adults(88, 1, 50)]);
+  k.levels.level[1] = 5;
+  const ev = step(k);
+  assert.deepEqual(ev.switches, [[2, 0], [2, 0], [2, 0], [2, 0]], 'only the civ that is not a Kingdom');
+});
+
+test('RULES.md "Enclosed hexes": enclosed by two Kingdoms, the one with the most people takes it (tie: lower civ number)', () => {
+  // Civ 0 and civ 1 both hold every neighbour of 55.
+  const both = (extra0, extra1) => {
+    const map = makeMap(10, 10, () => PLAINS);
+    const groups = [];
+    for (let d = 0; d < 6; d++) { const t = map.neighbours[55 * 6 + d]; groups.push([t, 0, 5], [t, 1, 5]); }
+    const w = world(['expansionist', 'aggressive', 'cooperative'], [...groups, adults(88, 0, extra0), adults(99, 1, extra1), adults(55, 2, 6)]);
+    w.levels.level[0] = 5; w.levels.level[1] = 5;
+    const ev = step(w);
+    return [w.levels.inside[55], ev.switches.filter(([f]) => f === 2).map(([, t]) => t)];
+  };
+  assert.deepEqual(both(1, 2), [1, [1, 1, 1, 1, 1, 1]], 'civ 1 has more people');
+  assert.deepEqual(both(2, 2), [0, [0, 0, 0, 0, 0, 0]], 'a tie: the lower civ number');
 });
 
 test('RULES.md "Absorbing": the people absorbed keep everything else and change only civ', () => {
-  const w = world(['expansionist', 'aggressive'], [adults(55, 0, 100), adults(55, 1, 40, { coop: 0.9 })]);
-  w.levels.level[0] = 5;
+  const w = ring(['expansionist', 'aggressive'], 55, 0, [adults(55, 1, 4, { coop: 0.9 })]);
+  const first = w.people.high - 4;
   step(w);
-  let moved = 0;
-  for (let i = 100; i < 140; i++) {
-    if (w.people.civ[i] === 0) { moved++; assert.equal(w.people.hex[i], 55); assert.equal(w.people.age[i], 25); assert.equal(Math.fround(w.people.cooperation[i]), Math.fround(0.9)); }
+  for (let i = first; i < first + 4; i++) {
+    assert.equal(w.people.civ[i], 0);
+    assert.equal(w.people.hex[i], 55);
+    assert.equal(w.people.age[i], 25);
+    assert.equal(w.people.traits[COOPERATION][i], Math.fround(0.9));
   }
-  assert.equal(moved, 4);
 });
 
 // ---- boats -------------------------------------------------------------------------------------
@@ -737,22 +764,24 @@ test('RULES.md "Boats": a civ gets boats at level 4 (Simulation.onLevel) and los
 
 // ---- Simulation: stats, end condition, determinism --------------------------------------------
 
-test('stats expose level, name, food security, progress and requirements scaled to the map', () => {
+test('stats expose level, name, food security, progress and requirements from the land per civ', () => {
   const sim = new Simulation({ seed: 'lvstats', size: 20, civCount: 2, civTypes: ['nomadic', 'isolationist'] });
   const [a, b] = sim.stats().civs;
+  const m = levelMinimums(2, sim.levels.land, 2);
+  assert.equal(sim.levels.land, sim.landHexes);
   assert.deepEqual([a.level, a.levelName, b.next.level, b.next.levelName], [1, 'Foragers', 2, 'Farmers']);
-  assert.deepEqual([a.next.years, a.next.pop, a.next.hexes], [188, 160, 16]);
-  assert.deepEqual([b.next.years, b.next.pop, b.next.hexes], [120, 160, 16]);
+  assert.deepEqual([a.next.years, a.next.pop, a.next.hexes], [188, m.pop, m.hexes]);
+  assert.deepEqual([b.next.years, b.next.pop, b.next.hexes], [120, m.pop, m.hexes]);
   assert.equal(b.next.materials.wood, 100);
   assert.equal(a.next.materials.wood, 80);
   assert.deepEqual(a.reached, [0, null, null, null, null]);
   assert.equal(a.stockpile.wood, 0);
 });
 
-/** A sim whose level maths ignores map size (1 × 1 scale gives no people or hex minimum), so a short run can reach Kingdom. */
+/** A sim with no people or hex minimums, so a short run can reach Kingdom. */
 function kingdomSim(extra = {}) {
   const sim = new Simulation({ seed: 'kingdom', size: 10, civCount: 2, startPop: 20, ...extra });
-  sim.levels.cols = 1; sim.levels.rows = 1;
+  sim.levels.minHex.fill(0); sim.levels.minPeople.fill(0);
   return sim;
 }
 const readyForKingdom = (sim, civ) => {
