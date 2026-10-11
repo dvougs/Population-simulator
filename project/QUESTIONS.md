@@ -49,5 +49,6 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 ## Requests
 
 - Add a plains (fertile land) share slider next to the forest, desert and tundra sliders from Q-002 (owner mentioned "fertile" with them, 2026-10-11).
+- Start planning Phase 2, which the owner calls "version 1.0", with civilizations in it. Propose what goes in: civ types, traits, mutations, their concepts and their visuals (owner, 2026-10-11 00:29 UTC).
 
 ## Answered
