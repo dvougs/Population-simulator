@@ -76,8 +76,8 @@ function civsCard(r) {
       ])))));
 }
 
-/** Population over time per civ: one SVG polyline each, no libraries. */
-function chartCard(r) {
+/** Population over time per civ: one SVG polyline each, no libraries. Also drawn on How to play. */
+export function chartCard(r) {
   const hist = r.history;
   const n = hist.rows;
   const civs = hist.civs;
@@ -262,19 +262,22 @@ function recordsCard(r) {
   ]));
 }
 
+/** One history log entry as the end screen reads it (RULES.md "End screen", History). */
+export function eventText(e) {
+  if (e.type === 'extinction') return `${civName(e.civ)} died out`;
+  if (e.type === 'contact') return `${civName(e.civ)} met ${civName(e.other)} at (${e.col}, ${e.row})`;
+  if (e.type === 'milestone') return `${civName(e.civ)} passed ${formatNumber(e.people)} people`;
+  if (e.type === 'peak') return `${civName(e.civ)} peaked at ${formatNumber(e.people)} people; fewer from year ${e.declineYear}`;
+  if (e.type === 'mostHexes') return `${civName(e.civ)} held its most hexes: ${formatNumber(e.hexes)}`;
+  if (e.type === 'fight') {
+    return `${civName(e.attacker)} attacked ${civName(e.defender)} at (${e.col}, ${e.row}); ${civName(e.winner)} won; ${formatNumber(e.deaths)} killed`;
+  }
+  return `Famine in ${civName(e.civ)}${e.ongoing ? ' (still going)' : ''}: ${formatNumber(e.deaths)} starved${e.endYear > e.year ? ` by year ${e.endYear}` : ''}`;
+}
+
 function historyCard(r) {
   const { events, eventsDropped } = r.records;
-  const text = (e) => {
-    if (e.type === 'extinction') return `${civName(e.civ)} died out`;
-    if (e.type === 'contact') return `${civName(e.civ)} met ${civName(e.other)} at (${e.col}, ${e.row})`;
-    if (e.type === 'milestone') return `${civName(e.civ)} passed ${formatNumber(e.people)} people`;
-    if (e.type === 'peak') return `${civName(e.civ)} peaked at ${formatNumber(e.people)} people; fewer from year ${e.declineYear}`;
-    if (e.type === 'mostHexes') return `${civName(e.civ)} held its most hexes: ${formatNumber(e.hexes)}`;
-    if (e.type === 'fight') {
-      return `${civName(e.attacker)} attacked ${civName(e.defender)} at (${e.col}, ${e.row}); ${civName(e.winner)} won; ${formatNumber(e.deaths)} killed`;
-    }
-    return `Famine in ${civName(e.civ)}${e.ongoing ? ' (still going)' : ''}: ${formatNumber(e.deaths)} starved${e.endYear > e.year ? ` by year ${e.endYear}` : ''}`;
-  };
+  const text = eventText;
   return card('end-history', 'History',
     events.length === 0 ? h('p', { class: 'muted' }, 'Nothing to report.')
       : h('ol', { class: 'end-log' }, events.map((e) => h('li', { 'data-type': e.type, 'data-civ': e.civ },
