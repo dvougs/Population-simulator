@@ -13,12 +13,15 @@ import { initControls } from './ui/controls.js';
 import { renderInspector, renderPersonCard } from './ui/inspector.js';
 import { formatNumber } from './ui/dom.js';
 import { renderStats, renderCivStats, renderHudCivs } from './ui/statsPanel.js';
+import { renderEndScreen } from './ui/endScreen.js';
 import { mapParams } from './sim/params.js';
+import { randomSeedString } from './sim/rng.js';
 import { DEEP_WATER } from './sim/terrain.js';
 
 const $ = (id) => document.getElementById(id);
 const ui = {
-  mapgen: $('mapgen'), setup: $('setup'), game: $('game'), resume: $('btn-resume'),
+  mapgen: $('mapgen'), setup: $('setup'), game: $('game'), end: $('end'), endBody: $('end-body'), resume: $('btn-resume'),
+  endNow: $('btn-end-now'),
   canvas: $('map'), year: $('hud-year'), pop: $('hud-pop'), hudCivs: $('hud-civs'), inspector: $('inspector'), toast: $('toast'),
   sheet: $('sheet'), handle: $('sheet-handle'), stats: $('stats'), civStats: $('civ-stats'),
 };
@@ -35,6 +38,8 @@ let dirty = true;
 let userMovedCamera = false;
 let lastPanelUpdate = 0;
 let shownEnd = false;
+/** Settings of the game last started, for "Same settings again" (kept in memory only). */
+let startParams = null;
 
 const loop = new Loop({
   tick: (n) => host.tick(n),
@@ -44,17 +49,14 @@ const loop = new Loop({
     // The water shimmer keeps redrawing on its own clock; the sim never sees it.
     if (dirty || (!ui.game.hidden && renderer.needsFrame(now))) { renderer.draw(camera, outlinedHex(), now); dirty = false; }
     if (ran > 0 && now - lastPanelUpdate > 100) { updatePanels(); lastPanelUpdate = now; }
-    if (host.finished && !shownEnd) {
-      shownEnd = true;
-      updatePanels();
-      controls.setPaused(true);
-      showToast(host.stats().endReason);
-    }
+    if (host.finished && !shownEnd) showEnd();
   },
 });
 
 const controls = initControls({
   playBtn: $('btn-play'), stepBtn: $('btn-step'), speedEl: $('speed'), loop,
+  // "End now" belongs to the paused game.
+  onChange: () => { ui.endNow.hidden = !loop.paused; },
 });
 initBottomSheet(ui.sheet, ui.handle);
 
@@ -87,6 +89,7 @@ async function startGame(params) {
     return;
   }
   host.start(params);
+  startParams = host.params;
   map = host.map();
   renderer.setMap(map);
   renderer.setPopulation(host.population(), performance.now());
@@ -112,7 +115,36 @@ function showScreen(name) {
   ui.mapgen.hidden = name !== 'mapgen';
   ui.setup.hidden = name !== 'setup';
   ui.game.hidden = name !== 'game';
+  ui.end.hidden = name !== 'end';
   ui.resume.hidden = !(name === 'setup' && host.sim);
+}
+
+/** Pause and open the end screen for the finished run. */
+function showEnd() {
+  shownEnd = true;
+  controls.setPaused(true);
+  updatePanels();
+  renderEndScreen(ui.endBody, host.report(), {
+    onKeepWatching: () => {
+      host.keepWatching();
+      shownEnd = false;
+      showScreen('game');
+      resize();
+      updatePanels();
+      controls.setPaused(false);
+    },
+    onSameAgain: () => startGame(startParams),
+    onNewMap: () => {
+      mapgen.setParams({ ...startParams, seed: randomSeedString() }, 'custom');
+      showScreen('mapgen');
+    },
+    onSetup: () => {
+      setup.setParams(startParams);
+      showScreen('setup');
+    },
+  });
+  showScreen('end');
+  ui.end.scrollTop = 0;
 }
 
 function updatePanels() {
@@ -294,6 +326,10 @@ $('btn-setup').addEventListener('click', () => {
   showScreen('setup');
 });
 ui.resume.addEventListener('click', () => { showScreen('game'); resize(); });
+ui.endNow.addEventListener('click', () => {
+  host.endNow();
+  showEnd();
+});
 
 try {
   const saved = JSON.parse(localStorage.getItem('popsim:lastParams') || 'null');
@@ -325,6 +361,8 @@ window.popsim = {
   selected: () => selected,
   /** Person shown in the inspector as { slot, id }, or null. */
   selectedPerson: () => (person ? { slot: person.slot, id: person.id } : null),
+  /** End-screen data of the running game (SimHost.report()), or null. */
+  report: () => host.report(),
   /** Whether people are drawn one by one at the current zoom. */
   peopleShown: () => renderer.people?.shown ?? false,
 };

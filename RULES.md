@@ -98,6 +98,7 @@ Each year (tick) runs these steps in order. Within a step everyone decides first
 5. **Migration** (see below).
 6. **Food regrowth.** Each hex regains food equal to 50% of its food capacity, never above its capacity.
 7. **Statistics** for the year are recorded (see "Statistics").
+8. **End conditions** are checked (see "End of the game").
 
 ## Migration
 
@@ -215,7 +216,26 @@ On the setup screen you tick any combination of these end conditions. Ticking no
 
 The conditions are checked at the end of each year, after the statistics. The first one met ends the game; if several are met in the same year, the first in this order counts: total extinction, last civ standing, dominance, year limit.
 
-- When the game ends it pauses and the end reason is shown.
+- **End now:** while the game is paused, the controls show an *End now* button. It ends the game at once, with no winner (reason "Ended by the player"), and opens the end screen. On a game that has already ended it reopens the end screen.
+- When the game ends it pauses, the top bar shows "(ended)" after the year, and the end screen opens.
+
+## End screen
+
+A scrollable screen that opens when the game ends. Everything on it comes from the statistics and records kept during the run (see "Statistics"), so it opens at once.
+
+- **Header:** the winner (the surviving civ for Last civ standing, the dominant civ for Dominance; "No winner" otherwise), the end reason, and the years run.
+- **Buttons:**
+  - *Keep watching:* back to the map; the game carries on from where it stopped as a sandbox, where no end condition applies any more (not even total extinction). Not shown after a total extinction. *End now* still opens the end screen again.
+  - *Same settings again:* starts a new game with exactly the settings of the one that ended (same seed, so the same map and start). The settings are kept in memory only.
+  - *New map:* the map-generation screen with the same settings and a new random seed.
+  - *Back to setup:* the setup screen with the settings of the game that ended.
+- **Cards:**
+  - *Civs by final population* (most people first; ties by higher peak population, then lower civ number): people at the end, peak population and the first year it was reached, average lifespan (average age at death; "No deaths" if none died), most hexes held at once, and the year the civ died out (or No).
+  - *Population over time:* one line per civ in its colour, from year 0 to the last year, all on the same scale (the top of the chart is the highest population any civ reached in the recorded history). It draws at most 400 points per civ, taken evenly from the recorded rows, plus the last row.
+  - *People:* the oldest person ever (id, civ, age, and the year they died or "alive") and the oldest person alive at the end (see "Records" under "Statistics").
+  - *Deaths by cause:* deaths by old age and by starvation over the whole run, all civs together, with their share of all deaths.
+  - *Records:* longest family line, the person with the most descendants, and the worst famine (see "Statistics").
+  - *History:* the history log, oldest first (by first year; on the same year famines before extinctions, then by civ number).
 
 ## Not in the game yet
 
