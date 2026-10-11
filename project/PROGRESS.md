@@ -5,7 +5,7 @@
 - Phase: Phase 2 (people) live with life cycle, migration and per-civ stats (PR #14). People on the map with civ colours and emblems, the person card, height shading and the own-civ migration pull are in a release candidate (T-015, T-018, T-019, T-020). Version 1.0 scope set by the owner (Q-003): civ types, 8 traits with mutation, contact and fighting, materials and levels 1 to 5, end conditions, end screen and home page (T-021 to T-030).
 - Last full cycle: 2026-10-11 08:07 UTC
 - Live on GitHub Pages: Phase 1 with its follow-ups and Phase 2 people, life cycle, migration and stats (PRs #10, #13, #14). https://dvougs.github.io/Population-simulator/
-- Open release candidate: "Release candidate: people on the map, height shading, own-civ migration pull" (branch claude/cycle-20261011-0807).
+- Open release candidate: #15 "Release candidate: people on the map, height shading, own-civ migration pull" https://github.com/dvougs/Population-simulator/pull/15
 - Ready next: T-024 (material deposits), T-026 (end conditions), T-027 (end screen), T-028 (home page), T-029 (their tests).
 - Blockers: T-021 waits on Q-006 (trait numbers); T-022 and T-023 on Q-007 (Cooperative, Nomadic, who fights, how a fight works); T-025 on Q-008 (gathering and level-effect numbers); T-030 on all three. Proposal P-007 (show every civ in a shared hex, visuals) is undecided.
 
@@ -22,7 +22,7 @@
 - RULES.md checked against src/sim/migration.js (ownCivWeight 2), src/render/palette.js (0.06, 0.25), src/render/civStyle.js and peopleLayer.js (200 px, table): values match. Ownership clean (game-dev: src/, RULES.md, index.html, styles/; unit-tester: tests/ only).
 - Design review on the cycle branch at c6150dc (the fix after it changed drawing only), seeds review-20261011c-1/-2/-3, default setup, 400 years: final population 1144 (441/370/333), 1434 (578/447/409), 1364 (562/351/451), still rising; hashes f908ac74, ff02b718, f264c69f. Deaths: old age 2884/3353/3407, starvation 8/238/237. Average lifespan 50.0–52.6, oldest 64–67. No extinctions. Hex-slots on 64 land hexes 106/128/147. game-dev's before/after on the b seeds: 146 → 142, 143 → 135, 131 → 136, so the ×2 pull is a weak effect (noted in the PR; the owner approved ×2). Levels not reported: they do not exist yet (T-025 adds them; headless reporting goes with it). Proposal P-007 (show every civ in a shared hex, visuals). No second proposal: the clearest balance signal (slow growth, the map about half full at year 400) depends on the fertility numbers asked in Q-006.
 - Docs pass: README.md updated on the cycle branch for people on the map, emblems and shading. RULES.md updated by game-dev. No other drift.
-- Release candidate opened from claude/cycle-20261011-0807. Email to the owner (questions, proposals, release candidate).
+- Opened PR #15. Email to the owner (questions, proposals, release candidate).
 
 ### 2026-10-11 04:05: Phase 2 people, life cycle, migration, stats
 
