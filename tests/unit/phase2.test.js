@@ -135,16 +135,18 @@ test('totals: per civ, start pop + births - deaths = alive; history sums equal t
     const stats = sim.stats();
     let alive = 0;
     stats.civs.forEach((c, k) => {
-      const deaths = c.deaths.oldAge + c.deaths.starvation;
-      assert.equal(startPop + c.births - deaths, c.pop, `${seed} civ ${k}`);
-      let births = 0; let old = 0; let starve = 0; let life = 0;
+      const deaths = c.deaths.oldAge + c.deaths.starvation + c.deaths.war;
+      // Start + births - deaths (old age, starvation, war) + switches in - switches out = alive.
+      assert.equal(startPop + c.births - deaths + c.switchesIn - c.switchesOut, c.pop, `${seed} civ ${k}`);
+      let births = 0; let old = 0; let starve = 0; let war = 0; let life = 0;
       for (let r = 0; r < h.rows; r++) {
         births += h.births[r * h.civs + k];
         old += h.deathsOldAge[r * h.civs + k];
         starve += h.deathsStarvation[r * h.civs + k];
+        war += h.deathsWar[r * h.civs + k];
         life += h.lifespanSum[r * h.civs + k];
       }
-      assert.deepEqual([births, old, starve], [c.births, c.deaths.oldAge, c.deaths.starvation]);
+      assert.deepEqual([births, old, starve, war], [c.births, c.deaths.oldAge, c.deaths.starvation, c.deaths.war]);
       assert.equal(h.pop[400 * h.civs + k], c.pop);
       assert.equal(h.hexes[400 * h.civs + k], c.hexes);
       if (deaths > 0) assert.equal(c.avgLifespan, Math.round((life / deaths) * 10) / 10);

@@ -203,9 +203,12 @@ test('host: endNow, keepWatching and report go through the host', () => {
   assert.equal(host.report().winnerName, null);
 });
 
-test('state hash is unchanged by the end-condition work (value from before T-026/T-027)', () => {
-  const s = new Simulation({ seed: 'hashcheck', size: 15, civCount: 4 });
-  s.tick(300);
-  assert.equal(s.hash(), '0fc49a6f');
-  assert.equal(s.people.count, 1710);
+test('pinned state hash (re-pinned when traits, civ types, contact and levels shipped; same run twice gives the same hash)', () => {
+  const run = () => {
+    const s = new Simulation({ seed: 'hashcheck', size: 15, civCount: 4 });
+    s.tick(300);
+    return [s.hash(), s.people.count];
+  };
+  assert.deepEqual(run(), run());
+  assert.deepEqual(run(), ['eec0aaf1', 2428]);
 });

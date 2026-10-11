@@ -4,6 +4,7 @@
 
 import { Simulation } from '../sim/simulation.js';
 import { generateMap, hashMap, countTerrain } from '../sim/mapgen.js';
+import { buildReach } from '../sim/migration.js';
 
 /** The drawable part of a map: sizes and typed arrays only. */
 function mapData(map) {
@@ -65,6 +66,17 @@ export class LocalSimHost {
   person(slot, id) { return this.sim?.person(slot, id) ?? null; }
   /** Living people in hex (col, row): { index, total, people: [{ slot, id, age, health, hunger, civ }] }, lowest id first. */
   hexPeople(col, row, limit) { return this.sim?.hexPeople(col, row, limit) ?? null; }
+  /**
+   * Land hexes a person in hex `index` of the running map could walk to in one
+   * year with `movePoints` and no boats (RULES.md "Migration"), ascending; for
+   * the How to play pictures. Null without a game or off the map.
+   */
+  reach(index, movePoints) {
+    const map = this.sim?.map;
+    if (!map || !Number.isInteger(index) || index < 0 || index >= map.count) return null;
+    const { offsets, targets } = buildReach(map, movePoints);
+    return targets.slice(offsets[index], offsets[index + 1]);
+  }
   hash() { return this.sim?.hash() ?? null; }
   mapHash() { return this.sim?.mapHash() ?? null; }
 }

@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { People } from '../../src/sim/people.js';
-import { Records, FAMINE, EVENT_CAP } from '../../src/sim/records.js';
+import { Records, FAMINE, EVENT_CAP, MILESTONES, PEAK_DECLINE_YEARS } from '../../src/sim/records.js';
 import { DEATH_STARVATION, DEATH_OLD_AGE } from '../../src/sim/life.js';
 import { Simulation } from '../../src/sim/simulation.js';
 
@@ -23,10 +23,12 @@ const born = (w, parentSlot, year, civ = w.people.civ[parentSlot]) => {
 };
 const die = (w, slot, cause, year) => { w.rec.death(slot, w.people, cause, year); w.people.remove(slot); };
 
-test('RULES.md Records: constants (famine 2% and 5 deaths, 2048 events)', () => {
-  assert.equal(FAMINE.minShare, 0.02);
+test('RULES.md Records: constants (famine 1% and 5 deaths, 2048 events, milestones 100/500/1000, peak after 50 years)', () => {
+  assert.equal(FAMINE.minShare, 0.01);
   assert.equal(FAMINE.minDeaths, 5);
   assert.equal(EVENT_CAP, 2048);
+  assert.deepEqual([...MILESTONES], [100, 500, 1000]);
+  assert.equal(PEAK_DECLINE_YEARS, 50);
 });
 
 test('oldest person ever: a dead record, beaten only by a strictly older living person', () => {
@@ -110,21 +112,27 @@ function year(w, y, starved, pop) {
 }
 const famineW = () => { const w = world(2, 1); w.rec.lastPop.set([100, 100]); return w; };
 
-test('famine year: starvation deaths at least 2% of last year\'s people and at least 5', () => {
+const famines = (w, y) => w.rec.data(w.people, y).events.filter((e) => e.type === 'famine');
+
+test('RULES.md Statistics, famine year: starvation deaths at least 1% of last year\'s people and at least 5', () => {
   let w = famineW();
   year(w, 1, [4, 0], [96, 100]); // 4% but under 5
-  assert.equal(w.rec.data(w.people, 1).events.length, 0);
-  w = famineW(); w.rec.lastPop.set([200, 100]);
-  year(w, 1, [4, 0], [196, 100]); // 2% exactly but only 4 deaths
-  assert.equal(w.rec.data(w.people, 1).events.length, 0);
-  w = famineW(); w.rec.lastPop.set([300, 100]);
-  year(w, 1, [5, 0], [295, 100]); // 5 deaths but 1.67% < 2%
-  assert.equal(w.rec.data(w.people, 1).events.length, 0);
-  w = famineW(); w.rec.lastPop.set([250, 100]);
-  year(w, 1, [5, 0], [245, 100]); // exactly 2% and exactly 5
-  const ev = w.rec.data(w.people, 1).events;
+  assert.equal(famines(w, 1).length, 0);
+  w = famineW(); w.rec.lastPop.set([400, 100]);
+  year(w, 1, [4, 0], [396, 100]); // exactly 1% but only 4 deaths
+  assert.equal(famines(w, 1).length, 0);
+  w = famineW(); w.rec.lastPop.set([501, 100]);
+  year(w, 1, [5, 0], [496, 100]); // 5 deaths but just under 1%
+  assert.equal(famines(w, 1).length, 0);
+  w = famineW(); w.rec.lastPop.set([500, 100]);
+  year(w, 1, [5, 0], [495, 100]); // exactly 1% and exactly 5
+  const ev = famines(w, 1);
   assert.equal(ev.length, 1);
   assert.deepEqual(ev[0], { type: 'famine', civ: 0, year: 1, endYear: 1, deaths: 5, ongoing: true });
+  // 2% of the people used to be needed: 5 deaths of 400 (1.25%) is now a famine.
+  w = famineW(); w.rec.lastPop.set([400, 100]);
+  year(w, 1, [5, 0], [395, 100]);
+  assert.equal(famines(w, 1).length, 1);
 });
 
 test('consecutive famine years merge into one famine; a quiet year ends it', () => {
@@ -135,7 +143,7 @@ test('consecutive famine years merge into one famine; a quiet year ends it', () 
   year(w, 4, [9, 0], [73, 100]);       // a second one
   year(w, 5, [0, 0], [73, 100]);
   const d = w.rec.data(w.people, 5);
-  assert.deepEqual(d.events.map((e) => [e.civ, e.year, e.endYear, e.deaths]), [[0, 1, 2, 18], [0, 4, 4, 9]]);
+  assert.deepEqual(d.events.filter((e) => e.type === 'famine').map((e) => [e.civ, e.year, e.endYear, e.deaths]), [[0, 1, 2, 18], [0, 4, 4, 9]]);
   assert.deepEqual(d.worstFamine, { civ: 0, startYear: 1, endYear: 2, deaths: 18, ongoing: false });
   assert.equal(d.events.every((e) => !e.ongoing), true);
 });
@@ -146,8 +154,9 @@ test('a famine still going at report time counts up to the last year', () => {
   year(w, 2, [20, 0], [70, 100]);
   const d = w.rec.data(w.people, 2);
   assert.deepEqual(d.worstFamine, { civ: 0, startYear: 1, endYear: 2, deaths: 30, ongoing: true });
-  assert.equal(d.events[0].ongoing, true);
-  assert.equal(d.events[0].endYear, 2);
+  const f = d.events.find((e) => e.type === 'famine');
+  assert.equal(f.ongoing, true);
+  assert.equal(f.endYear, 2);
 });
 
 test('worst famine: most deaths; on a tie the one that ended first (an ongoing tie loses)', () => {
@@ -174,7 +183,8 @@ test('extinction is logged in its year and closes an open famine; events sort by
   year(w, 1, [10, 0], [90, 100]);
   year(w, 2, [90, 100], [0, 0]);
   const ev = w.rec.data(w.people, 2).events;
-  assert.deepEqual(ev.map((e) => [e.type, e.civ, e.year]), [['famine', 0, 1], ['famine', 1, 2], ['extinction', 0, 2], ['extinction', 1, 2]]);
+  assert.deepEqual(ev.filter((e) => e.type === 'famine' || e.type === 'extinction').map((e) => [e.type, e.civ, e.year]),
+    [['famine', 0, 1], ['famine', 1, 2], ['extinction', 0, 2], ['extinction', 1, 2]]);
   assert.equal(w.rec.data(w.people, 2).worstFamine.deaths, 100);
 });
 
@@ -214,4 +224,155 @@ test('seeded run: records come out consistent with the statistics', () => {
   const again = new Simulation({ seed: 'rec', size: 12, civCount: 3, startPop: 20 });
   again.tick(300);
   assert.deepEqual(again.report().records, rec);
+});
+
+// ---- T-039: first contact, milestones, peaks, most hexes (RULES.md "Statistics", History log) ----
+
+/** Close a year with explicit people per hex: perHex[hex] = array of people per civ. */
+function yearHex(rec, y, perHex, hexes = null) {
+  const civs = rec.civs;
+  const flat = new Int32Array(perHex.length * civs);
+  const pop = new Int32Array(civs);
+  perHex.forEach((row, h) => row.forEach((n, c) => { flat[h * civs + c] = n; pop[c] += n; }));
+  rec.endYear(y, pop, hexes ? Int32Array.from(hexes) : null, flat);
+}
+const ofType = (rec, type, people = { year: 0 }) => rec.data(people, 99).events.filter((e) => e.type === type);
+
+test('RULES.md first contact: once per pair, in the first year they share a hex, at the lowest shared hex', () => {
+  const rec = new Records(3, 3, 5);
+  yearHex(rec, 1, [[5, 0, 0], [0, 5, 0], [0, 0, 5]]);
+  assert.equal(ofType(rec, 'contact').length, 0, 'nobody shares');
+  yearHex(rec, 2, [[5, 0, 0], [0, 5, 0], [0, 0, 5], [0, 3, 3]]);
+  let ev = ofType(rec, 'contact');
+  assert.equal(ev.length, 1);
+  assert.deepEqual([ev[0].civ, ev[0].other, ev[0].year, ev[0].hex, ev[0].col, ev[0].row], [1, 2, 2, 3, 3, 0]);
+  // Again next year, and in another hex: still just one for the pair.
+  yearHex(rec, 3, [[5, 0, 0], [0, 5, 0], [0, 3, 3], [0, 3, 3]]);
+  assert.equal(ofType(rec, 'contact').length, 1);
+  // A hex with all three: the pairs not yet met get theirs, the lowest shared hex first.
+  yearHex(rec, 4, [[0, 0, 0], [4, 4, 4], [0, 0, 0], [0, 0, 0], [0, 0, 0], [4, 4, 0]]);
+  ev = ofType(rec, 'contact');
+  assert.deepEqual(ev.map((e) => [e.civ, e.other, e.year, e.hex]), [[1, 2, 2, 3], [0, 1, 4, 1], [0, 2, 4, 1]]);
+  // All pairs met: nothing more, ever.
+  yearHex(rec, 5, [[1, 1, 1]]);
+  assert.equal(ofType(rec, 'contact').length, 3);
+  assert.equal(rec.unmet, 0);
+});
+
+test('RULES.md first contact: a pair that shares a hex in the same year as another pair, and civs listed lower first', () => {
+  const rec = new Records(2, 2, 4);
+  yearHex(rec, 7, [[0, 0], [0, 0], [3, 1]]);
+  const [e] = ofType(rec, 'contact');
+  assert.deepEqual([e.civ, e.other, e.year, e.col, e.row], [0, 1, 7, 2, 0]);
+});
+
+test('RULES.md milestones: 100, 500 and 1,000 people, each once per civ, in the first year it has at least that many', () => {
+  const rec = new Records(2, 2);
+  const pops = [[99, 10], [100, 10], [100, 600], [499, 1000], [500, 1000], [1500, 50], [90, 1000], [100, 1000], [1000, 1000]];
+  pops.forEach((p, y) => rec.endYear(y, Int32Array.from(p)));
+  const ms = ofType(rec, 'milestone').map((e) => [e.civ, e.people, e.year]);
+  assert.deepEqual(ms.sort((a, b) => a[0] - b[0] || a[1] - b[1]), [
+    [0, 100, 1], [0, 500, 4], [0, 1000, 5],
+    [1, 100, 2], [1, 500, 2], [1, 1000, 3],
+  ]);
+  // A jump over several thresholds in one year logs each of them.
+  const r2 = new Records(1, 1);
+  r2.endYear(0, Int32Array.of(5));
+  r2.endYear(1, Int32Array.of(1200));
+  assert.deepEqual(ofType(r2, 'milestone').map((e) => e.people), [100, 500, 1000]);
+  // Dropping below and returning does not log again.
+  r2.endYear(2, Int32Array.of(10));
+  r2.endYear(3, Int32Array.of(2000));
+  assert.equal(ofType(r2, 'milestone').length, 3);
+});
+
+test('RULES.md peak: logged after 50 years in a row below it, with the peak and its first year; moves to a later higher peak', () => {
+  const rec = new Records(1, 1);
+  rec.endYear(0, Int32Array.of(10));
+  rec.endYear(1, Int32Array.of(50));
+  rec.endYear(2, Int32Array.of(50));         // equal: still the peak, first reached in year 1
+  for (let y = 3; y < 3 + 49; y++) rec.endYear(y, Int32Array.of(40)); // 49 years below
+  assert.equal(ofType(rec, 'peak').length, 0, '49 years is not enough');
+  rec.endYear(52, Int32Array.of(40));        // the 50th year below
+  let pk = ofType(rec, 'peak');
+  assert.equal(pk.length, 1);
+  assert.deepEqual([pk[0].civ, pk[0].people, pk[0].year, pk[0].declineYear], [0, 50, 1, 3]);
+  // A year back at the peak's level... then below again: counts restart; a new higher peak replaces the entry.
+  rec.endYear(53, Int32Array.of(60));
+  for (let y = 54; y < 54 + 50; y++) rec.endYear(y, Int32Array.of(55));
+  pk = ofType(rec, 'peak');
+  assert.equal(pk.length, 1, 'one entry per civ');
+  assert.deepEqual([pk[0].people, pk[0].year, pk[0].declineYear], [60, 53, 54]);
+});
+
+test('RULES.md peak: a rise back to the peak before 50 years resets the count', () => {
+  const rec = new Records(1, 1);
+  rec.endYear(0, Int32Array.of(50));
+  for (let y = 1; y <= 30; y++) rec.endYear(y, Int32Array.of(20));
+  rec.endYear(31, Int32Array.of(50));        // back at the peak
+  for (let y = 32; y <= 80; y++) rec.endYear(y, Int32Array.of(20)); // 49 years
+  assert.equal(ofType(rec, 'peak').length, 0);
+  rec.endYear(81, Int32Array.of(20));
+  assert.equal(ofType(rec, 'peak').length, 1);
+});
+
+test('RULES.md most hexes: one per civ that held any, at the first year it held that many, added at report time', () => {
+  const rec = new Records(2, 2);
+  const run = (y, hexes) => rec.endYear(y, Int32Array.of(5, 5), Int32Array.from(hexes));
+  run(0, [1, 0]); run(1, [3, 2]); run(2, [5, 2]); run(3, [5, 1]); run(4, [2, 4]);
+  const ev = ofType(rec, 'mostHexes').map((e) => [e.civ, e.hexes, e.year]);
+  assert.deepEqual(ev, [[0, 5, 2], [1, 4, 4]]);
+  assert.equal(rec.evCount, 0, 'not stored in the log');
+  const none = new Records(1, 1);
+  none.endYear(0, Int32Array.of(0), Int32Array.of(0));
+  assert.equal(ofType(none, 'mostHexes').length, 0);
+});
+
+test('RULES.md history log order in one year: famines, contacts, fights, milestones, peaks, most hexes, extinctions, then civ', () => {
+  const rec = new Records(2, 2, 3);
+  rec.lastPop.set([200, 200]);
+  for (let i = 0; i < 20; i++) rec.starve[0]++;
+  rec.fight(5, 4, 1, 0, 0, 1, 7);
+  rec.endYear(5, Int32Array.of(150, 100), Int32Array.of(2, 2), Int32Array.from([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 3]));
+  const types = rec.data({ high: 0 }, 5).events.map((e) => e.type);
+  assert.deepEqual(types, ['famine', 'contact', 'fight', 'milestone', 'milestone', 'mostHexes', 'mostHexes']);
+});
+
+test('RULES.md history log: the cap drops famines and fights but keeps first contacts, milestones, peaks and extinctions', () => {
+  const civs = 3;
+  const rec = new Records(civs, civs, 4);
+  const need = (civs * (civs - 1)) / 2 + 5 * civs;
+  assert.equal(rec.room(), need, 'room for one contact per pair and 3 milestones, a peak and an extinction per civ');
+  // Fill the log with fights up to the cap.
+  for (let i = 0; rec.evCount < EVENT_CAP - civs; i++) rec.fight(i, 0, 0, 1, 0, 0, 1);
+  const before = rec.evCount;
+  rec.fight(9999, 0, 0, 1, 0, 0, 1);
+  assert.equal(rec.evCount, before, 'a fight past the cap is dropped');
+  assert.equal(rec.evDropped, 1);
+  // Everything that can happen only a few times still goes in.
+  yearHex(rec, 1, [[600, 600, 600]]);                      // 3 contacts, 3 × (100, 500) milestones
+  yearHex(rec, 2, [[1100, 1100, 1100]]);                   // 1,000 milestones
+  for (let y = 3; y < 3 + 50; y++) yearHex(rec, y, [[100, 100, 100]]); // peaks
+  rec.starve.fill(0);
+  rec.endYear(60, Int32Array.of(0, 0, 0));                 // extinctions (lastPop is set by famines())
+  const d = rec.data({ high: 0 }, 60);
+  const count = (t) => d.events.filter((e) => e.type === t).length;
+  assert.deepEqual([count('contact'), count('milestone'), count('peak')], [3, 9, 3]);
+  assert.equal(count('extinction'), 3);
+  assert.ok(rec.evCount <= EVENT_CAP + rec.room());
+});
+
+test('seeded run: the log holds one first contact per pair at most, milestones once, and is deterministic', () => {
+  const run = () => {
+    const sim = new Simulation({ seed: 'hist', size: 12, civCount: 3, startPop: 40, mutation: 0.03 });
+    sim.tick(400);
+    return sim.report().records.events;
+  };
+  const ev = run();
+  assert.deepEqual(run(), ev);
+  const pairs = ev.filter((e) => e.type === 'contact').map((e) => `${e.civ}-${e.other}`);
+  assert.equal(new Set(pairs).size, pairs.length);
+  const ms = ev.filter((e) => e.type === 'milestone').map((e) => `${e.civ}:${e.people}`);
+  assert.equal(new Set(ms).size, ms.length);
+  for (const e of ev.filter((x) => x.type === 'contact')) assert.ok(e.civ < e.other);
 });

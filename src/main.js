@@ -1,4 +1,4 @@
-// Boot: wires the map-generation and setup screens, sim host, renderer, input and controls together.
+// Boot: wires the home page, How to play, the map-generation and setup screens, sim host, renderer, input and controls together.
 
 import { LocalSimHost } from './host/simHost.js';
 import { Loop } from './loop.js';
@@ -7,6 +7,8 @@ import { Renderer } from './render/renderer.js';
 import { peopleShown, PEOPLE_ZOOM_PX, PEOPLE_FLY_PX } from './render/peopleLayer.js';
 import { hexAtWorld, hexCentre, worldBounds, HEX_SIZE } from './render/layout.js';
 import { attachGestures } from './input/gestures.js';
+import { HomeScreen } from './ui/homeScreen.js';
+import { HowScreen } from './ui/howScreen.js';
 import { MapgenScreen } from './ui/mapgenScreen.js';
 import { SetupScreen } from './ui/setupScreen.js';
 import { initBottomSheet } from './ui/bottomSheet.js';
@@ -15,16 +17,19 @@ import { renderInspector, renderPersonCard } from './ui/inspector.js';
 import { formatNumber } from './ui/dom.js';
 import { renderStats, renderCivStats, renderHudCivs } from './ui/statsPanel.js';
 import { renderEndScreen } from './ui/endScreen.js';
+import { renderLevels, renderLevelGuide } from './ui/levelsPanel.js';
 import { mapParams } from './sim/params.js';
 import { randomSeedString } from './sim/rng.js';
 import { DEEP_WATER } from './sim/terrain.js';
 
 const $ = (id) => document.getElementById(id);
 const ui = {
+  home: $('home'), how: $('how'), homeResume: $('btn-home-resume'),
   mapgen: $('mapgen'), setup: $('setup'), game: $('game'), end: $('end'), endBody: $('end-body'), resume: $('btn-resume'),
   endNow: $('btn-end-now'),
   canvas: $('map'), year: $('hud-year'), pop: $('hud-pop'), hudCivs: $('hud-civs'), inspector: $('inspector'), toast: $('toast'),
   sheet: $('sheet'), handle: $('sheet-handle'), stats: $('stats'), civStats: $('civ-stats'),
+  civLevels: $('civ-levels'), levelGuide: $('level-guide-body'),
 };
 
 const host = new LocalSimHost();
@@ -65,6 +70,11 @@ const controls = initControls({
 });
 initBottomSheet(ui.sheet, ui.handle);
 
+/** The screen on show: 'home', 'how', 'mapgen', 'setup', 'game' or 'end'. */
+let screen = null;
+const home = new HomeScreen({ canvas: $('home-canvas'), caption: $('home-caption'), points: $('home-points') });
+const how = new HowScreen($('how-body'), { onNewGame: () => newGame() });
+
 const mapgen = new MapgenScreen(
   { form: $('mapgen-form'), canvas: $('preview'), info: $('preview-info') },
   {
@@ -96,6 +106,7 @@ async function startGame(params) {
   host.start(params);
   startParams = host.params;
   map = host.map();
+  renderLevelGuide(ui.levelGuide, map.cols, map.rows);
   renderer.setMap(map);
   renderer.setPopulation(host.population(), performance.now());
   camera.setBounds(worldBounds(map.cols, map.rows));
@@ -114,16 +125,57 @@ async function startGame(params) {
   controls.sync();
   updatePanels();
   loop.start();
-  try { localStorage.setItem('popsim:lastParams', JSON.stringify(host.params)); } catch { /* storage unavailable */ }
 }
 
 function showScreen(name) {
+  screen = name;
+  ui.home.hidden = name !== 'home';
+  ui.how.hidden = name !== 'how';
   ui.mapgen.hidden = name !== 'mapgen';
   ui.setup.hidden = name !== 'setup';
   ui.game.hidden = name !== 'game';
   ui.end.hidden = name !== 'end';
   ui.resume.hidden = !(name === 'setup' && host.sim);
+  ui.homeResume.hidden = !(name === 'home' && host.sim);
+  home.setActive(name === 'home');
+  if (name === 'how') how.show();
 }
+
+/*
+ * Addresses (RULES.md "Home page"): the page opens on the home page; "#how"
+ * opens How to play and "#new" the map-generation screen. Opening How to play
+ * from the home page adds a history entry, so the phone's back gesture returns
+ * home; the Home and New game buttons clear the address.
+ */
+const routeFromHash = () => ({ '#how': 'how', '#new': 'mapgen' })[location.hash] ?? 'home';
+const clearHash = () => { if (location.hash) history.replaceState(null, '', location.pathname + location.search); };
+/** Whether How to play was opened from the home page with its own history entry (so Back can pop it). */
+let howPushed = false;
+
+function openHow() {
+  if (location.hash !== '#how') { history.pushState(null, '', '#how'); howPushed = true; }
+  showScreen('how');
+  ui.how.scrollTop = 0;
+}
+
+function goHome() {
+  if (screen === 'how' && howPushed) { howPushed = false; history.back(); return; } // popstate shows home
+  clearHash();
+  showScreen('home');
+}
+
+function newGame() {
+  howPushed = false;
+  clearHash();
+  showScreen('mapgen');
+}
+
+window.addEventListener('popstate', () => {
+  // Only the home page and How to play follow the address; a game in progress is never pulled away.
+  if (screen !== 'home' && screen !== 'how') return;
+  howPushed = false;
+  showScreen(routeFromHash() === 'how' ? 'how' : 'home');
+});
 
 /** Pause and open the end screen for the finished run. */
 function showEnd() {
@@ -160,6 +212,7 @@ function updatePanels() {
   const alive = stats.civs.filter((c) => c.pop > 0).length;
   ui.pop.textContent = `${formatNumber(stats.totalPop)} people · ${alive} of ${stats.civs.length} civs · ${map.cols} × ${map.rows} hexes`;
   renderCivStats(ui.civStats, stats);
+  renderLevels(ui.civLevels, stats);
   renderHudCivs(ui.hudCivs, stats);
   renderStats(ui.stats, stats);
   // Keep the open card's values current.
@@ -380,15 +433,22 @@ ui.endNow.addEventListener('click', () => {
   showEnd();
 });
 
-try {
-  const saved = JSON.parse(localStorage.getItem('popsim:lastParams') || 'null');
-  if (saved) mapgen.setParams(saved, 'custom');
-} catch { /* ignore bad saved params */ }
-showScreen('mapgen');
+$('btn-new-game').addEventListener('click', newGame);
+$('btn-how').addEventListener('click', openHow);
+$('btn-how-new').addEventListener('click', newGame);
+$('btn-how-back').addEventListener('click', goHome);
+$('btn-home').addEventListener('click', goHome);
+ui.homeResume.addEventListener('click', () => { showScreen('game'); resize(); });
+
+showScreen(routeFromHash());
+// Run How to play's world while nothing else is happening, so the page opens at once.
+(window.requestIdleCallback ?? ((f) => setTimeout(f, 1500)))(() => how.prepare());
 
 // Exposed for the browser tests and for poking at the sim from devtools.
 window.popsim = {
   host, loop, camera, startGame,
+  /** The screen on show: 'home', 'how', 'mapgen', 'setup', 'game' or 'end'. */
+  screen: () => screen,
   /** Current year of the running game (0 before a game starts). */
   year: () => host.tickCount,
   /** Map settings of the running game, or null. */

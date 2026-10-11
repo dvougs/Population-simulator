@@ -17,9 +17,41 @@
   <script type="module" src="src/main.js"></script>
 </head>
 <body>
-  <section id="mapgen" class="screen setup" aria-labelledby="mapgen-title">
+  <section id="home" class="screen home" aria-labelledby="home-title">
+    <div class="home-layout">
+      <figure class="home-world">
+        <canvas id="home-canvas" role="img" aria-label="A small world, alive: civilisations spreading across a hex map"></canvas>
+        <figcaption class="home-caption"><span class="live-dot" aria-hidden="true"></span><span id="home-caption"></span></figcaption>
+      </figure>
+      <div class="home-text">
+        <p class="home-kicker">A civilisation sandbox</p>
+        <h1 id="home-title">Population Simulator</h1>
+        <p class="home-tagline">Shape a world of hexes, seed it with peoples, and watch every single person in it live, wander, fight and build, year after year.</p>
+        <div class="home-actions">
+          <button id="btn-new-game" class="btn primary" type="button">New game</button>
+          <button id="btn-how" class="btn" type="button">How to play</button>
+          <button id="btn-home-resume" class="btn ghost" type="button" hidden>Back to game</button>
+        </div>
+        <ul id="home-points" class="home-points"></ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="how" class="screen setup how" aria-labelledby="how-title" hidden>
+    <header class="setup-header how-header">
+      <button id="btn-how-back" class="btn ghost" type="button">&#8592; Home</button>
+      <h1 id="how-title">How to play</h1>
+    </header>
+    <div id="how-body" class="how-body"></div>
+    <div class="start-bar"><div class="inner">
+      <button id="btn-how-new" class="btn primary" type="button">New game</button>
+    </div></div>
+  </section>
+
+  <section id="mapgen" class="screen setup" aria-labelledby="mapgen-title" hidden>
     <header class="setup-header">
       <h1 id="mapgen-title">New world</h1>
+      <button id="btn-home" class="btn ghost" type="button">Home</button>
     </header>
     <div class="mapgen-layout">
       <figure class="preview">
@@ -81,6 +113,12 @@
       <div id="sheet-body" class="sheet-body">
         <h2 class="sheet-title">Civilisations</h2>
         <ul id="civ-stats" class="stats"></ul>
+        <h2 class="sheet-title">Levels</h2>
+        <div id="civ-levels" class="levels"></div>
+        <details id="level-guide" class="level-guide">
+          <summary>What levels and materials do</summary>
+          <div id="level-guide-body" class="level-guide-body"></div>
+        </details>
         <h2 class="sheet-title">Map</h2>
         <ul id="stats" class="stats"></ul>
       </div>

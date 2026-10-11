@@ -16,6 +16,10 @@ import { Container, Graphics, Rectangle, Sprite, Texture, CanvasSource } from '.
 import { hexCentre, HEX_SIZE } from './layout.js';
 import { CIV_STYLES, traceEmblem, civStyle, EMBLEM_ORDER } from './civStyle.js';
 import { rgbToHex } from './palette.js';
+import { hash32, personSpot, hexTotal, largestCiv, shortCount, LABEL_R, PERSON_R, SPREAD_R } from './peopleMaths.js';
+
+// Moved to peopleMaths.js (no PixiJS there, so the How to play pictures can share them); re-exported for existing importers.
+export { hexTotal, largestCiv, shortCount };
 
 /** People are drawn one by one once a hex is at least this many CSS px across (corner to corner) on screen. */
 export const PEOPLE_ZOOM_PX = 120;
@@ -27,12 +31,9 @@ const MOVE_MS = 600;
 const CELL = 64; // atlas cell, px
 const CELL_R = 24; // emblem radius inside a cell, px
 const GLYPHS = '0123456789kM.';
-// World sizes (HEX_SIZE is 32): label emblem radius, digit height, person emblem radius.
-const LABEL_R = 0.3 * HEX_SIZE;
+// World sizes (HEX_SIZE is 32) of the count digits; emblem sizes are in spots.js.
 const DIGIT_SPRITE = 0.62 * HEX_SIZE; // whole cell, so the digit itself is about 0.36 hex high
 const DIGIT_ADVANCE = 0.3 * HEX_SIZE;
-const PERSON_R = 0.075 * HEX_SIZE;
-const SPREAD_R = 0.6 * HEX_SIZE; // people sit in a disc this wide around the hex centre
 /** Idle drift: radius of each person's slow circle around their spot, and the slowest and fastest lap. */
 export const DRIFT_R = 0.1 * HEX_SIZE;
 export const DRIFT_LAP_MIN_S = 4;
@@ -85,41 +86,6 @@ let atlas = null;
 function getAtlas() {
   atlas ??= buildAtlas();
   return atlas;
-}
-
-/** Short head count for a hex label: at most 4 characters. */
-export function shortCount(n) {
-  if (n < 1000) return String(n);
-  if (n < 10000) return `${Math.floor(n / 100) / 10}k`;
-  if (n < 1e6) return `${Math.min(999, Math.round(n / 1000))}k`;
-  return `${Math.min(999, Math.round(n / 1e6))}M`;
-}
-
-/** People in hex h, all civs, from a population snapshot's hexCivPop (civs entries per hex). */
-export function hexTotal(hexCivPop, civs, h) {
-  let total = 0;
-  for (let c = 0; c < civs; c++) total += hexCivPop[h * civs + c];
-  return total;
-}
-
-/** Civ whose emblem labels hex h: the one with most people there, the lower civ number on a tie; -1 if empty. */
-export function largestCiv(hexCivPop, civs, h) {
-  let best = -1;
-  let most = 0;
-  for (let c = 0; c < civs; c++) {
-    const k = hexCivPop[h * civs + c];
-    if (k > most) { most = k; best = c; }
-  }
-  return best;
-}
-
-/** Stable bits from a person's id: their spot inside the hex (uniform over a disc) and their drift. */
-function hash32(id) {
-  let x = Math.imul(id ^ 0x9e3779b9, 0x85ebca6b);
-  x ^= x >>> 13;
-  x = Math.imul(x, 0xc2b2ae35);
-  x ^= x >>> 16;
-  return x >>> 0;
 }
 
 /** Seconds person `id` takes for one lap of their idle drift: DRIFT_LAP_MIN_S to DRIFT_LAP_MAX_S. */
@@ -204,11 +170,9 @@ export class PeopleLayer {
       const h = data.hex[i];
       const same = this.pAlive[i] && this.pId[i] === id;
       if (same && this.pHex[i] === h) continue; // most people, most years: nothing to redo
-      const hash = hash32(id);
-      const r = SPREAD_R * Math.sqrt((hash & 0xffff) / 65536);
-      const a = (2 * Math.PI * (hash >>> 16)) / 65536;
-      const tx = this.hexX[h] + r * Math.cos(a);
-      const ty = this.hexY[h] + r * Math.sin(a);
+      const spot = personSpot(id, SPREAD_R);
+      const tx = this.hexX[h] + spot.dx;
+      const ty = this.hexY[h] + spot.dy;
       if (same) {
         // Moved: glide from wherever they are on their way now (drift rides on top throughout).
         this.glide(i, now);

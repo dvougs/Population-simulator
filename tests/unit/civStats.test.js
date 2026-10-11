@@ -1,13 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { CivStats, HISTORY_ROWS, HISTORY_FIELDS } from '../../src/sim/civStats.js';
-import { DEATH_OLD_AGE, DEATH_STARVATION } from '../../src/sim/life.js';
+import { DEATH_OLD_AGE, DEATH_STARVATION, DEATH_WAR } from '../../src/sim/life.js';
+import { TRAITS, TRAIT_COUNT } from '../../src/sim/traits.js';
 
 const year = (st, y, pop, hexes = pop.map(() => 1), oldest = pop.map(() => 0)) =>
   st.endYear(y, Int32Array.from(pop), Int32Array.from(hexes), Int32Array.from(oldest));
 
 test('history columns match RULES.md "Statistics"', () => {
-  assert.deepEqual(HISTORY_FIELDS, ['pop', 'hexes', 'births', 'deathsOldAge', 'deathsStarvation', 'lifespanSum']);
+  assert.deepEqual(HISTORY_FIELDS, ['pop', 'hexes', 'births', 'deathsOldAge', 'deathsStarvation', 'lifespanSum', 'deathsWar', 'level']);
   assert.equal(HISTORY_ROWS, 8192);
 });
 
@@ -131,4 +132,100 @@ test('RULES.md "Statistics": peak population year is the first year the peak was
   const [c] = st.summary();
   assert.equal(c.peakPop, 9);
   assert.equal(c.peakPopYear, 2);
+});
+
+test('RULES.md "Statistics": war deaths are their own column and count towards lifespan and totals', () => {
+  const st = new CivStats(2);
+  st.death(0, DEATH_WAR, 30);
+  st.death(0, DEATH_WAR, 10);
+  st.death(0, DEATH_OLD_AGE, 80);
+  year(st, 1, [5, 5]);
+  const [a, b] = st.summary();
+  assert.deepEqual(a.deaths, { oldAge: 1, starvation: 0, war: 2 });
+  assert.equal(a.avgLifespan, 40, '(30 + 10 + 80) / 3, war deaths included');
+  assert.deepEqual(b.deaths, { oldAge: 0, starvation: 0, war: 0 });
+  const h = st.historyData();
+  assert.deepEqual([...h.deathsWar], [2, 0]);
+  assert.deepEqual([...h.deathsOldAge], [1, 0]);
+});
+
+test('fights count for both sides and wins for the winner; switches count in and out', () => {
+  const st = new CivStats(3);
+  st.fight(0, 1, 1);
+  st.fight(2, 0, 2);
+  st.switched(0, 1);
+  st.switched(0, 2);
+  st.switched(1, 0);
+  year(st, 1, [1, 1, 1]);
+  const s = st.summary();
+  assert.deepEqual(s.map((c) => c.fights), [2, 1, 1]);
+  assert.deepEqual(s.map((c) => c.fightsWon), [0, 1, 1]);
+  assert.deepEqual(s.map((c) => c.switchesOut), [2, 1, 0]);
+  assert.deepEqual(s.map((c) => c.switchesIn), [1, 1, 1]);
+});
+
+test('RULES.md "Statistics": extinction cause is the most deaths that year (tie: old age, starvation, war), switching if none', () => {
+  const cause = (setup) => {
+    const st = new CivStats(1);
+    year(st, 0, [3]);
+    setup(st);
+    year(st, 1, [0]);
+    return st.summary()[0].extinctCause;
+  };
+  assert.equal(cause((st) => { st.death(0, DEATH_WAR, 5); st.death(0, DEATH_WAR, 5); st.death(0, DEATH_STARVATION, 5); }), 'war');
+  assert.equal(cause((st) => { st.death(0, DEATH_WAR, 5); st.death(0, DEATH_STARVATION, 5); }), 'starvation');
+  assert.equal(cause((st) => { st.death(0, DEATH_WAR, 5); st.death(0, DEATH_OLD_AGE, 5); }), 'oldAge');
+  assert.equal(cause(() => {}), 'switching');
+});
+
+test('RULES.md "Statistics": the level column is a snapshot (1 when no levels are passed)', () => {
+  const st = new CivStats(2);
+  st.endYear(0, Int32Array.of(5, 5), Int32Array.of(1, 1), Int32Array.of(0, 0));
+  st.endYear(1, Int32Array.of(5, 5), Int32Array.of(1, 1), Int32Array.of(0, 0), null, Uint8Array.of(2, 1));
+  const h = st.historyData();
+  assert.deepEqual([...h.level], [1, 1, 2, 1]);
+});
+
+test('RULES.md "Statistics": trait averages are recorded per row, NaN while a civ has nobody, and the founders\' averages are kept', () => {
+  const st = new CivStats(2);
+  const avg = (a, b) => {
+    const t = new Float64Array(2 * TRAIT_COUNT);
+    for (let k = 0; k < TRAIT_COUNT; k++) { t[k] = a + k / 100; t[TRAIT_COUNT + k] = b; }
+    return t;
+  };
+  const end = (y, pop, t) => st.endYear(y, Int32Array.from(pop), Int32Array.of(1, 1), Int32Array.of(0, 0), t, Uint8Array.of(1, 1));
+  end(0, [3, 3], avg(0.4, 0.6));
+  end(1, [3, 3], avg(0.5, 0.7));
+  const dead = avg(0.9, NaN);
+  end(2, [3, 0], dead);
+  const h = st.historyData();
+  assert.deepEqual(h.traitIds, TRAITS);
+  assert.equal(h.traitCount, 8);
+  assert.equal(h.traits.length, 3 * 2 * 8);
+  assert.ok(Math.abs(h.traits[(1 * 2 + 0) * 8 + 3] - 0.53) < 1e-6);
+  assert.ok(Number.isNaN(h.traits[(2 * 2 + 1) * 8]), 'civ 2 has nobody in year 2');
+  const [a, b] = st.summary();
+  assert.equal(a.startTraits.fertility, 0.4);
+  assert.equal(a.startTraits.lifeExpectancy, 0.41);
+  assert.equal(a.traits.fertility, 0.9, 'now');
+  assert.equal(b.traits.fertility, 0.7, 'its last averages while it had people');
+  assert.equal(b.startTraits.fertility, 0.6);
+});
+
+test('RULES.md "Statistics": merged rows take the trait averages and the level from the later year', () => {
+  const st = new CivStats(1);
+  const rec = (y) => {
+    const t = new Float64Array(TRAIT_COUNT).fill((y % 100) / 100);
+    st.endYear(y, Int32Array.of(1), Int32Array.of(1), Int32Array.of(0), t, Uint8Array.of(1 + (y % 5)));
+  };
+  for (let y = 0; y < HISTORY_ROWS + 2; y++) rec(y);
+  assert.equal(st.stride, 2);
+  const h = st.historyData();
+  // Row r covers years 2r and 2r + 1.
+  for (const r of [0, 1, 7, 100, 4095]) {
+    const later = 2 * r + 1;
+    assert.equal(h.years[r], later);
+    assert.ok(Math.abs(h.traits[r * TRAIT_COUNT] - (later % 100) / 100) < 1e-6, `row ${r} fertility`);
+    assert.equal(h.level[r], 1 + (later % 5), `row ${r} level`);
+  }
 });

@@ -2,8 +2,10 @@
 
 import { h, formatNumber } from './dom.js';
 import { emblemSvg } from '../render/civStyle.js';
+import { MATERIAL_IDS, MATERIAL_NAMES } from '../sim/materials.js';
+import { TRAITS, TRAIT_NAMES } from '../sim/traits.js';
 
-const MATERIAL_KIND = { forest: 'wood', hills: 'stone' };
+const materialName = (id) => MATERIAL_NAMES[MATERIAL_IDS.indexOf(id)] ?? id;
 
 /** A civ's emblem as a decorative inline element (no text, so it never changes a row's text). */
 export function emblem(civ, size = 14) {
@@ -55,7 +57,8 @@ export function renderInspector(el, hex, onClose, opts = {}) {
     ['People', peopleText(hex), () => peopleNodes(hex)],
     ['Food', `${formatNumber(hex.food)} / ${formatNumber(hex.foodCap)}`],
     ['Food capacity', formatNumber(hex.foodCap)],
-    ['Materials', hex.materials > 0 ? `${formatNumber(hex.materials)} (${MATERIAL_KIND[hex.terrain]})` : 'None'],
+    ['Deposits', hex.deposits?.length ? hex.deposits.map(materialName).join(', ') : 'None'],
+    ['Gathering', gatheringText(hex), () => gatheringNodes(hex)],
     ['Movement cost', hex.moveCost === null ? 'Impassable' : String(hex.moveCost)],
     ['Defence bonus', hex.defence > 0 ? `+${Math.round(hex.defence * 100)}%` : '0%'],
   ];
@@ -134,6 +137,26 @@ function fillPeopleList(el, list, data) {
   }
 }
 
+const oneDecimal = (v) => (Math.floor(v * 10 + 1e-9) / 10).toFixed(1);
+
+/** One civ's gathering in the hex: materials worked, gatherers and this year's take. */
+function gatherPart(g) {
+  const what = g.materials.length ? `${g.materials.map(materialName).join(', ').toLowerCase()}, ${oneDecimal(g.gatherers)} gatherers` : 'won the yield in a fight';
+  return `Civ ${g.civ + 1}: ${what}; got ${oneDecimal(g.amount)}`;
+}
+
+function gatheringText(hex) {
+  const list = hex.gathering ?? [];
+  return list.length ? list.map(gatherPart).join('. ') : 'Nobody';
+}
+
+/** Same text as gatheringText, one line per civ with its emblem. */
+function gatheringNodes(hex) {
+  const list = hex.gathering ?? [];
+  if (!list.length) return ['Nobody'];
+  return list.flatMap((g, k) => [k > 0 ? '. ' : null, emblem(g.civ, 12), gatherPart(g)].filter((x) => x !== null));
+}
+
 function peopleText(hex) {
   if (!hex.people) return 'None';
   const parts = (hex.peopleByCiv ?? []).map((n, c) => (n > 0 ? `Civ ${c + 1}: ${formatNumber(n)}` : null)).filter(Boolean);
@@ -174,6 +197,7 @@ export function renderPersonCard(el, person, { onClose, onShowHex, dead = false 
     ['Parent', person.parent === null ? 'None (founder)' : `#${person.parent}${person.parentAlive ? '' : ' (died)'}`],
     ['Children', `${person.children} living`],
     ['Hex', `(${person.col}, ${person.row})`],
+    ...TRAITS.map((k, t) => [TRAIT_NAMES[t], person.traits ? person.traits[k].toFixed(2) : '–']),
   ];
   const key = `p${person.id}`;
   if (el.dataset.shown === key && fillRows(el, rows)) return;

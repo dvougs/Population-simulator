@@ -33,7 +33,7 @@ src/sim/                pure simulation
 src/host/simHost.js     UI ↔ sim boundary
 src/render/             PixiJS renderer, camera maths, palette
 src/input/              pointer pan, pinch and tap
-src/ui/                 screens (map generation, setup, end), bottom sheet, inspector, stats
+src/ui/                 screens (home, How to play, map generation, setup, end), bottom sheet, inspector, stats, levels
 tests/unit/             node:test unit tests (pure logic only)
 tests/e2e/              Playwright specs at phone viewports (run by CI, not by an agent)
 tools/                  headless.js (CLI runner), serve.js (static server), make-icons.js

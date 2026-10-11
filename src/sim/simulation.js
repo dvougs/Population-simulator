@@ -1,20 +1,25 @@
 // Simulation: owns the map, the people and the clock. The only entry point the
-// UI, the headless runner and the tests use. One tick is one year:
-// birthdays, eating, deaths, births, migration, food regrowth, then the
-// year's stats are recorded.
+// UI, the headless runner and the tests use. One tick is one year: gathering
+// and levels, birthdays, eating, deaths, births, migration, food regrowth,
+// contact (fights and switching civ), then the year's stats are recorded.
 
 import { normalizeParams, mapParams } from './params.js';
 import { generateMap, countTerrain, hashMap, fnv } from './mapgen.js';
 import { indexToAxial } from './hex.js';
 import { Rng } from './rng.js';
 import { People, NO_PARENT } from './people.js';
-import { pickStarts, found, eat, deaths, births, regrow } from './life.js';
-import { buildReach, migrate } from './migration.js';
+import { pickStarts, found, eat, deaths, births, regrow, DEATH_STARVATION } from './life.js';
+import { buildReach, migrate, migrationRules, setReach } from './migration.js';
+import { Contact } from './contact.js';
+import { Levels, LEVEL_EFFECTS } from './levels.js';
+import { CIV_TYPE_NAMES } from './civTypes.js';
 import { CivStats } from './civStats.js';
 import { Records, FAMINE } from './records.js';
 import {
-  DEEP_WATER, TERRAIN_IDS, TERRAIN_NAMES, MOVE_COST, DEFENCE_BONUS, MATERIALS,
+  DEEP_WATER, TERRAIN_IDS, TERRAIN_NAMES, MOVE_COST, DEFENCE_BONUS,
 } from './terrain.js';
+import { MATERIAL_COUNT, MATERIAL_IDS } from './materials.js';
+import { TRAITS, TRAIT_COUNT } from './traits.js';
 
 export class Simulation {
   constructor(params) {
@@ -24,7 +29,7 @@ export class Simulation {
     this.tickCount = 0;
     this.finished = false;
     this.endReason = null;
-    /** How the run ended ('extinction', 'lastCiv', 'dominance', 'years', 'player') and the winning civ, if any. */
+    /** How the run ended ('extinction', 'lastCiv', 'kingdom', 'dominance', 'years', 'player') and the winning civ, if any. */
     this.endKind = null;
     this.winner = null;
     /** Set by Keep watching: no end condition applies any more, not even extinction. */
@@ -41,22 +46,36 @@ export class Simulation {
       migration: rng.fork('migration'),
     };
     const placement = rng.fork('placement');
+    // Founders' trait spread and every child's mutation; forked last so the other streams are as before traits.
+    this.rng.traits = rng.fork('traits');
+    // Fights and civ switching (also forked after the older streams).
+    this.rng.war = rng.fork('war');
+    this.rng.switch = rng.fork('switch');
+    // Kingdoms absorbing smaller civs.
+    this.rng.absorb = rng.fork('absorb');
     this.starts = pickStarts(map, civs, placement);
     this.civCount = civs;
+    this.civTypes = this.params.civTypes.slice();
     // Room for every hex filled to capacity, so the pool rarely has to grow.
     let capSum = 0;
     for (let h = 0; h < map.count; h++) capSum += map.foodCap[h];
     this.people = new People(Math.max(civs * this.params.startPop, Math.ceil(capSum * 1.25)));
-    found(this.people, this.starts, this.params.startPop, placement);
+    found(this.people, this.starts, this.params.startPop, placement, this.rng.traits, this.civTypes);
     this.reach = buildReach(map);
+    this.migrationRules = migrationRules(this.civTypes, map, this.reach);
+    this.contact = new Contact(map, this.civTypes);
+    this.levels = new Levels(map, this.civTypes);
 
     // Scratch arrays, allocated once (per-person ones again only if the pool grows).
     const n = map.count;
     this.hexPop = new Int32Array(n);
     this.seen = new Int32Array(n);
     this.picked = new Int32Array(n);
+    this.needSum = new Float64Array(n);
+    this.eaten = new Float64Array(n);
+    /** Sum, then average, of each trait per civ: civTraits[civ × TRAIT_COUNT + trait]. */
+    this.civTraits = new Float64Array(civs * TRAIT_COUNT);
     this.spare = new Float64Array(n);
-    this.civHex = new Uint8Array(n * civs);
     this.civHeld = new Uint8Array(n * civs);
     /** People of each civ in each hex at the end of the last year: hexCivPop[hex × civs + civ]. */
     this.hexCivPop = new Int32Array(n * civs);
@@ -71,11 +90,23 @@ export class Simulation {
     this.civStats = new CivStats(civs);
     const people = this.people;
     const st = this.civStats;
-    this.records = new Records(civs, this.starts.length * this.params.startPop);
+    this.records = new Records(civs, this.starts.length * this.params.startPop, map.cols);
     this.records.founders(people);
     const rec = this.records;
     this.onDeath = (i, cause) => { st.death(people.civ[i], cause, people.age[i]); rec.death(i, people, cause, this.tickCount); };
     this.onBirth = (i) => { st.birth(people.civ[i]); rec.birth(i, people, this.tickCount); };
+    this.onFight = (h, attacker, defender, holder, winner, deaths) => {
+      st.fight(attacker, defender, winner);
+      rec.fight(this.tickCount, h, attacker, defender, holder, winner, deaths);
+    };
+    this.onSwitch = (from, to) => st.switched(from, to);
+    this.onLevel = (c, from, to) => {
+      // Boats come and go with level 4.
+      const boats = to >= LEVEL_EFFECTS.boatLevel;
+      if (boats !== (this.migrationRules.boats[c] === 1)) setReach(this.migrationRules, c, map, boats, LEVEL_EFFECTS.boatCost);
+    };
+    /** Starvation deaths per civ in the year last recorded (for food security). */
+    this.lastStarved = new Int32Array(civs);
     this.recordYear();
   }
 
@@ -88,37 +119,62 @@ export class Simulation {
   year() {
     const people = this.people;
     const { alive, age } = people;
+    const lv = this.levels;
+    // From the counts at the end of last year, so before anyone ages, eats or moves.
+    lv.year(people, this.map, this.tickCount, this.hexCivPop, this.lastStarved, this.contact.fightWinner, this.rng.absorb,
+      this.onLevel, this.onSwitch);
     for (let i = 0; i < people.high; i++) if (alive[i] && age[i] < 65535) age[i]++;
-    eat(people, this.map, this.rng.eat, this.hexPop, this.seen, this.picked);
-    deaths(people, this.rng.death, this.onDeath);
-    births(people, this.map, this.rng.birth, this.hexPop, this.parents, this.onBirth);
+    eat(people, this.map, this.rng.eat, this.hexPop, this.seen, this.picked, this.needSum, this.eaten, lv.shelter);
+    deaths(people, this.rng.death, this.onDeath, lv.oldAgeDelay);
+    births(people, this.map, this.rng.birth, this.hexPop, this.parents, this.onBirth, this.rng.traits, this.params.mutation, lv.birthBonus);
     if (this.dest.length < people.capacity) this.allocPersonScratch();
-    migrate(people, this.map, this.reach, this.rng.migration, this.hexPop, this.spare, this.dest, this.civHeld);
+    migrate(people, this.map, this.reach, this.rng.migration, this.hexPop, this.spare, this.dest, this.civHeld, this.migrationRules);
     regrow(this.map);
+    // hexCivPop still holds last year's counts here: it decides each fight's defender.
+    this.contact.year(people, this.map, this.hexCivPop, this.tickCount, this.rng.war, this.rng.switch,
+      this.onDeath, this.onFight, this.onSwitch);
   }
 
-  /** Count people, hexes held and the oldest person per civ, and append the year's stats row. */
+  /** Winner of this year's fight in each hex (civ index), or −1 where there was none. */
+  get fightWinner() {
+    return this.contact.fightWinner;
+  }
+
+  /** Count people, hexes held, the oldest person and trait averages per civ, and append the year's stats row. */
   recordYear() {
     const p = this.people;
-    const { alive, civ, hex, age } = p;
-    const n = this.map.count;
-    this.civPop.fill(0);
-    this.civHexes.fill(0);
-    this.civOldest.fill(0);
-    this.civHex.fill(0);
-    this.hexCivPop.fill(0);
+    const { alive, civ, hex, age, hunger } = p;
+    const ct = this.civTraits;
+    ct.fill(0);
+    // Locals, not traits[t][i]: this loop runs over everyone every year.
+    const [t0, t1, t2, t3, t4, t5, t6, t7] = p.traits;
+    const { civPop, civHexes, civOldest, hexCivPop } = this;
+    civPop.fill(0);
+    civHexes.fill(0);
+    civOldest.fill(0);
+    hexCivPop.fill(0);
     const civs = this.civCount;
+    // Gathering next year reads each civ's hungry people.
+    const hungry = this.levels.hungry;
+    hungry.fill(0);
     for (let i = 0; i < p.high; i++) {
       if (!alive[i]) continue;
       const c = civ[i];
-      this.civPop[c]++;
-      this.hexCivPop[hex[i] * civs + c]++;
-      if (age[i] > this.civOldest[c]) this.civOldest[c] = age[i];
-      const k = c * n + hex[i];
-      if (!this.civHex[k]) { this.civHex[k] = 1; this.civHexes[c]++; }
+      civPop[c]++;
+      // A civ's first person in a hex adds the hex to those it holds.
+      if (hexCivPop[hex[i] * civs + c]++ === 0) civHexes[c]++;
+      if (hunger[i] > 0) hungry[c]++;
+      if (age[i] > civOldest[c]) civOldest[c] = age[i];
+      const b = c * TRAIT_COUNT;
+      ct[b] += t0[i]; ct[b + 1] += t1[i]; ct[b + 2] += t2[i]; ct[b + 3] += t3[i];
+      ct[b + 4] += t4[i]; ct[b + 5] += t5[i]; ct[b + 6] += t6[i]; ct[b + 7] += t7[i];
     }
-    this.civStats.endYear(this.tickCount, this.civPop, this.civHexes, this.civOldest);
-    this.records.endYear(this.tickCount, this.civPop);
+    for (let c = 0; c < civs; c++) {
+      for (let t = 0; t < TRAIT_COUNT; t++) ct[c * TRAIT_COUNT + t] = this.civPop[c] > 0 ? ct[c * TRAIT_COUNT + t] / this.civPop[c] : NaN;
+    }
+    for (let c = 0; c < civs; c++) this.lastStarved[c] = this.civStats.yearDeaths[c * 3 + DEATH_STARVATION];
+    this.civStats.endYear(this.tickCount, this.civPop, this.civHexes, this.civOldest, ct, this.levels.level);
+    this.records.endYear(this.tickCount, this.civPop, this.civHexes, this.hexCivPop);
   }
 
   /** Advance n ticks (stops early when the end condition is met). Returns ticks run. */
@@ -136,7 +192,7 @@ export class Simulation {
 
   /**
    * End conditions, checked after each year in this order (the first met
-   * ends the run): total extinction, last civ standing, dominance, year limit.
+   * ends the run): total extinction, last civ standing, first to Kingdom, dominance, year limit.
    */
   checkEnd() {
     const p = this.params;
@@ -157,6 +213,10 @@ export class Simulation {
     if (this.sandbox) return;
     if (alive === 0) this.end('extinction', null, 'Every civ died out');
     else if (ends.includes('lastCiv') && civs >= 2 && alive === 1) this.end('lastCiv', last, `Civ ${last + 1} is the last civ standing`);
+    else if (ends.includes('kingdom') && this.levels.kingdomCiv >= 0) {
+      const k = this.levels.kingdomCiv;
+      this.end('kingdom', k, `Civ ${k + 1} became the first Kingdom`);
+    }
     else if (ends.includes('dominance') && dominant >= 0) {
       this.end('dominance', dominant, `Civ ${dominant + 1} held ${pct}% of the land for ${p.dominanceYears} years`);
     } else if (ends.includes('years') && this.tickCount >= p.endTicks) this.end('years', null, `Reached year ${p.endTicks}`);
@@ -187,7 +247,11 @@ export class Simulation {
     return {
       tick: this.tickCount,
       totalPop: this.people.count,
-      civs: this.civStats.summary(),
+      civs: this.civStats.summary().map((c, k) => ({
+        ...c, type: this.civTypes[k], typeName: CIV_TYPE_NAMES[this.civTypes[k]], ...this.levels.summary(k),
+      })),
+      /** First civ to reach Kingdom and the year, or null. */
+      firstKingdom: this.levels.kingdomCiv >= 0 ? { civ: this.levels.kingdomCiv, year: this.levels.kingdomYear } : null,
       terrainCounts: this.terrainCounts.slice(),
       finished: this.finished,
       endReason: this.endReason,
@@ -209,8 +273,8 @@ export class Simulation {
    */
   report() {
     const civs = this.civStats.summary();
-    const deaths = { oldAge: 0, starvation: 0 };
-    for (const c of civs) { deaths.oldAge += c.deaths.oldAge; deaths.starvation += c.deaths.starvation; }
+    const deaths = { oldAge: 0, starvation: 0, war: 0 };
+    for (const c of civs) { deaths.oldAge += c.deaths.oldAge; deaths.starvation += c.deaths.starvation; deaths.war += c.deaths.war; }
     return {
       ...this.stats(),
       winnerName: this.winner === null ? null : `Civ ${this.winner + 1}`,
@@ -232,6 +296,16 @@ export class Simulation {
     for (let i = 0; i < p.high; i++) if (p.alive[i] && p.hex[i] === d.index) byCiv[p.civ[i]]++;
     d.people = byCiv.reduce((a, b) => a + b, 0);
     d.peopleByCiv = byCiv;
+    // Who gathered here this year (step 1): materials worked, gatherers, and the amount each civ got
+    // (a fight's winner can get a yield it did not gather, with no materials or gatherers of its own).
+    const lv = this.levels;
+    d.gathering = [];
+    for (let c = 0; c < this.civCount; c++) {
+      const k = d.index * this.civCount + c;
+      if (lv.gatherers[k] > 0 || lv.gathered[k] > 0) {
+        d.gathering.push({ civ: c, materials: depositList(lv.gatherMask[k]), gatherers: lv.gatherers[k], amount: lv.gathered[k] });
+      }
+    }
     return d;
   }
 
@@ -283,6 +357,8 @@ export class Simulation {
       parent: parent === NO_PARENT ? null : parent,
       parentAlive: parent === NO_PARENT ? null : parentAlive,
       children,
+      /** The 8 traits (0 … 1), keyed by trait id (see traits.js TRAITS). */
+      traits: Object.fromEntries(TRAITS.map((k, t) => [k, p.traits[t][slot]])),
       hex: h,
       col: h % cols,
       row: Math.floor(h / cols),
@@ -339,8 +415,15 @@ export function describeHex(map, col, row) {
     river: map.river[i] === 1,
     food: map.food[i],
     foodCap: map.foodCap[i],
-    materials: MATERIALS[t],
+    /** Material ids of the hex's deposits, in material order (wood first, spices last). */
+    deposits: depositList(map.deposits[i]),
     moveCost: water ? null : MOVE_COST[t],
     defence: DEFENCE_BONUS[t],
   };
+}
+
+function depositList(bits) {
+  const out = [];
+  for (let m = 0; m < MATERIAL_COUNT; m++) if (bits & (1 << m)) out.push(MATERIAL_IDS[m]);
+  return out;
 }

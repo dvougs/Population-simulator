@@ -5,13 +5,13 @@ import { test, expect, devices } from '@playwright/test';
 
 // RULES.md "Terrain".
 const TERRAIN = {
-  coast: { name: 'Coast', food: 50, move: '1', defence: '0%', materials: 'None' },
-  plains: { name: 'Plains', food: 60, move: '1', defence: '0%', materials: 'None' },
-  forest: { name: 'Forest', food: 40, move: '2', defence: '+25%', materials: '30 (wood)' },
-  hills: { name: 'Hills', food: 30, move: '2', defence: '+50%', materials: '20 (stone)' },
-  mountain: { name: 'Mountain', food: 10, move: '3', defence: '+100%', materials: 'None' },
-  desert: { name: 'Desert', food: 10, move: '1.5', defence: '0%', materials: 'None' },
-  tundra: { name: 'Tundra', food: 15, move: '1.5', defence: '0%', materials: 'None' },
+  coast: { name: 'Coast', food: 50, move: '1', defence: '0%' },
+  plains: { name: 'Plains', food: 60, move: '1', defence: '0%' },
+  forest: { name: 'Forest', food: 40, move: '2', defence: '+25%' },
+  hills: { name: 'Hills', food: 30, move: '2', defence: '+50%' },
+  mountain: { name: 'Mountain', food: 10, move: '3', defence: '+100%' },
+  desert: { name: 'Desert', food: 10, move: '1.5', defence: '0%' },
+  tundra: { name: 'Tundra', food: 15, move: '1.5', defence: '0%' },
 };
 const RIVER_BONUS = 30;
 
@@ -135,7 +135,12 @@ async function expectInspectorMatchesRules(page, sample) {
   const h = sample.hex;
   const rule = TERRAIN[h.terrain];
   expect(rule, `unknown terrain ${h.terrain}`).toBeTruthy();
-  const cap = rule.food + (h.river ? RIVER_BONUS : 0);
+  // RULES.md "What levels do": a civ at level 2 or more raises plains and river hexes by 25% (every hex by 25% more at level 5),
+  // so the capacity is the level 1 value, or a raised one once someone has levelled up.
+  const base = rule.food + (h.river ? RIVER_BONUS : 0);
+  const cap = Math.round(h.foodCap);
+  expect([base, base * 1.25, base * 1.5].map(Math.round)).toContain(cap);
+  if (h.foodCap !== base) expect(['plains', 'forest', 'coast', 'hills', 'mountain', 'desert', 'tundra']).toContain(h.terrain);
   await expect(insp.locator('h3')).toContainText(rule.name);
   await expect(insp.locator('h3')).toContainText(`(${sample.col}, ${sample.row})`);
   // RULES.md "A year": people eat and food regrows, so food is anywhere from 0 to the capacity.
@@ -148,7 +153,14 @@ async function expectInspectorMatchesRules(page, sample) {
   if (h.people === 0) await expect(peopleDd).toHaveText('None');
   else await expect(peopleDd).toHaveText(new RegExp(`^${h.people} \\(Civ \\d+: \\d+`));
   await expect(insp.locator('dd[data-field="food-capacity"]')).toHaveText(String(cap));
-  await expect(insp.locator('dd[data-field="materials"]')).toHaveText(rule.materials);
+  // RULES.md "Material deposits": the card lists the hex's deposits by name (or None); who gathered there this year is a row of its own.
+  const deposits = h.deposits.map((id) => id[0].toUpperCase() + id.slice(1)).join(', ');
+  await expect(insp.locator('dd[data-field="deposits"]')).toHaveText(deposits || 'None');
+  await expect(insp.locator('dd[data-field="materials"]')).toHaveCount(0);
+  const gathering = insp.locator('dd[data-field="gathering"]');
+  await expect(gathering).toHaveCount(1);
+  if (h.gathering.length === 0) await expect(gathering).toHaveText('Nobody');
+  else await expect(gathering).not.toHaveText('Nobody');
   await expect(insp.locator('dd[data-field="movement-cost"]')).toHaveText(rule.move);
   await expect(insp.locator('dd[data-field="defence-bonus"]')).toHaveText(rule.defence);
   if (h.river) await expect(insp.locator('dd[data-field="river"]')).toHaveText('Yes (fertile)');
@@ -159,7 +171,8 @@ test.beforeEach(async ({ page }) => {
   page.errors = [];
   page.on('pageerror', (e) => page.errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => { if (m.type() === 'error') page.errors.push(`console: ${m.text()}`); });
-  await page.goto('/');
+  // The home page is the first screen; #new opens the map-generation screen directly (and a reload keeps it).
+  await page.goto('/#new');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await expect(page.locator('#mapgen')).toBeVisible();
@@ -171,7 +184,17 @@ test.afterEach(async ({ page }) => {
 });
 
 test.describe('map generation screen', () => {
-  test('opens first with the RULES.md defaults', async ({ page }, testInfo) => {
+  test('the home page is the first screen; New game opens this one with the RULES.md defaults', async ({ page }, testInfo) => {
+    // RULES.md "Home page": the game opens on the home page; #new (used by every test here) skips it.
+    await page.goto('/');
+    await expect(page.locator('#home')).toBeVisible();
+    await expect(page.locator('#mapgen')).toBeHidden();
+    await expect(page.locator('#how')).toBeHidden();
+    await expect(page.locator('#btn-home-resume')).toBeHidden();
+    await page.locator('#btn-new-game').click();
+    await expect(page.locator('#mapgen')).toBeVisible();
+    await expect(page.locator('#home')).toBeHidden();
+    await expect.poll(() => previewHash(page)).not.toBeNull();
     await expect(page.locator('#setup')).toBeHidden();
     await expect(page.locator('#game')).toBeHidden();
     await expect(page.locator('#m-preset')).toHaveValue('default');

@@ -12,6 +12,9 @@ import {
   DEEP_WATER, COAST, PLAINS, FOREST, HILLS, MOUNTAIN, DESERT, TUNDRA, TERRAIN_COUNT,
   FOOD_CAPACITY, RIVER_FOOD_BONUS,
 } from './terrain.js';
+import {
+  MATERIAL_COUNT, DEPOSIT_CHANCE, RIVER_DEPOSIT_CHANCE, EXOTIC, EXOTIC_REROLL_LIMIT,
+} from './materials.js';
 
 /** Shares of land and lowland used by the generator (also in RULES.md). */
 export const GEN = Object.freeze({
@@ -35,6 +38,8 @@ export function createMap(cols, rows) {
     elevation: new Float32Array(count),
     foodCap: new Float32Array(count),
     food: new Float32Array(count),
+    /** Material deposits per hex: bit m set when the hex holds material m (see materials.js). */
+    deposits: new Uint16Array(count),
     neighbours: buildNeighbourTable(cols, rows),
   };
 }
@@ -53,6 +58,9 @@ export function generateMap(input) {
   const tempNoise = makeNoise(rng.fork('temperature'), 2, 2);
   const moistNoise = makeNoise(rng.fork('moisture'), 2 + Math.floor(n / 10), 3);
   const riverRng = rng.fork('rivers');
+  // Forked after the others, so adding deposits left every earlier stream (and the terrain) unchanged.
+  const depositRng = rng.fork('deposits');
+  const rerollRng = rng.fork('depositReroll');
 
   // Sample the noise at each hex centre, scaled so the map spans [0, 1] both ways.
   const b = mapBounds(n, n, 1);
@@ -155,8 +163,51 @@ export function generateMap(input) {
     map.foodCap[i] = FOOD_CAPACITY[terrain[i]] + (map.river[i] ? RIVER_FOOD_BONUS : 0);
     map.food[i] = map.foodCap[i];
   }
+  rollDeposits(map, depositRng, rerollRng);
   map.params = p;
   return map;
+}
+
+/** One roll of material m in hex i: its terrain's chance, and for a river hex the river chance too. */
+function rollOne(map, i, m, rng) {
+  const t = DEPOSIT_CHANCE[m][map.terrain[i]];
+  let hit = t > 0 && rng.next() < t;
+  const r = map.river[i] ? RIVER_DEPOSIT_CHANCE[m] : 0;
+  if (r > 0 && rng.next() < r) hit = true;
+  return hit;
+}
+
+/**
+ * Every land hex rolls for every material (index order, then material order).
+ * Then each exotic material the map lacks is rolled again over the whole land
+ * (its own stream) until at least one hex holds it. After EXOTIC_REROLL_LIMIT
+ * rounds it goes to the hex with the best chance (lowest index on ties); a map
+ * with no land that can hold it at all goes without.
+ */
+function rollDeposits(map, rng, rerollRng) {
+  const { count, terrain, deposits } = map;
+  for (let i = 0; i < count; i++) {
+    if (terrain[i] === DEEP_WATER) continue;
+    for (let m = 0; m < MATERIAL_COUNT; m++) if (rollOne(map, i, m, rng)) deposits[i] |= 1 << m;
+  }
+  for (const m of EXOTIC) {
+    let found = false;
+    let best = -1;
+    let bestChance = 0;
+    for (let i = 0; i < count; i++) {
+      if (terrain[i] === DEEP_WATER) continue;
+      if (deposits[i] & (1 << m)) found = true;
+      const c = Math.max(DEPOSIT_CHANCE[m][terrain[i]], map.river[i] ? RIVER_DEPOSIT_CHANCE[m] : 0);
+      if (c > bestChance) { bestChance = c; best = i; }
+    }
+    if (found || best < 0) continue;
+    for (let round = 0; round < EXOTIC_REROLL_LIMIT && !found; round++) {
+      for (let i = 0; i < count; i++) {
+        if (terrain[i] !== DEEP_WATER && rollOne(map, i, m, rerollRng)) { deposits[i] |= 1 << m; found = true; }
+      }
+    }
+    if (!found) deposits[best] |= 1 << m;
+  }
 }
 
 /**
@@ -280,7 +331,7 @@ export function countTerrain(map) {
 
 /** FNV-1a over everything that defines the map. Equal hashes mean equal maps. */
 export function hashMap(map) {
-  return fnv([map.terrain, map.lake, map.river, map.riverTo]);
+  return fnv([map.terrain, map.lake, map.river, map.riverTo, map.deposits]);
 }
 
 export function fnv(arrays, h = 0x811c9dc5) {
