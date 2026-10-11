@@ -4,6 +4,32 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
 
 ## Open
 
+## Proposals
+
+Ideas the director draws from headless simulation runs and the code. At most 6 wait here at a time.
+
+### P-008: Fill the end screen's history log with events that actually happen
+- Date: 2026-10-11
+- Category: UI
+- What: The new end screen's history log and "worst famine" record come out empty in a normal game, so the end screen tells no story. Log the moments a player would remember that already happen today: first contact (the first year two civs share a hex), each civ passing 100, 500 and 1,000 people, a civ's peak population and its first year of decline, the most hexes a civ ever held, and lower the famine bar so a bad starvation year shows up (for example 1% of the civ's people instead of 2%).
+- Evidence: Headless runs of seeds review-20261011d-1 to -3 on claude/cycle-20261011-1006 at 71fa0e5, default setup, 400 years: "0 events" and "worst famine none" on all three seeds, although the civs had 43 to 125 starvation deaths each over the run (seed -1: 110, 116, 125), spread thinly over the years. src/sim/records.js:13 sets a famine at 2% of the civ's people and at least 5 deaths in one year; src/sim/records.js:16 logs only famines and extinctions.
+- Effort: S
+- Phone performance risk: low: a few counters per civ checked once a year, written to the existing capped event log.
+- Decision:
+
+### P-009: Draw people by age and hunger, and let births and deaths show
+- Date: 2026-10-11
+- Category: animation
+- What: Zoomed in, every person is the same emblem at the same size, and people pop in and vanish instantly, so you cannot see a village grow or a famine bite. Draw children smaller (growing to full size by 16), elders slightly faded, hungry people pale, a newborn appearing with a short grow-in and the dead fading out over half a second. The map would visibly breathe with each year's births and deaths.
+- Evidence: src/render/peopleLayer.js:363 gives every person sprite one fixed size and src/render/peopleLayer.js:369-371 only changes its civ tint; age and hunger are never read when drawing. Seeds review-20261011d-1 to -3 at 71fa0e5, default setup: about 4 to 6 births and 3 to 5 deaths per civ every year by year 400 (seed -1, Civ 1: 1,915 births and 1,459 deaths in 400 years), all invisible except as sprites appearing and disappearing.
+- Effort: S
+- Phone performance risk: low: a scale and alpha per sprite set in the existing loop over visible people; no new textures or allocation.
+- Decision:
+
+## Requests
+
+## Answered
+
 ### Q-006: What numbers should the 8 traits use?
 - Date: 2026-10-11
 - Why it matters: Q-004 settled 8 inherited traits with mutation (T-021), but not how a trait value turns into a birth chance, a lifespan or a food need, nor each civ type's starting values. Today everyone has a 5% birth chance, old age from 45, and eats 1 food a year.
@@ -13,6 +39,8 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
   3. Same as 1 but no type starting values: every civ starts at 0.5 and only terrain and mutation make them differ.
 - Recommendation: 1, it keeps today's balance at 0.5, gives each type a visible starting identity, and the director tunes the numbers from headless runs (asking you before moving any by more than half).
 - Answer: add your own numbers so to be realistic and balanced and then initialize a new, one-time agent to review the proposed agents and balance them out. only after teh new agent balances out the numbers, create the task for the dev. (reading: the director picks realistic, balanced trait numbers itself, using option 1's shape as a starting point. A separate one-time reviewer agent ("review the proposed agents" read as "review the proposed numbers") then checks and rebalances them, for example with headless runs. Only after that review does the director create the game-dev task. The final numbers go into RULES.md with the change.)
+- Review: a one-time balance reviewer agent prototyped option 1 in a copy of the sim (10 seeds, every type in every civ position, up to 3,000 years). Option 1 as drafted let fertility run away (0.94 by year 3000) and Expansionist take 81% of all people by year 1000. Final set: fertility and metabolism make hunger hit harder (fertile, fast-burning people starve faster), metabolism also raises the birth chance, heat and cold tolerance trade off, Expansionist fertility 0.58, Nomadic metabolism 0.45 with heat and cold 0.6. Result: each type 29% to 43% of people at year 1000 (fair share 33%), no civ extinct in 360 runs, traits stay between 0.4 and 0.75, population at year 400 about 1,430. Full numbers in T-021.
+- Moved: 2026-10-11, tasks T-021 (with the reviewed numbers), T-030
 
 ### Q-007: How do Cooperative and Nomadic behave, which types always fight, and how does a fight work?
 - Date: 2026-10-11
@@ -23,6 +51,7 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
   3. As 1, but fights only cause fleeing, no deaths (a gentler game; war deaths appear only with L4 organised war).
 - Recommendation: 1, it gives each type one clear trait the player can see, keeps fights local and rare when food is plentiful, and uses the defence bonuses already in the terrain table.
 - Answer: let's go with 1 (reading: option 1 as written, Cooperative never starts fights, Nomadic moves further, Aggressive always fights when sharing a hex, fights as described; no separate reviewer step asked for this one)
+- Moved: 2026-10-11, tasks T-022, T-023 unblocked with option 1 in their criteria (they follow T-021), T-030
 
 ### Q-008: What numbers should gathering and level effects use?
 - Date: 2026-10-11
@@ -33,10 +62,7 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
   3. Same yields as 1, but smaller level effects (+10% food, birth +0.25 points): levels matter less, populations stay closer together.
 - Recommendation: 1, it keeps your 1,750-year fastest path to Kingdom realistic on a 10 × 10 map, and the director checks it with headless runs before release.
 - Answer: agreed. (reading: option 1, as recommended)
-
-## Proposals
-
-Ideas the director draws from headless simulation runs and the code. At most 6 wait here at a time.
+- Moved: 2026-10-11, task T-025 unblocked with option 1 in its criteria (follows T-024), T-030
 
 ### P-007: Show every civ in a shared hex, not just the largest
 - Date: 2026-10-11
@@ -46,15 +72,23 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Effort: S
 - Phone performance risk: low: two more sprites per populated hex from the same atlas, updated only when the yearly counts change.
 - Decision: ring version. also include a bold ring circling ALL hexes each civ occupies, showing it as one larger area consisting of many hexes. (reading: yes, with changes. Each hex shows a thin ring around its count, split by each civ's share. On top of that, every civ gets a bold outline in its colour around the outer edge of all the hexes it occupies, so its territory reads as one area. Because civs share hexes, these outlines can overlap.)
+- Moved: 2026-10-11, tasks T-031 (ring and territory outlines, built this cycle), T-035
 
-## Requests
+### R-008: Real-time reporting visible on desktop, in a column to the right of the map (owner, 2026-10-11 09:43 UTC).
+- Date: 2026-10-11
+- Moved: 2026-10-11, tasks T-032 (todo, next cycle)
 
-- R-008: Real-time reporting visible on desktop, in a column to the right of the map (owner, 2026-10-11 09:43 UTC).
-- R-009: Colour the hexes each civ occupies in that civ's colour, without losing the hex's terrain flavour (owner, 2026-10-11 09:43 UTC).
-- R-010: "End game conditions are still 2 at the start of the game. Update to the previous agreed terms." (owner, 2026-10-11 09:43 UTC; reading: the setup screen still offers only None and Year limit; the R-007 end conditions are already planned as T-026 (todo), so the owner wants T-026 built soon.)
-- R-011: Tapping a hex should zoom in and show the actual people living there. Overall, people should be visible, since the map does not feel alive during the simulation today (owner, 2026-10-11 09:43 UTC).
+### R-009: Colour the hexes each civ occupies in that civ's colour, without losing the hex's terrain flavour (owner, 2026-10-11 09:43 UTC).
+- Date: 2026-10-11
+- Moved: 2026-10-11, tasks T-033 (built this cycle), T-035
 
-## Answered
+### R-010: "End game conditions are still 2 at the start of the game. Update to the previous agreed terms." (owner, 2026-10-11 09:43 UTC; reading: the setup screen still offers only None and Year limit; the R-007 end conditions are already planned as T-026 (todo), so the owner wants T-026 built soon.)
+- Date: 2026-10-11
+- Moved: 2026-10-11, tasks T-026 (built this cycle), T-029
+
+### R-011: Tapping a hex should zoom in and show the actual people living there. Overall, people should be visible, since the map does not feel alive during the simulation today (owner, 2026-10-11 09:43 UTC).
+- Date: 2026-10-11
+- Moved: 2026-10-11, tasks T-034 (built this cycle; also people idle inside their hex and show at a lower zoom), T-035
 
 ### Q-003: What goes into version 1.0?
 - Date: 2026-10-11
