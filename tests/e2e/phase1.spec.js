@@ -419,6 +419,8 @@ test.describe('setup screen', () => {
     await page.locator('#m-seed').fill('start-me');
     await page.locator('#m-size').fill('14');
     await expect.poll(() => previewParams(page)).toMatchObject({ seed: 'start-me', size: 14 });
+    // The preview redraws on the next frame; its caption changes in the same redraw as its hash.
+    await expect(page.locator('#preview-info')).toContainText('14 × 14 hexes');
     const hash = await previewHash(page);
     const params = await previewParams(page);
     await startGame(page);

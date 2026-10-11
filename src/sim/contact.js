@@ -76,7 +76,8 @@ export class Contact {
   /**
    * One year of contact. lastPop[hex × civs + civ]: people per civ per hex at the end of last year
    * (decides who holds the hex). Callbacks: onDeath(slot, cause) before a war death
-   * is removed, onFight(hex, attacker, defender, holder, winner, deaths),
+   * is removed, onFight(hex, attacker, defender, holder, winner, deaths, killedByWinner,
+   * killedByLoser) (deaths on both sides, then the loser's and the winner's people who died),
    * onSwitch(from, to). Returns the number of fights.
    */
   year(people, map, lastPop, year, warRng, switchRng, onDeath, onFight, onSwitch) {
@@ -223,7 +224,7 @@ export class Contact {
         const w = fightWinner[h];
         if (w < 0) continue;
         this.lostTo[this.loser[h] * civs + w] = year;
-        onFight(h, this.attacker[h], this.defender[h], this.holder[h], w, this.killLoser[h] + this.killWinner[h]);
+        onFight(h, this.attacker[h], this.defender[h], this.holder[h], w, this.killLoser[h] + this.killWinner[h], this.pickL[h], this.pickW[h]);
       }
     }
     return fights;

@@ -4,6 +4,7 @@ import { LocalSimHost } from './host/simHost.js';
 import { Loop } from './loop.js';
 import { Camera, FLY_MS, flightAt } from './render/camera.js';
 import { Renderer } from './render/renderer.js';
+import { MenuScene } from './render/menuScene.js';
 import { peopleShown, PEOPLE_ZOOM_PX, PEOPLE_FLY_PX } from './render/peopleLayer.js';
 import { hexAtWorld, hexCentre, worldBounds, HEX_SIZE } from './render/layout.js';
 import { attachGestures } from './input/gestures.js';
@@ -72,8 +73,12 @@ initBottomSheet(ui.sheet, ui.handle);
 
 /** The screen on show: 'home', 'how', 'mapgen', 'setup', 'game' or 'end'. */
 let screen = null;
-const home = new HomeScreen({ canvas: $('home-canvas'), caption: $('home-caption'), points: $('home-points') });
-const how = new HowScreen($('how-body'), { onNewGame: () => newGame() });
+// The menu screens' animated backdrop: the page's second (and last) WebGL context, made on first use.
+const menu = new MenuScene($('menu-bg'));
+const heroFigure = document.querySelector('.home-world');
+const home = new HomeScreen({ canvas: $('home-canvas'), caption: $('home-caption'), points: $('home-points'), figure: heroFigure }, menu);
+menu.trackHero(heroFigure, ui.home);
+const how = new HowScreen($('how-body'), { onNewGame: () => newGame(), nav: $('how-nav'), progress: $('how-progress') });
 
 const mapgen = new MapgenScreen(
   { form: $('mapgen-form'), canvas: $('preview'), info: $('preview-info') },
@@ -128,6 +133,7 @@ async function startGame(params) {
 }
 
 function showScreen(name) {
+  const first = screen === null;
   screen = name;
   ui.home.hidden = name !== 'home';
   ui.how.hidden = name !== 'how';
@@ -139,6 +145,22 @@ function showScreen(name) {
   ui.homeResume.hidden = !(name === 'home' && host.sim);
   home.setActive(name === 'home');
   if (name === 'how') how.show();
+  // The backdrop runs behind the menu screens only; the game and end screens stop it.
+  menu.setMode(name === 'home' ? 'home' : MENU_PAGES.includes(name) ? 'page' : null);
+  // Entrances mark moving between screens; a visit's first screen just appears, except the home page's welcome.
+  if (!first || name === 'home') markEntering(name);
+}
+
+const MENU_PAGES = ['how', 'mapgen', 'setup'];
+let enterTimer = 0;
+/** Play the screen's entrance (styles/main.css .entering) once per show, not on every form rebuild. */
+function markEntering(name) {
+  for (const el of [ui.home, ui.how, ui.mapgen, ui.setup]) el.classList.remove('entering');
+  clearTimeout(enterTimer);
+  const el = ui[name];
+  if (name === 'game' || name === 'end' || !el) return;
+  el.classList.add('entering');
+  enterTimer = setTimeout(() => el.classList.remove('entering'), 1200);
 }
 
 /*

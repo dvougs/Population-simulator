@@ -195,7 +195,7 @@ export function howText() {
           ['Migrate', 'The hungry and the crowded set out for better land.'],
           ['Food regrows', `Every hex regrows ${pct(L.foodRegrowth)} of its capacity.`],
           ['Contact', 'Civs sharing a hex may fight, or people may change sides.'],
-          ['Records', 'The year goes into the statistics and the history log.'],
+          ['Records', 'The year goes into the statistics, the war tallies and the history.'],
           ['The end?', 'The end conditions you picked are checked.'],
         ],
         after: 'Within each step everyone decides first and then it all happens at once, so nobody gains from being first in line.',
@@ -306,7 +306,7 @@ export function howText() {
         after: [
           'If everyone dies, the game ends whatever you ticked. You can also pause and tap End now.',
           'The end screen tells the whole story: the winner, each civ\'s peak and lifespan, population and level charts, '
-            + 'how the traits drifted, the oldest person who ever lived, the longest family line, the worst famine, and every fight in the history log.',
+            + 'how the traits drifted, the oldest person who ever lived, the longest family line, the worst famine, the wars between each pair of civs, and a short history of the turning points.',
         ],
       },
       {

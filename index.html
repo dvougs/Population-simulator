@@ -18,6 +18,9 @@
   <script type="module" src="src/main.js" onerror="if(!/[?&amp;]r=/.test(location.search))location.replace(location.pathname+'?r='+Date.now()+location.hash)"></script>
 </head>
 <body>
+  <!-- Animated backdrop of the menu screens (src/render/menuScene.js); shown only once WebGL is up. -->
+  <canvas id="menu-bg" class="menu-bg" aria-hidden="true"></canvas>
+
   <section id="home" class="screen home" aria-labelledby="home-title">
     <div class="home-layout">
       <figure class="home-world">
@@ -25,23 +28,27 @@
         <figcaption class="home-caption"><span class="live-dot" aria-hidden="true"></span><span id="home-caption"></span></figcaption>
       </figure>
       <div class="home-text">
-        <p class="home-kicker">A civilisation sandbox</p>
-        <h1 id="home-title">Population Simulator</h1>
-        <p class="home-tagline">Shape a world of hexes, seed it with peoples, and watch every single person in it live, wander, fight and build, year after year.</p>
-        <div class="home-actions">
-          <button id="btn-new-game" class="btn primary" type="button">New game</button>
-          <button id="btn-how" class="btn" type="button">How to play</button>
+        <p class="home-kicker enter" style="--i:0"><span class="kicker-dot" aria-hidden="true"></span>A civilisation sandbox</p>
+        <h1 id="home-title" class="enter" style="--i:1">Population Simulator</h1>
+        <p class="home-tagline enter" style="--i:2">Shape a world of hexes, seed it with peoples, and watch every single person in it live, wander, fight and build, year after year.</p>
+        <div class="home-actions enter" style="--i:3">
+          <button id="btn-new-game" class="btn primary" type="button"><span>New game</span><span class="btn-arrow" aria-hidden="true">&#8594;</span></button>
+          <button id="btn-how" class="btn glass" type="button">How to play</button>
           <button id="btn-home-resume" class="btn ghost" type="button" hidden>Back to game</button>
         </div>
-        <ul id="home-points" class="home-points"></ul>
+        <ul id="home-points" class="home-points enter" style="--i:4"></ul>
       </div>
     </div>
   </section>
 
   <section id="how" class="screen setup how" aria-labelledby="how-title" hidden>
     <header class="setup-header how-header">
-      <button id="btn-how-back" class="btn ghost" type="button">&#8592; Home</button>
-      <h1 id="how-title">How to play</h1>
+      <div class="how-head-row">
+        <button id="btn-how-back" class="btn ghost" type="button">&#8592; Home</button>
+        <h1 id="how-title">How to play</h1>
+      </div>
+      <nav id="how-nav" class="how-toc" aria-label="Sections"></nav>
+      <span class="how-progress" aria-hidden="true"><span id="how-progress"></span></span>
     </header>
     <div id="how-body" class="how-body"></div>
     <div class="start-bar"><div class="inner">
@@ -50,16 +57,22 @@
   </section>
 
   <section id="mapgen" class="screen setup" aria-labelledby="mapgen-title" hidden>
-    <header class="setup-header">
-      <h1 id="mapgen-title">New world</h1>
+    <header class="setup-header enter" style="--i:0">
+      <div class="head-title">
+        <p class="step-kicker"><span class="steps" aria-hidden="true"><i class="on"></i><i></i></span>Step 1 of 2 · The land</p>
+        <h1 id="mapgen-title">New world</h1>
+      </div>
       <button id="btn-home" class="btn ghost" type="button">Home</button>
     </header>
     <div class="mapgen-layout">
-      <figure class="preview">
-        <canvas id="preview" aria-label="Map preview"></canvas>
+      <figure class="preview enter" style="--i:1">
+        <div class="preview-frame">
+          <canvas id="preview" aria-label="Map preview"></canvas>
+          <span class="preview-sheen" aria-hidden="true"></span>
+        </div>
         <figcaption id="preview-info" aria-live="polite"></figcaption>
       </figure>
-      <form id="mapgen-form" class="setup-form mapgen-form" novalidate></form>
+      <form id="mapgen-form" class="setup-form mapgen-form enter" style="--i:2" novalidate></form>
     </div>
     <div class="start-bar"><div class="inner">
       <button id="btn-continue" class="btn primary" type="submit" form="mapgen-form">Continue</button>
@@ -67,11 +80,14 @@
   </section>
 
   <section id="setup" class="screen setup" aria-labelledby="setup-title" hidden>
-    <header class="setup-header">
-      <h1 id="setup-title">Population Simulator</h1>
+    <header class="setup-header enter" style="--i:0">
+      <div class="head-title">
+        <p class="step-kicker"><span class="steps" aria-hidden="true"><i class="on"></i><i class="on"></i></span>Step 2 of 2 · The peoples</p>
+        <h1 id="setup-title">Population Simulator</h1>
+      </div>
       <button id="btn-resume" class="btn ghost" type="button" hidden>Back to game</button>
     </header>
-    <form id="setup-form" class="setup-form" novalidate></form>
+    <form id="setup-form" class="setup-form enter" style="--i:1" novalidate></form>
     <div class="start-bar"><div class="inner">
       <button id="btn-start" class="btn primary" type="submit" form="setup-form">Start simulation</button>
     </div></div>

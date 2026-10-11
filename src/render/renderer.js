@@ -27,12 +27,14 @@
 // while the game runs (setMoving), so pausing freezes them in place.
 
 import { Application, Container, Graphics } from '../../vendor/pixi.mjs';
+import { isSoftwareGl } from './gpu.js';
 import { hexPolygon, riverSegments, HEX_SIZE } from './layout.js';
 import { hexColours, rgbToHex, RIVER_RGB } from './palette.js';
 import { DEEP_WATER } from '../sim/terrain.js';
 import { PeopleLayer, peopleShown } from './peopleLayer.js';
 import { TerritoryLayer } from './territoryLayer.js';
 
+const SOFTWARE_MAX_DPR = 1; // backing resolution cap on a software WebGL renderer (gpu.js)
 const SHIMMER_PERIOD_MS = 8000; // one full swell: slow, like a tide
 const SHIMMER_ALPHA = 0.1; // peak white over the water: gentle
 const SHIMMER_STEPS = 6; // alpha levels; a redraw is due only when the level changes
@@ -111,6 +113,7 @@ export class Renderer {
     });
     app.stage.eventMode = 'none';
     this.app = app;
+    this.software = isSoftwareGl(app.renderer.gl);
     this.world = new Container();
     app.stage.addChild(this.world);
   }
@@ -173,7 +176,9 @@ export class Renderer {
 
   resize(cssW, cssH, dpr) {
     if (!this.app) return;
-    this.app.renderer.resize(Math.max(1, Math.round(cssW)), Math.max(1, Math.round(cssH)), dpr);
+    // Without a GPU every pixel costs CPU time; at a phone's 3x density the page stops responding.
+    const res = this.software ? Math.min(dpr, SOFTWARE_MAX_DPR) : dpr;
+    this.app.renderer.resize(Math.max(1, Math.round(cssW)), Math.max(1, Math.round(cssH)), res);
   }
 
   /** Draw the map under the camera, outlining hex `selected` (-1 for none). `now` is render time in ms. */
