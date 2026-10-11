@@ -20,6 +20,8 @@ export const LIMITS = Object.freeze({
   desert: { min: 0, max: 1 },
   tundra: { min: 0, max: 1 },
   endTicks: { min: 10, max: 100000 },
+  civCount: { min: 1, max: 8 },
+  startPop: { min: 2, max: 200 },
   seedLength: 64,
 });
 
@@ -34,6 +36,9 @@ export const DEFAULT_PARAMS = Object.freeze({
   forest: 0.3,
   desert: 0.15,
   tundra: 0.15,
+  // Game settings: civilisations placed at the start and people in each.
+  civCount: 3,
+  startPop: 20,
   endCondition: 'none',
   endTicks: 1000,
 });
@@ -41,13 +46,17 @@ export const DEFAULT_PARAMS = Object.freeze({
 export const PRESETS = {
   default: { label: 'Small world', params: {} },
   continent: { label: 'Continent', params: {
-    seed: 'continent', size: 30, water: 0.2, mountains: 0.12, rivers: 6, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15 } },
+    seed: 'continent', size: 30, water: 0.2, mountains: 0.12, rivers: 6, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
+    civCount: 4, startPop: 30 } },
   archipelago: { label: 'Archipelago', params: {
-    seed: 'islands', size: 30, water: 0.6, mountains: 0.08, rivers: 2, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15 } },
+    seed: 'islands', size: 30, water: 0.6, mountains: 0.08, rivers: 2, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
+    civCount: 5, startPop: 20 } },
   highlands: { label: 'Highlands', params: {
-    seed: 'peaks', size: 20, water: 0.15, mountains: 0.3, rivers: 5, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15 } },
+    seed: 'peaks', size: 20, water: 0.15, mountains: 0.3, rivers: 5, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
+    civCount: 3, startPop: 20 } },
   large: { label: 'Large world', params: {
-    seed: 'vast', size: 50, water: 0.3, mountains: 0.12, rivers: 12, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15 } },
+    seed: 'vast', size: 50, water: 0.3, mountains: 0.12, rivers: 12, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
+    civCount: 6, startPop: 40 } },
 };
 
 export function presetParams(key) {
@@ -71,6 +80,8 @@ export function normalizeParams(input = {}) {
   p.mountains = Math.round(range(input.mountains, 'mountains', d.mountains) * 100) / 100;
   p.rivers = Math.round(range(input.rivers, 'rivers', d.rivers));
   for (const k of LOWLAND_KEYS) p[k] = Math.round(range(input[k], k, d[k]) * 100) / 100;
+  p.civCount = Math.round(range(input.civCount, 'civCount', d.civCount));
+  p.startPop = Math.round(range(input.startPop, 'startPop', d.startPop));
   p.endCondition = END_CONDITIONS.includes(input.endCondition) ? input.endCondition : d.endCondition;
   p.endTicks = Math.round(range(input.endTicks, 'endTicks', d.endTicks));
   return p;
@@ -82,7 +93,7 @@ export function mapParams(params) {
   return Object.fromEntries(MAP_KEYS.map((k) => [k, p[k]]));
 }
 
-/** Random but sensible map. Uses Math.random (UI only); the sim itself stays seeded. */
+/** Random but sensible map and civs. Uses Math.random (UI only); the sim itself stays seeded. */
 export function randomParams(random = Math.random) {
   const size = 10 + Math.floor(random() * 41);
   return normalizeParams({
@@ -95,6 +106,8 @@ export function randomParams(random = Math.random) {
     forest: 0.1 + random() * 0.4,
     desert: random() * 0.3,
     tundra: random() * 0.3,
+    civCount: 2 + Math.floor(random() * 5),
+    startPop: 10 + Math.floor(random() * 41),
     endCondition: 'none',
   });
 }
