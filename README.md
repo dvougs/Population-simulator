@@ -11,7 +11,10 @@ A browser game where civilisations grow, age, starve and spread across a generat
 - Drawn with PixiJS, with a gentle tide on the sea, lakes and rivers (static if your device asks for reduced motion): drag to pan, pinch or wheel to zoom, fit to screen, tap a hex to inspect it.
 - Pause, single step and speeds from 1× to Max, and an optional year limit.
 - Civilisations of individual people: choose how many civs and how many people each on the setup screen. Every year people age, eat from their hex, have children, grow old, starve when food runs short, and migrate from hungry or crowded hexes towards spare food within a year's walk. Food regrows each year.
-- A live population count and hexes held per civ, and the people per civ in a tapped hex. People are not drawn on the map yet, and traits, civ types, contact and levels come later (see [project/ROADMAP.md](project/ROADMAP.md)).
+- Each civ has its own colour and shape emblem. Zoomed out, every hex with people shows its largest civ's emblem and a head count; zoom in and each person appears as a tiny emblem that glides to a new hex when they migrate. Migrants prefer hexes their own civ already holds.
+- A live population count and hexes held per civ, a tapped hex lists its people, and tapping a person shows their age, health, hunger, civ, parent and living children.
+- Hexes are shaded by height, so ridges, valleys and deep water show on the map.
+- Traits, civ types, contact and fighting, materials, levels and the end screen are next (version 1.0, see [project/ROADMAP.md](project/ROADMAP.md)).
 - Add to Home Screen for a full-screen app.
 
 ## Run it locally
