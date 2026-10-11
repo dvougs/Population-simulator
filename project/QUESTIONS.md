@@ -12,7 +12,7 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
   2. Same as 1 but narrower effects (fertility 4% to 6%, old age 40 to 50): civs differ less, drift matters less.
   3. Same as 1 but no type starting values: every civ starts at 0.5 and only terrain and mutation make them differ.
 - Recommendation: 1, it keeps today's balance at 0.5, gives each type a visible starting identity, and the director tunes the numbers from headless runs (asking you before moving any by more than half).
-- Answer:
+- Answer: add your own numbers so to be realistic and balanced and then initialize a new, one-time agent to review the proposed agents and balance them out. only after teh new agent balances out the numbers, create the task for the dev. (reading: the director picks realistic, balanced trait numbers itself, using option 1's shape as a starting point. A separate one-time reviewer agent ("review the proposed agents" read as "review the proposed numbers") then checks and rebalances them, for example with headless runs. Only after that review does the director create the game-dev task. The final numbers go into RULES.md with the change.)
 
 ### Q-007: How do Cooperative and Nomadic behave, which types always fight, and how does a fight work?
 - Date: 2026-10-11
