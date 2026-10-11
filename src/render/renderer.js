@@ -9,6 +9,15 @@
 // a second at most, and only when the alpha has visibly moved), and any other
 // redraw (panning, a tick) already carries the new alpha, so the shimmer adds
 // almost no frame cost even in a software-rendered browser.
+//
+// People: a new population snapshot (after ticks ran) does not force a redraw
+// of its own. Every redraw re-rasterises the whole map, which in a software
+// renderer at a phone's pixel ratio costs about 100 ms, so redrawing on every
+// tick frame starved the page at 20x. A changed snapshot only marks the
+// people dirty and is drawn on the shimmer's throttled clock: together they
+// cause at most one redraw per PEOPLE_FRAME_MS, no more than the shimmer alone
+// was allowed. Any other redraw (pan, tap) shows the latest counts at once.
+// Only gliding people (zoomed in) redraw every frame, so glides stay smooth.
 
 import { Application, Container, Graphics } from '../../vendor/pixi.mjs';
 import { hexPolygon, riverSegments, HEX_SIZE } from './layout.js';
@@ -20,6 +29,7 @@ const SHIMMER_PERIOD_MS = 8000; // one full swell: slow, like a tide
 const SHIMMER_ALPHA = 0.1; // peak white over the water: gentle
 const SHIMMER_STEPS = 6; // alpha levels; a redraw is due only when the level changes
 const SHIMMER_FRAME_MS = 400; // shimmer-only redraws at most 2.5 a second (about 1.5 on average)
+const PEOPLE_FRAME_MS = SHIMMER_FRAME_MS; // redraws for new head counts alone share the shimmer's budget
 
 export class Renderer {
   constructor(canvas) {
@@ -32,6 +42,8 @@ export class Renderer {
     this.shimmer = null;
     this.shimmerLevel = -1;
     this.lastShimmer = -Infinity;
+    this.lastDraw = -Infinity;
+    this.peopleDirty = false;
     this.motionChanged = false;
     this.reducedMotion = false;
     if (typeof window !== 'undefined' && window.matchMedia) {
@@ -51,6 +63,7 @@ export class Renderer {
     if (!this.map) return false;
     if (this.motionChanged) return true;
     if (this.people?.animating(now)) return true;
+    if (this.peopleDirty && now - this.lastDraw >= PEOPLE_FRAME_MS) return true;
     if (!this.animating || now - this.lastShimmer < SHIMMER_FRAME_MS) return false;
     return shimmerLevel(now) !== this.shimmerLevel;
   }
@@ -109,7 +122,7 @@ export class Renderer {
 
   /** New population snapshot from SimHost.population(); `now` is render time in ms. */
   setPopulation(data, now = performance.now()) {
-    if (this.people && data) this.people.setPopulation(data, now);
+    if (this.people && data) { this.people.setPopulation(data, now); this.peopleDirty = true; }
   }
 
   /** Ring the person (slot, id) on the map while people are drawn; slot -1 for none. */
@@ -135,6 +148,8 @@ export class Renderer {
   /** Draw the map under the camera, outlining hex `selected` (-1 for none). `now` is render time in ms. */
   draw(camera, selected = -1, now = performance.now()) {
     if (!this.app || !this.map) return;
+    this.lastDraw = now;
+    this.peopleDirty = false;
     this.updateShimmer(now);
     if (selected !== this.selected) {
       this.selected = selected;

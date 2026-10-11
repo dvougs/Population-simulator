@@ -39,7 +39,8 @@ let shownEnd = false;
 const loop = new Loop({
   tick: (n) => host.tick(n),
   frame: (ran, now) => {
-    if (ran > 0) { renderer.setPopulation(host.population(), now); dirty = true; }
+    // New head counts are drawn on the renderer's throttled clock, not every tick frame.
+    if (ran > 0) renderer.setPopulation(host.population(), now);
     // The water shimmer keeps redrawing on its own clock; the sim never sees it.
     if (dirty || (!ui.game.hidden && renderer.needsFrame(now))) { renderer.draw(camera, outlinedHex(), now); dirty = false; }
     if (ran > 0 && now - lastPanelUpdate > 100) { updatePanels(); lastPanelUpdate = now; }

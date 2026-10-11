@@ -131,7 +131,7 @@ Each civ has a colour and a shape emblem, chosen by civ number, so civs can be t
 | Civ 7 | white (245, 245, 245) | upside-down triangle |
 | Civ 8 | violet (150, 100, 255) | ring |
 
-- **Zoomed out**, each land hex with people shows the emblem of its largest civ (on a tie, the lower civ number) in that civ's colour, and below it the total people in the hex (all civs). Counts of 1000 or more are shortened: 1.2k (one decimal, rounded down) under 10000, then 46k, then 2M.
+- **Zoomed out**, each land hex with people shows the emblem of its largest civ (on a tie, the lower civ number) in that civ's colour, and below it the total people in the hex (all civs). Counts of 1000 or more are shortened: 1.2k (one decimal, rounded down) under 10000, then 46k, then 2M. While the game runs, the labels show the latest year and refresh at most 2.5 times a second (every 0.4 seconds), so a fast game does not redraw the whole map every frame; panning, zooming or tapping shows the latest counts at once.
 - **Zoomed in**, once a hex is at least 200 pixels across on screen (corner to corner), the hex labels give way to the people themselves: each person is a tiny emblem in their civ's colour, at a fixed spot inside their hex (picked from their id, within 60% of the hex size from its centre).
 - A person who migrates glides from where they were drawn to their spot in the new hex over 0.6 seconds. This is drawing only: in the game they move at once, as "Migration" says.
 - **Tap a hex** to see its terrain, food and its people per civ with each civ's emblem. *List people* opens the list of the people in the hex, lowest id first (the first 100, then how many more); tap a row to open that person.

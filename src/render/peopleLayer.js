@@ -86,6 +86,24 @@ export function shortCount(n) {
   return `${Math.min(999, Math.round(n / 1e6))}M`;
 }
 
+/** People in hex h, all civs, from a population snapshot's hexCivPop (civs entries per hex). */
+export function hexTotal(hexCivPop, civs, h) {
+  let total = 0;
+  for (let c = 0; c < civs; c++) total += hexCivPop[h * civs + c];
+  return total;
+}
+
+/** Civ whose emblem labels hex h: the one with most people there, the lower civ number on a tie; -1 if empty. */
+export function largestCiv(hexCivPop, civs, h) {
+  let best = -1;
+  let most = 0;
+  for (let c = 0; c < civs; c++) {
+    const k = hexCivPop[h * civs + c];
+    if (k > most) { most = k; best = c; }
+  }
+  return best;
+}
+
 /** Stable spot for a person inside their hex, from their id (uniform over a disc). */
 function hash32(id) {
   let x = Math.imul(id ^ 0x9e3779b9, 0x85ebca6b);
@@ -226,13 +244,7 @@ export class PeopleLayer {
     const civs = d.civs;
     const n = this.hexX.length;
     for (let h = 0; h < n; h++) {
-      let total = 0;
-      let best = 0;
-      for (let c = 0; c < civs; c++) {
-        const k = d.hexCivPop[h * civs + c];
-        total += k;
-        if (k > d.hexCivPop[h * civs + best]) best = c; // ties keep the lower civ index
-      }
+      const total = hexTotal(d.hexCivPop, civs, h);
       let lab = this.hexLabels[h];
       if (total === 0) {
         if (lab && lab.box.visible) { lab.box.visible = false; lab.total = 0; }
@@ -240,6 +252,7 @@ export class PeopleLayer {
       }
       lab ??= this.makeLabel(h);
       lab.box.visible = true;
+      const best = largestCiv(d.hexCivPop, civs, h);
       if (lab.civ !== best) {
         lab.civ = best;
         lab.emblem.texture = this.atlas.emblems[civStyle(best).emblem];
