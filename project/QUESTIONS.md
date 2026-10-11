@@ -32,7 +32,7 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
   2. Same effects as 1, but yields twice as high (faster levels, about 900 years to Kingdom instead of 1,750+).
   3. Same yields as 1, but smaller level effects (+10% food, birth +0.25 points): levels matter less, populations stay closer together.
 - Recommendation: 1, it keeps your 1,750-year fastest path to Kingdom realistic on a 10 × 10 map, and the director checks it with headless runs before release.
-- Answer:
+- Answer: agreed. (reading: option 1, as recommended)
 
 ## Proposals
 
