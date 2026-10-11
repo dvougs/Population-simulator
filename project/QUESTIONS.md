@@ -4,9 +4,53 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
 
 ## Open
 
+### Q-009: Should a civ keep gathering when a few of its people go hungry?
+- Date: 2026-10-11
+- Why it matters: Levels need materials, and a civ gathers only while its food is "secure" (Q-008 option 1: nobody in the civ went hungry last year). Once a civ fills its land, someone in it goes hungry almost every year, so it stops gathering for good. In headless runs no civ got past L3, so Kingdom and the First to Kingdom ending are out of reach.
+- Evidence: seeds review-20261011f-1 to -3 at b52df73, default setup, 400 years: the largest civ on each seed (1,570, 1,035 and 956 people) is "food not secure" at year 400. On seed review-20261011e-1 over 3,000 years, Civ 1 reached L3 in year 477 and stayed there for 2,500 years with about 1,770 people, unable to gather the copper it needed.
+- Options:
+  1. Secure when at most 5% of the civ's people went hungry last year (the 1.2 food per person rule stays): big civs keep gathering, and levels 4 and 5 become reachable. The director checks with headless runs that Kingdom takes about 1,750 years or more.
+  2. Judge each hex instead of the whole civ: a hex where nobody went hungry last year may send its 20% to gather. Crowded hexes stop, the rest of the civ carries on.
+  3. Keep the rule as it is: levels 4 and 5 stay very rare.
+- Recommendation: 1. It is the smallest change, keeps "food first" in spirit, and makes your 1.0 level ladder reachable.
+- Priority: P1 (suggested; stands unless the owner changes it)
+- Answer:
+
+### Q-010: The hunger and crowding fight triggers almost never fire. Change them?
+- Date: 2026-10-11
+- Why it matters: The rules (and How to play) say civs fight when a shared hex is short of food or crowded, but the one-time fight certifier found these two triggers start almost no fights. Fights come from Aggressive civs, revenge and 3-to-1 numbers instead, so "scarcity leads to fights" from your design is mostly not happening.
+- Evidence: certifier runs at b52df73, default setup: of 23,349 shared hex-years, the hex was short of food in 1,606 (7%) and at capacity in 35 (0.15%). Of 12,506 fights, about 23 came from hunger alone and about 10 from crowding. The check runs after food regrows (src/sim/contact.js), when hexes look full of food. Someone in the hex had gone hungry that year in 39% of shared hex-years.
+- Options:
+  1. Hunger trigger fires when someone in the hex went hungry this year (instead of food below need after regrowth); crowding when the hex holds at least 80% of its food capacity. Scarcity becomes a real cause of war; more fights overall, which the director checks for extinctions with headless runs.
+  2. Only the hunger change from option 1; crowding stays as it is.
+  3. Keep them as they are and reword RULES.md and How to play to say these triggers are rare.
+- Recommendation: 1. It matches your design ("scarcity plus aggressive people leads to fights") and the director re-runs the certifier's seed sets before release.
+- Priority: P2 (suggested; stands unless the owner changes it)
+- Answer:
+
 ## Proposals
 
 Ideas the director draws from headless simulation runs and the code. At most 6 wait here at a time.
+
+### P-010: Show fights on the map
+- Date: 2026-10-11
+- Category: visuals
+- What: Fights now happen hundreds of times a game, but the map shows none of them; you only see a hex's numbers change. When a hex has a fight, flash it briefly in the winner's colour with a small crossed-swords mark for about a second (on the yearly clock), and draw a short arrow from the hex to where the losers fled. Zoomed in, the people who died fade out.
+- Evidence: seeds review-20261011f-1 to -3 at b52df73, default setup, 400 years: 529, 721 and 773 fights, and 1,107, 1,397 and 1,342 war deaths. Nothing under src/render reads fights (`grep fight src/render` finds nothing); fights show only in the hex card, the sheet and the end screen.
+- Effort: S
+- Phone performance risk: low: one small overlay redrawn once a year from the per-hex fight winner the sim already keeps (`sim.fightWinner`). No per-person work.
+- Priority: P2 (suggested; stands unless the owner changes it)
+- Decision:
+
+### P-011: Group fights into wars in the history log
+- Date: 2026-10-11
+- Category: UI
+- What: The end screen's history log is now almost all single fights, so first contacts, milestones, famines and extinctions get lost in it. Group the fights between two civs into one "war" line: from the first year to the last (a war ends after 10 years without a fight between them), with fights, wins on each side and war deaths. Single fights stay in the hex card and the stats.
+- Evidence: seeds review-20261011f-1 to -3 at b52df73, 400 years: fights are 529 of 544, 721 of 734 and 773 of 785 history events. The log keeps at most 2,048 events (src/sim/records.js), so long games fill it with fights within a few hundred years, and later famines and fights are then dropped.
+- Effort: S
+- Phone performance risk: low: one open war per pair of civs, updated once a year; a shorter log to draw.
+- Priority: P2 (suggested; stands unless the owner changes it)
+- Decision:
 
 ## Requests
 

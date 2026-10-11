@@ -2,14 +2,34 @@
 
 ## Status
 
-- Phase: Phase 2 (people) live with people on the map, civ colours and emblems, the person card, height shading and the own-civ migration pull (PR #15). End conditions, the end screen, civ tint, territory outlines, shared-hex rings and tap-to-zoom with idling people are in a release candidate (T-026, T-027, T-031, T-033, T-034). Version 1.0 scope (Q-003): civ types, 8 traits with mutation, contact and fighting, materials and levels 1 to 5, end conditions, end screen and home page.
-- Last full cycle: 2026-10-11 10:06 UTC
-- Live on GitHub Pages: Phase 1 with its follow-ups and Phase 2 people, life cycle, migration, stats, people on the map and height shading (PRs #10, #13, #14, #15). https://dvougs.github.io/Population-simulator/
-- Open release candidate: #16 "Release candidate: end conditions, end screen, civ territory on the map, tap to zoom" https://github.com/dvougs/Population-simulator/pull/16
-- Ready next: T-021 (traits, with the reviewed Q-006 numbers), T-024 (material deposits), then T-022, T-023, T-025 in order; T-028 (home page), T-032 (desktop report column, R-008), T-037 (nothing saved between sessions), with tests T-030 and T-036.
-- Blockers: none. Proposals P-008 (end-screen history log, UI) and P-009 (people drawn by age and hunger, animation) are undecided.
+- Phase: version 1.0 nearly complete. Live: Phase 2 people, end conditions, end screen, civ territory and tap-to-zoom (PRs #15, #16). In the release candidate (cycle 2026-10-11 14:07): home page and How to play, 8 traits with mutation, 5 civ types on the setup screen, contact and fighting (certified), material deposits, gathering and levels 1 to 5 with First to Kingdom, level and material panels, a fuller history log, nothing saved between sessions.
+- Last full cycle: 2026-10-11 14:07 UTC
+- Live on GitHub Pages: Phase 1 and its follow-ups, Phase 2 people, end conditions and end screen, civ tint and territory outlines, tap to zoom (PRs #10, #13 to #16). https://dvougs.github.io/Population-simulator/
+- Open release candidate: "Release candidate: home page, traits, civ types, fighting, materials and levels" from claude/cycle-20261011-1407 (see the cycle log for the number).
+- Ready next: T-032 (desktop live report column, P2), T-040 (people drawn by age and hunger, P3, after the 1.0 features).
+- Blockers: none. Waiting on the owner: Q-009 (levels stall because big civs never count as food-secure, P1), Q-010 (hunger and crowding fight triggers almost never fire, P2), P-010 (show fights on the map), P-011 (group fights into wars in the history log).
 
 ## Cycle log
+
+### 2026-10-11 14:07: home page, traits, civ types, fighting, materials and levels
+
+- Owner input: P-008 yes (P2), P-009 yes with low priority (P3); requests R-012 (fighting with wider triggers and a one-time certifier), R-013 (show levels and materials), R-014 (home page in the next build, in full), R-015 (civ type explanations on setup) and R-016 (traits, fighting, materials and gathering are P1). TASKS.md got a Priority column (older tasks P2). T-021 to T-025, T-028, T-030 and T-036 became P1; T-022 took R-015, T-023 took R-012's five triggers and the certifier step, T-028 took R-014. New tasks: T-038 and T-039 (P-008), T-040 (P-009), T-041 (R-013).
+- Merged since last cycle: #16 (T-026, T-027, T-029, T-031, T-033, T-034, T-035 done) and #17 (studio: priorities and priority-based builds).
+- Batch: every ready P1 (T-021, T-022, T-023, T-024, T-025, T-028, T-030, T-036) plus P2 tasks sharing their context (T-037 setup screen, T-038 and T-039 history log with fights, T-041 levels UI). Left for later: T-032 (P2, separate layout), T-040 (P3).
+- Built on claude/cycle-20261011-1407 in four game-dev runs:
+  - T-037 nothing saved; T-024 deposits (re-roll until every exotic is present where the land can hold it); T-021 traits with the reviewed Q-006 numbers (year-400 population 1,467, 1,453 and 1,543 on seeds review-20261011e-1 to -3).
+  - T-022 civ types (default setup Expansionist, Aggressive, Cooperative) and T-023 contact with the five triggers, civ switching and war deaths.
+  - T-025 gathering, stockpiles, levels 1 to 5 and First to Kingdom; T-041 levels panel, level guide, hex card gathering row and end-screen level chart; T-038 history events (first contact, milestones, peaks, most hexes; famine threshold 2% to 1%).
+  - T-028 home page with a living world, and an 11-section How to play illustrated by the game's own drawings, with every number read from the sim modules.
+- R-012 certifier (one-time general-purpose agent): REJECTED the first fight rules. The Aggressive civ was wiped out by its own rule (36 of 40 extinct by year 1000) because the winner's 5% loss rounded half up, and losers fled into the winner's hexes. Fix: winner losses round down, losers flee to a neighbour without the winner. The game-dev run applying it was cut off by the session usage limit; the director committed its finished edits unchanged (b52df73), which reproduced the certifier's target hashes exactly. Re-verified: APPROVED. War is about 30% of deaths, every run has fights, and extinctions at year 1000 dropped from 71 to 24 of 120 civs on 40 seeds. Not blocking: the hunger and crowding triggers almost never fire (asked as Q-010); the 2,048-event log fills with fights (P-011).
+- Tested by unit-tester (T-030, T-036, T-039): 393 unit tests pass (13 stale tests rewritten for the intended rule changes, new files for traits, deposits, civ types, contact, levels and UI helpers); no bugs. The e2e spec was updated for the home page (it opens `/#new`), the deposits and gathering rows and level-raised food capacity; 72 Playwright runs passed locally, with one desktop preview-hash flake that passed on every rerun (seen last cycle too).
+- Ownership check: game-dev commits touch no tests/, unit-tester commits only tests/. Docs pass: README (1.0 in progress, deposits, First to Kingdom, nothing saved) and CLAUDE.md layout (home, How to play, levels).
+- `npm run perf`: 169 ticks/s against the CI floor of 150 (it was about 468 before this cycle; more people and the per-person trait, contact and level work).
+- Design review on claude/cycle-20261011-1407 at b52df73, seeds review-20261011f-1 to -3, default setup, 400 years:
+  - Population at year 400: 1,679 (Expansionist 1,570, Aggressive 50, Cooperative 59), 1,468 (1,035, 433, Cooperative extinct in 396 by war) and 1,330 (142, 232, 956).
+  - War deaths 1,107, 1,397 and 1,342; fights 529, 721 and 773 (fights are 97% to 98% of history events).
+  - Levels: every civ that reached L2 did so between years 150 and 294; none reached L3 by year 400 (L3 needs 300 years at L2). The largest civ on each seed is "food not secure" at year 400; a 3,000-year run stalled at L3 for 2,500 years.
+  - Questions: Q-009 (food security rule, P1), Q-010 (fight triggers, P2). Proposals: P-010 (show fights on the map, visuals) and P-011 (group fights into wars, UI).
 
 ### 2026-10-11 10:06: end conditions and end screen, civ territory on the map, tap to zoom
 
