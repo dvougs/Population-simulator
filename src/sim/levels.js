@@ -77,6 +77,8 @@ export const LEVEL_EFFECTS = Object.freeze({
   /** At level 5: every hex + this share of food capacity, and old age starts this many years later. */
   kingdomBonus: 0.25,
   oldAgeDelay: 5,
+  /** The top level, Kingdom (the same as MAX_LEVEL). */
+  kingdomLevel: 5,
   /** A Kingdom's strength in a fight against a civ that is not a Kingdom is multiplied by this. */
   kingdomStrength: 5,
   /** A civ below its level's minimum population this many years in a row drops one level. */
@@ -207,6 +209,19 @@ export class Levels {
       this.shelter[c] = L >= e.shelterLevel ? e.shelterFactor : 1;
       this.oldAgeDelay[c] = L >= MAX_LEVEL ? e.oldAgeDelay : 0;
       this.boats[c] = L >= e.boatLevel ? 1 : 0;
+    }
+  }
+
+  /** Fills out[c] with the materials civ c's next level still needs (bitmask; 0 for a Kingdom). */
+  wanted(out) {
+    for (let c = 0; c < this.civs; c++) {
+      const L = this.level[c];
+      let mask = 0;
+      if (L < MAX_LEVEL) {
+        const b = (c * 6 + L) * MATERIAL_COUNT;
+        for (let m = 0; m < MATERIAL_COUNT; m++) if (this.stock[c * MATERIAL_COUNT + m] < this.needMat[b + m]) mask |= 1 << m;
+      }
+      out[c] = mask;
     }
   }
 

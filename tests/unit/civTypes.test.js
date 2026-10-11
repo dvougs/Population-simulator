@@ -51,14 +51,14 @@ test('RULES.md "Migration" by civ type: the per-civ migration table', () => {
   assert.equal(MIGRATION.crowdedChance, 0.2);
   const map = makeMap(10, 10, () => PLAINS);
   const rules = migrationRules(CIV_TYPES.concat('nonsense'), map, buildReach(map));
-  //                          hungry  fed+crowded  crowded above  movement points
+  //                          hungry  fed+crowded  crowded above  movement points (0: one hex a year)
   const want = {
-    expansionist: [0.5, 0.2, 0.5, 3],
-    aggressive: [0.5, 0.2, 0.8, 3],
-    cooperative: [0.5, 0.2, 0.8, 3],
-    isolationist: [0.5, 0, 0.8, 3],
+    expansionist: [0.5, 0.2, 0.5, 0],
+    aggressive: [0.5, 0.2, 0.8, 0],
+    cooperative: [0.5, 0.2, 0.8, 0],
+    isolationist: [0.5, 0, 0.8, 0],
     nomadic: [1, 0.4, 0.8, 5],
-    nonsense: [0.5, 0.2, 0.8, 3],
+    nonsense: [0.5, 0.2, 0.8, 0],
   };
   CIV_TYPES.concat('nonsense').forEach((t, c) => {
     assert.deepEqual([rules.hungryChance[c], rules.crowdedChance[c], rules.crowdedShare[c], rules.movePoints[c]], want[t], t);
@@ -111,7 +111,7 @@ test('RULES.md "Migration" by type: crowded means above 80% of capacity, above 5
   near(moveShare('expansionist', 49), 0.2, 0.035);
 });
 
-test('RULES.md "Migration" by type: Nomadic people have 5 movement points, the others 3', () => {
+test('RULES.md "Migration" by type: Nomadic people have 5 movement points, the others move one hex', () => {
   const far = (type) => {
     const w = crowd(type, 49, { hunger: 1 });
     // Make every hex far from the crowd attractive and the near ones not: only distant hexes have spare food.
@@ -124,22 +124,23 @@ test('RULES.md "Migration" by type: Nomadic people have 5 movement points, the o
     }
     return max;
   };
-  assert.equal(far('aggressive'), 0, 'no hex within 3 steps has spare food, so nobody can move');
+  assert.equal(far('aggressive'), 0, 'no neighbour has spare food, so nobody can move');
   assert.ok(far('nomadic') >= 4 && far('nomadic') <= 5, 'a Nomadic person reaches hexes 4 and 5 steps away');
   const map = makeMap(10, 10, () => PLAINS);
   const rules = migrationRules(['aggressive', 'nomadic'], map, buildReach(map));
   const count = (c) => rules.reach[c].offsets[C + 1] - rules.reach[c].offsets[C];
   const within = (r) => { let n = 0; for (let h = 0; h < 100; h++) if (h !== C && dist(C, h) <= r) n++; return n; };
-  assert.equal(count(0), within(3), 'usual: every plains hex within 3 steps');
+  assert.equal(count(0), 6, 'usual: the six neighbours');
+  assert.deepEqual([...rules.reach[0].targets.slice(rules.reach[0].offsets[C], rules.reach[0].offsets[C + 1])],
+    [...map.neighbours.slice(C * 6, C * 6 + 6)].sort((a, b) => a - b));
   assert.equal(count(1), within(5), 'Nomadic: every plains hex within 5 steps');
-  assert.equal(within(3), 36);
 });
 
 test('a Simulation builds its migration and contact rules from params.civTypes', () => {
   const types = ['nomadic', 'isolationist', 'expansionist', 'aggressive'];
   const sim = new Simulation({ seed: 'types', civCount: 4, civTypes: types });
   assert.deepEqual(sim.civTypes, types);
-  assert.deepEqual([...sim.migrationRules.movePoints], [5, 3, 3, 3]);
+  assert.deepEqual([...sim.migrationRules.movePoints], [5, 0, 0, 0]);
   assert.deepEqual([...sim.migrationRules.crowdedChance], [0.4, 0, 0.2, 0.2]);
   assert.deepEqual(sim.stats().civs.map((c) => c.type), types);
   assert.deepEqual(sim.stats().civs.map((c) => c.typeName), ['Nomadic', 'Isolationist', 'Expansionist', 'Aggressive']);

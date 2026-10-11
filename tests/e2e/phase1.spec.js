@@ -270,7 +270,7 @@ test.describe('map generation screen', () => {
     await expect(page.locator('#m-rivers')).toHaveValue('2');
     expect(await previewParams(page)).toEqual(PRESETS.default);
     // RULES.md ranges.
-    for (const [id, min, max] of [['m-size', 10, 50], ['m-water', 0, 70], ['m-mountains', 0, 40], ['m-rivers', 0, 20]]) {
+    for (const [id, min, max] of [['m-size', 10, 100], ['m-water', 0, 70], ['m-mountains', 0, 40], ['m-rivers', 0, 20]]) {
       await expect(page.locator(`#${id}`)).toHaveAttribute('min', String(min));
       await expect(page.locator(`#${id}`)).toHaveAttribute('max', String(max));
     }

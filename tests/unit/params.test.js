@@ -14,7 +14,7 @@ test('defaults match RULES.md "Map settings" and "Game settings"', () => {
   assert.deepEqual({ ...DEFAULT_PARAMS }, {
     seed: 'pangaea', size: 10, water: 0.25, mountains: 0.12, rivers: 2,
     plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15, civCount: 3, civTypes: ['expansionist', 'aggressive', 'cooperative'], startPop: 20, mutation: 0.03,
-    endConditions: [], endTicks: 2500, dominanceShare: 0.6, dominanceYears: 300,
+    endConditions: [], endTicks: 2500, dominanceShare: 0.6, dominanceYears: 300, starts: [],
   });
   assert.deepEqual(normalizeParams(), { ...DEFAULT_PARAMS });
   assert.deepEqual(normalizeParams({}), { ...DEFAULT_PARAMS });
@@ -22,7 +22,7 @@ test('defaults match RULES.md "Map settings" and "Game settings"', () => {
 });
 
 test('ranges match RULES.md', () => {
-  assert.deepEqual(LIMITS.size, { min: 10, max: 50 });
+  assert.deepEqual(LIMITS.size, { min: 10, max: 100 });
   assert.deepEqual(LIMITS.water, { min: 0, max: 0.7 });
   assert.deepEqual(LIMITS.mountains, { min: 0, max: 0.4 });
   assert.deepEqual(LIMITS.rivers, { min: 0, max: 20 });
@@ -39,14 +39,16 @@ test('ranges match RULES.md', () => {
   assert.deepEqual(LOWLAND_KEYS, ['plains', 'forest', 'desert', 'tundra']);
 });
 
-test('size: 10 to 50, clamped on both sides, rounded to whole hexes', () => {
+test('size: 10 to 100, clamped on both sides, rounded to whole hexes', () => {
   const s = (v) => normalizeParams({ size: v }).size;
   assert.equal(s(9), 10);
   assert.equal(s(10), 10);
   assert.equal(s(11), 11);
   assert.equal(s(49), 49);
   assert.equal(s(50), 50);
-  assert.equal(s(51), 50);
+  assert.equal(s(51), 51);
+  assert.equal(s(100), 100);
+  assert.equal(s(101), 100);
   assert.equal(s(-100), 10);
   assert.equal(s(24.6), 25);
   assert.equal(s('30'), 30);
@@ -322,4 +324,17 @@ test('RULES.md "Game settings": every preset has its civs, types, people and mut
     assert.equal(p.startPop, pop, k);
     assert.equal(p.mutation, 0.03, k);
   }
+});
+
+test('RULES.md "Starting positions": one entry per civ, a hex of the map or -1; none chosen is stored as []', () => {
+  const st = (starts, civCount = 3, size = 10) => normalizeParams({ starts, civCount, size }).starts;
+  assert.deepEqual(st(undefined), []);
+  assert.deepEqual(st([-1, -1, -1]), []);
+  assert.deepEqual(st([5, -1, 99]), [5, -1, 99]);
+  assert.deepEqual(st([5]), [5, -1, -1], 'padded to the civ count');
+  assert.deepEqual(st([5, 6, 7, 8]), [5, 6, 7], 'cut to the civ count');
+  assert.deepEqual(st([100, 2.5, 'x', null, -3], 5), [], 'off the map or not whole numbers: automatic');
+  assert.deepEqual(st([100], 1, 11), [100], 'hex 100 is on an 11 x 11 map');
+  assert.deepEqual(st(['7', 3]), [7, 3, -1], 'numbers as text are read');
+  assert.deepEqual(st('nonsense'), []);
 });

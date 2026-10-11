@@ -48,12 +48,12 @@ test('How to play text: has the sections in the RULES.md order and every number 
   assert.deepEqual(t.sections.map((s) => s.id), ['map', 'people', 'year', 'migration', 'civs', 'traits', 'types', 'contact', 'levels', 'end', 'controls']);
   const text = all();
   for (const must of [
-    'from 10 × 10 up to 50 × 50', 'regrows 50%', '+30 food',
+    'from 10 × 10 up to 100 × 100', 'regrows 50%', '+30 food',
     'costs 1 movement point', 'desert or tundra 1.5', 'forest or hills 2', 'mountain 3', '+25% in forest, +50% in hills and +100% in mountain',
     'health from 0 to 100', 'they gain 25 health', 'they lose about 35', 'Between 16 and 40', 'about a 5% chance', 'From about 45', 'past about 85',
     '8 years every second', '2×, 5×, 20× or Max',
     'hungry sets out with a 50% chance', 'more people than 80% of its food', 'sets out with a 20% chance',
-    '3 movement points a year (a Nomadic one has 5)', 'counted twice',
+    'People move one hex a year', 'with 5 movement points a year', 'needs counts × 3', 'cannot beat, × 0.25', 'can beat, × 2', '+20% for each neighbouring hex', 'counted twice',
     '1 to 8 civilisations', '2 to 200 people (20 by default)', 'at least 3 steps',
     'up to ±3%', '0% to 10%',
     'above 0.5', 'above 0.4', '3 to 1', 'above 0.45', 'last 20 years', 'loses 20% of its people', 'the winner loses 5%, rounded down', 'about 1% a year',

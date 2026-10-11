@@ -203,12 +203,12 @@ test('host: endNow, keepWatching and report go through the host', () => {
   assert.equal(host.report().winnerName, null);
 });
 
-test('pinned state hash (re-pinned when traits, civ types, contact and levels shipped, and for Kingdom borders and land-based minimums; same run twice gives the same hash)', () => {
+test('pinned state hash (re-pinned when traits, civ types, contact and levels shipped, for Kingdom borders and land-based minimums, and for one-hex moves and expansion priorities; same run twice gives the same hash)', () => {
   const run = () => {
     const s = new Simulation({ seed: 'hashcheck', size: 15, civCount: 4 });
     s.tick(300);
     return [s.hash(), s.people.count];
   };
   assert.deepEqual(run(), run());
-  assert.deepEqual(run(), ['f131773f', 2468]);
+  assert.deepEqual(run(), ['dfe10d95', 2437]);
 });

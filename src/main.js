@@ -91,6 +91,8 @@ const mapgen = new MapgenScreen(
   },
 );
 const setup = new SetupScreen($('setup-form'), {
+  preview: (params) => host.preview(params),
+  starts: (params) => host.starts(params),
   onStart: (params) => startGame(params),
   onChangeMap: (params) => {
     mapgen.setParams(params, 'custom');

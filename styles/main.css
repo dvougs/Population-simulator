@@ -583,3 +583,10 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 6px 
 }
 
 @media (prefers-reduced-motion: reduce) { .sheet-body { transition: none; } }
+
+/* Starting positions on the setup screen: pick a civ, tap a hex. */
+.start-chips { flex-wrap: wrap; gap: 8px; }
+.btn.chip { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px; }
+.btn.chip[aria-pressed="true"] { border-color: var(--text); box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35) inset; }
+.start-frame { border-radius: 16px; overflow: hidden; border: 1px solid var(--line); }
+.start-map { display: block; width: 100%; aspect-ratio: 8 / 7; max-height: 50vh; background: #0b0e13; cursor: crosshair; }

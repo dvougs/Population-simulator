@@ -26,7 +26,7 @@ This describes the current build (Phase 2, in progress): a generated hex map whe
 
 ## The map
 
-- The map is a square of pointy-top hexes, size × size, default 10 × 10, any size from 10 to 50.
+- The map is a square of pointy-top hexes, size × size, default 10 × 10, any size from 10 to 100.
 - Rows are laid out with odd rows shifted half a hex to the right. Each hex touches up to 6 neighbours; hexes on the edge have fewer (none off the map). The map does not wrap.
 - The distance between two hexes is the number of steps from one to the other through neighbours.
 - The map depends only on the nine map settings (seed, size, water, mountains, rivers, plains, forest, desert, tundra): the same settings always give the same map.
@@ -111,7 +111,7 @@ Chance a hex holds a deposit (%); a terrain not listed is 0:
 ## Civilisations and people
 
 - The game starts with *civ count* civilisations (civs), named Civ 1, Civ 2 and so on, each with *starting population* people and a type (see "Civ types"). Each civ has its own colour and shape emblem (see "How civs and people look").
-- **Start hexes.** A good start hex is land with food capacity 40 or more (coast, plains, forest, and any river hex). The first civ starts on a random good hex. Each next civ starts on a random good hex at least 3 steps from every earlier start; if there is none, on the good hex farthest from the earlier starts (lowest index on ties). With no good hexes at all, any land hex counts as good. On very small land several civs can start on the same hex.
+- **Start hexes.** A civ whose starting position was chosen on the setup screen (see "Game settings") starts there, if that hex is land and no earlier civ was given the same hex; every other civ is placed automatically. A good start hex is land with food capacity 40 or more (coast, plains, forest, and any river hex). Automatic civs are placed in civ order, after the chosen ones: each starts on a random good hex at least 3 steps from every start so far (chosen ones included); if there is none, on the good hex farthest from them (lowest index on ties). With no good hexes at all, any land hex counts as good. On very small land several civs can start on the same hex.
 - All of a civ's founders start together on its start hex, each with a random age from 0 to 39, full health (100) and no hunger, no parent, and traits drawn as "Traits" says.
 - Every person has an age (years), health (0 to 100), hunger (years in a row without food), a hex, a civ, a parent (the person who bore them; none for founders) and 8 traits.
 - Several civs can live in the same hex. When they do, they may fight or people may switch civ (see "Contact").
@@ -186,10 +186,16 @@ Each year (tick) runs these steps in order. Within a step everyone decides first
 - A person who went hungry this year sets out with chance 50%.
 - A person who ate, in a crowded hex, sets out with chance 20%. A hex is crowded when it holds more people (all civs) than 80% of its food capacity.
 - **By civ type** (see "Civ types"): for Expansionist people a hex is already crowded above 50% of its food capacity; Isolationist people who ate never set out; Nomadic people set out at twice the chance (100% hungry, 40% fed in a crowded hex) and have 5 movement points. Aggressive and Cooperative people use the usual numbers.
-- **Reach.** A person has 3 movement points a year (Nomadic: 5). Entering a hex costs its movement cost (coast and plains 1, desert and tundra 1.5, forest and hills 2, mountain 3). The hexes in reach are the land hexes that can be reached along a path of land hexes costing no more than their movement points (3, or 5 for Nomadic) in total. Seas and lakes cannot be entered or crossed, except by boat.
-- **Boats** (civs at level 4 or higher): a path may also cross one sea or lake hex, which costs 1 movement point. Only one water hex in the whole path, and the path must end on land (a person never stops on water). Any water hex counts, a lake or the sea, the ocean ring at the map's edge included; since the map does not wrap, crossing a ring hex only leads to land that also touches it. So a lake or strait one hex wide can be crossed, but not two water hexes in a row.
+- **Reach.** People move one hex a year: the hexes in reach are the land hexes next to theirs, whatever the terrain. Nomadic people walk instead, with 5 movement points a year: entering a hex costs its movement cost (coast and plains 1, desert and tundra 1.5, forest and hills 2, mountain 3), and the hexes in reach are the land hexes that can be reached along a path of land hexes costing no more than 5 in total. Seas and lakes cannot be entered or crossed, except by boat.
+- **Boats** (civs at level 4 or higher): the land hexes next to a sea or lake hex that is next to theirs are in reach too (one water hex crossed). For Nomadic people a path may cross one sea or lake hex, which costs 1 movement point. Only one water hex in the whole path, and the path must end on land (a person never stops on water). Any water hex counts, a lake or the sea, the ocean ring at the map's edge included; since the map does not wrap, crossing a ring hex only leads to land that also touches it. So a lake or strait one hex wide can be crossed, but not two water hexes in a row.
 - **Spare food** of a hex = the food it will hold after this year's regrowth (food + 50% of capacity, at most the capacity) − the people in it now (after this year's births).
-- A person who sets out picks one hex in reach whose spare food is above 0 and above their own hex's spare food, at random, with chances in proportion to each hex's weight. A hex's weight is its spare food, counted twice (×2) if it already holds at least one person of the mover's own civ. With no such hex, they stay.
+- A person who sets out picks one hex in reach whose spare food is above 0 and above their own hex's spare food, at random, with chances in proportion to each hex's weight. With no such hex, they stay.
+- **Where civs expand.** A hex's weight is its spare food, multiplied by each of these that applies:
+  1. *Own people:* × 2 if it already holds at least one person of the mover's own civ.
+  2. *Materials:* × 3 if it holds a deposit of a material the civ's next level still needs (its stockpile is below what that level costs; a Kingdom needs none).
+  3. *Threats:* a civ is a threat to the mover's civ if it is Aggressive, if the mover's civ lost a fight to it in the last 20 years, or if it is a Kingdom and the mover's civ is not. The mover's civ beats a threat if it can start fights (it is not Cooperative) and it is Aggressive, or it is a Kingdom and the threat is not, or it has more people than the threat (at the start of the year), unless the threat is a Kingdom and it is not. A hex with people of a threat in it or next to it counts × 0.25 if any of those threats is one the civ does not beat, otherwise × 2 (it pushes towards threats it beats).
+  4. *Keeping land together:* × (1 + 0.2 × the land neighbours of the hex that hold people of the mover's civ), so from × 1 to × 2.2.
+  Who is where (and so the threats and neighbours) is counted when the migration step starts.
 - **Kingdoms are closed.** A hex enclosed by a Kingdom (see "What levels do") is never in reach for people of any other civ, Kingdoms included: other civs can only take a Kingdom's land from its edge inwards, by fighting.
 - Everyone chooses against the same counts (food, people and which civs are in each hex), taken before anyone moves; then everyone who chose moves at once.
 
@@ -340,7 +346,7 @@ Chosen on the map-generation screen, before setup.
 | Setting | Default | Range |
 |---|---|---|
 | Seed | pangaea | any text, up to 64 characters (empty means the default) |
-| Size | 10 (10 × 10 hexes) | 10 to 50 |
+| Size | 10 (10 × 10 hexes) | 10 to 100 |
 | Water amount | 25% of all hexes, edge ring included | 0% to 70%, whole percent |
 | Mountains | 12% of land hexes | 0% to 40%, whole percent |
 | River count | 2 | 0 to 20 |
@@ -373,6 +379,7 @@ Chosen on the setup screen, after the map.
 | Civ count | 3 | 1 to 8 |
 | Civ types | Civ 1 Expansionist, Civ 2 Aggressive, Civ 3 Cooperative (a new civ gets, by its number, Expansionist, Aggressive, Cooperative, Isolationist, Nomadic, then again from Expansionist) | one of the 5 types per civ |
 | Starting population | 20 people per civ | 2 to 200 |
+| Starting positions | every civ placed automatically | per civ, any hex of the map (a water hex, or the same hex as an earlier civ, falls back to automatic) |
 | Mutation | 3% (each trait of a child moves by up to ±0.03 from its parent's) | 0% to 10%, whole percent |
 | End conditions | none ticked (Sandbox: no end) | any combination of Last civ standing, First to Kingdom, Dominance, Year limit; ticking none is Sandbox |
 | Dominance share | 60% of land hexes | 25% to 100%, whole percent |
@@ -381,6 +388,7 @@ Chosen on the setup screen, after the map.
 
 Out-of-range values are clamped to the range; values that are not numbers fall back to the default. Unknown end conditions are ignored, and anything that is not a list of end conditions means Sandbox. The civ count decides how many civs there are; a missing or unknown type takes the default type for that civ's number.
 
+- **Starting positions.** The setup screen shows the map with every civ's emblem on its starting hex (automatic ones fainter). Pick a civ, then tap a land hex: that civ will start there, and the next civ is picked. Tapping a hex another civ was given takes it away from that civ, which goes back to automatic. *All automatic* clears every choice. The choices belong to the map: coming back to setup with a different map clears them. Removing a civ removes its choice and the later civs keep theirs.
 - **The civ list.** The setup screen lists the civs, each with its emblem, a type picker, the type's explanation (see "Civ types") and a remove button. *Add civ* adds a civ at the end (up to 8) with the default type for its number; remove takes that civ out (down to 1) and the later civs move up a number, keeping their types. The *Civs* number field sets the count directly (civs are added or taken off at the end).
 
 - Each map preset also sets the civs and the end conditions:

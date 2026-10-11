@@ -7,20 +7,37 @@ import { slider } from './mapgenScreen.js';
 import { emblem } from './inspector.js';
 import { civStyle } from '../render/civStyle.js';
 import { rgbCss } from '../render/palette.js';
+import { drawPreview, drawStarts, previewHexAt } from '../render/preview.js';
+import { DEEP_WATER } from '../sim/terrain.js';
 
 const END_KEYS = ['endConditions', 'endTicks', 'dominanceShare', 'dominanceYears'];
 
 export class SetupScreen {
-  constructor(form, { onStart, onChangeMap }) {
+  /** preview(params) and starts(params) come from the SimHost: the map, and where each civ would start. */
+  constructor(form, { onStart, onChangeMap, preview = null, starts = null }) {
     this.form = form;
     this.onStart = onStart;
     this.onChangeMap = onChangeMap;
+    this.previewFn = preview;
+    this.startsFn = starts;
     this.params = normalizeParams({});
+    this.map = null;
+    /** The civ the next tap on the start map places. */
+    this.placing = 0;
     this.render();
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => this.drawStartMap()).observe(form);
   }
 
   setParams(p) {
-    this.params = normalizeParams(p);
+    const next = normalizeParams(p);
+    // Starting positions belong to one map: a different map starts from automatic placement again.
+    if (this.map && this.previewFn) {
+      const map = this.previewFn(next);
+      if (map.hash !== this.map.hash) next.starts = [];
+      this.map = map;
+    } else if (this.previewFn) this.map = this.previewFn(next);
+    this.params = next;
+    this.placing = Math.min(this.placing, next.civCount - 1);
     this.render();
   }
 
@@ -59,7 +76,8 @@ export class SetupScreen {
         + 'Children inherit their parent\'s traits (each 0 to 1), each nudged by up to ± the mutation: 3% is ±0.03.'),
     );
 
-    this.form.replaceChildren(map, civs, end);
+    this.form.replaceChildren(map, civs, this.renderStarts(p), end);
+    this.drawStartMap();
     this.form.onsubmit = (e) => {
       e.preventDefault();
       this.onStart(this.getParams());
@@ -83,7 +101,8 @@ export class SetupScreen {
     const remove = (k) => {
       if (p.civCount <= LIMITS.civCount.min) return;
       const types = p.civTypes.filter((_, j) => j !== k);
-      this.setParams({ ...p, civCount: types.length, civTypes: types });
+      const starts = p.starts.filter((_, j) => j !== k);
+      this.setParams({ ...p, civCount: types.length, civTypes: types, starts });
     };
     const countRow = h('div', { class: 'row' },
       h('label', { for: 'f-civs' }, 'Civs'),
@@ -107,6 +126,67 @@ export class SetupScreen {
       return li;
     }));
     return [countRow, list];
+  }
+
+  /**
+   * Starting positions: the map with every civ's start. Pick a civ, then tap a
+   * land hex to start it there; automatic starts are drawn fainter.
+   */
+  renderStarts(p) {
+    if (!this.previewFn) return null;
+    this.startCanvas = h('canvas', { id: 'start-map', class: 'start-map', role: 'img',
+      'aria-label': 'Map with each civ\'s starting hex. Tap a land hex to move the selected civ there.',
+      onclick: (e) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const hex = previewHexAt(this.map, this.startT, e.clientX - rect.left, e.clientY - rect.top);
+        if (hex) this.placeStart(hex.index);
+      } });
+    const chips = h('div', { class: 'row start-chips', id: 'start-chips' }, p.civTypes.map((_, k) => h('button', {
+      type: 'button', class: 'btn chip', id: `btn-start-civ-${k}`, 'aria-pressed': String(k === this.placing),
+      onclick: () => { this.placing = k; this.refreshStarts(); },
+    }, emblem(k, 16), `Civ ${k + 1}`)));
+    this.startNote = h('p', { class: 'civ-desc', id: 'start-note' });
+    return h('fieldset', { class: 'group wide', id: 'starts' },
+      h('legend', {}, 'Starting positions'),
+      chips,
+      h('div', { class: 'start-frame' }, this.startCanvas),
+      this.startNote,
+      h('div', { class: 'row' },
+        h('button', { type: 'button', class: 'btn grow', id: 'btn-starts-auto', onclick: () => {
+          this.params.starts = [];
+          this.refreshStarts();
+        } }, 'All automatic')));
+  }
+
+  /** Start the selected civ on hex `index` (land only), then select the next civ. */
+  placeStart(index) {
+    const p = this.params;
+    if (!this.map || this.map.terrain[index] === DEEP_WATER) return;
+    const starts = Array.from({ length: p.civCount }, (_, k) => p.starts[k] ?? -1);
+    // A hex holds one chosen start: whoever had it goes back to automatic.
+    for (let k = 0; k < starts.length; k++) if (starts[k] === index) starts[k] = -1;
+    starts[this.placing] = index;
+    p.starts = normalizeParams({ ...p, starts }).starts;
+    this.placing = (this.placing + 1) % p.civCount;
+    this.refreshStarts();
+  }
+
+  refreshStarts() {
+    const chips = this.form.querySelectorAll('#start-chips button');
+    chips.forEach((b, k) => b.setAttribute('aria-pressed', String(k === this.placing)));
+    this.drawStartMap();
+  }
+
+  drawStartMap() {
+    const canvas = this.startCanvas;
+    if (!canvas || !this.map || !canvas.isConnected || canvas.clientWidth === 0) return;
+    this.startT = drawPreview(canvas, this.map);
+    const { starts, chosen } = this.startsFn ? this.startsFn(this.params) : { starts: [], chosen: [] };
+    drawStarts(canvas, this.map, this.startT, starts, chosen, this.placing);
+    canvas.dataset.starts = starts.join(',');
+    const n = chosen.filter(Boolean).length;
+    this.startNote.textContent = `${n ? `${n} of ${starts.length} placed by hand; the others are placed automatically. ` : 'All placed automatically. '}`
+      + `Pick a civ, then tap a land hex to start it there.`;
   }
 
   /** End conditions: Sandbox or any mix of Last civ standing, First to Kingdom, Dominance and Year limit. */
