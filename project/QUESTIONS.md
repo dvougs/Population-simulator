@@ -24,7 +24,7 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Evidence: src/render/peopleLayer.js:363 gives every person sprite one fixed size and src/render/peopleLayer.js:369-371 only changes its civ tint; age and hunger are never read when drawing. Seeds review-20261011d-1 to -3 at 71fa0e5, default setup: about 4 to 6 births and 3 to 5 deaths per civ every year by year 400 (seed -1, Civ 1: 1,915 births and 1,459 deaths in 400 years), all invisible except as sprites appearing and disappearing.
 - Effort: S
 - Phone performance risk: low: a scale and alpha per sprite set in the existing loop over visible people; no new textures or allocation.
-- Decision:
+- Decision: Yeah, with low prio. (reading: yes, built after the home page, fighting, civ types and levels)
 
 ## Requests
 
