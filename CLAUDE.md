@@ -66,6 +66,7 @@ RULES.md                the player rulebook; always matches the code
 
 - Each cycle produces at most one "Release candidate: …" pull request. CI (`.github/workflows/ci.yml`) must be green before the owner merges it.
 - No agent plays the game in a browser during a cycle, to save time and credits. The Playwright specs in `tests/e2e/` run in CI on every pull request instead.
+- unit-tester runs only in cycles that change game logic (src/sim, src/host, src/loop.js, other unit-tested modules, or RULES.md); in screen-only cycles the director runs `npm run test:unit` itself.
 - Merging to `main` deploys to GitHub Pages (`.github/workflows/pages.yml`).
 - The owner answers questions and adds requests in `project/QUESTIONS.md`; the director turns them into tasks in `project/TASKS.md`.
 - New sim features need a unit test, determinism preserved, and a headless run that looks sane.
