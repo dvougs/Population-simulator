@@ -2,7 +2,7 @@
 
 How the game works, as currently implemented. Every number here is the value the code uses. If the game and this file disagree, the game has a bug (see CLAUDE.md).
 
-This describes the current build (Phase 2, in progress): a generated hex map where civilisations of individual people eat, have children, grow old, starve and migrate, year by year, until an end condition you chose is met. All people share the same base values for now; inherited traits and civ types come later. The full design is in [project/ROADMAP.md](project/ROADMAP.md); this file changes as each part of it ships.
+This describes the current build (Phase 2, in progress): a generated hex map where civilisations of individual people eat, have children, grow old, starve and migrate, year by year, until an end condition you chose is met. Every person carries 8 inherited traits that set their birth chance, lifespan, food need and how hard hunger hits them; civ types come later. The full design is in [project/ROADMAP.md](project/ROADMAP.md); this file changes as each part of it ships.
 
 ## Saving
 
@@ -56,7 +56,7 @@ When several hexes tie on a value, the one with the lower index (row × size + c
 - **Rivers** run through land hexes. A river hex keeps its terrain's movement cost and defence bonus (rivers are walkable) and gets +30 food capacity (rivers are fertile).
 - Seas and lakes are impassable.
 - Every hex starts with food equal to its food capacity.
-- Food capacity is in food units; a person eats 1 food a year (see "People").
+- Food capacity is in food units; a person eats 0.75 to 1.25 food a year by their metabolism, 1 at metabolism 0.5 (see "Traits").
 - Movement cost limits how far people migrate in a year (see "Migration"). The defence bonus has no effect yet: it is used once fights arrive.
 
 ### Material deposits
@@ -103,25 +103,46 @@ Chance a hex holds a deposit (%); a terrain not listed is 0:
 
 - The game starts with *civ count* civilisations (civs), named Civ 1, Civ 2 and so on, each with *starting population* people. Each civ has its own colour and shape emblem (see "How civs and people look").
 - **Start hexes.** A good start hex is land with food capacity 40 or more (coast, plains, forest, and any river hex). The first civ starts on a random good hex. Each next civ starts on a random good hex at least 3 steps from every earlier start; if there is none, on the good hex farthest from the earlier starts (lowest index on ties). With no good hexes at all, any land hex counts as good. On very small land several civs can start on the same hex.
-- All of a civ's founders start together on its start hex, each with a random age from 0 to 39, full health (100) and no hunger, and no parent.
-- Every person has an age (years), health (0 to 100), hunger (years in a row without food), a hex, a civ and a parent (the person who bore them; none for founders).
+- All of a civ's founders start together on its start hex, each with a random age from 0 to 39, full health (100) and no hunger, no parent, and traits drawn as "Traits" says.
+- Every person has an age (years), health (0 to 100), hunger (years in a row without food), a hex, a civ, a parent (the person who bore them; none for founders) and 8 traits.
 - Several civs can live in the same hex. They do not interact yet: no contact, fights or switching civ.
-- Every person uses the same base values below (birth chance, fertile ages, old age). Inherited traits will replace them per person later.
+- The fertile ages (16 to 40) are the same for everyone; birth chance, old age, food need and hunger's health loss depend on the person's traits.
+
+## Traits
+
+Every person has 8 traits, each a number from 0 to 1: fertility (f), life expectancy (l), strength, aggression, cooperation, metabolism (m), heat tolerance (h) and cold tolerance (c). A trait of 0.5 gives the values everyone had before traits (5% birth chance, old age from 45, 1 food a year, 35 health lost a hungry year).
+
+| Trait | What it does |
+|---|---|
+| Fertility f | Birth chance = (2.5% + 5% × f) × (0.75 + 0.5 × m): 2.5% to 7.5% at metabolism 0.5. Also raises the hunger burden. |
+| Life expectancy l | Old age starts at 35 + 20 × l (35 to 55 years). |
+| Metabolism m | Food eaten a year = 0.75 + 0.5 × m (0.75 to 1.25). Also multiplies the birth chance (above) and raises the hunger burden. |
+| Heat tolerance h | Lowers hunger's health loss in desert; raises it in tundra and mountain. |
+| Cold tolerance c | Lowers hunger's health loss in tundra and mountain; raises it in desert. |
+| Strength, aggression, cooperation | Carried and inherited, but no effect yet (they are used once fights and civ switching arrive). |
+
+- **Hunger's health loss** in a year without food = round(35 × B × climate), where:
+  - the hunger burden B = 1 + 2.8 × (f − 0.5) + 1.2 × (m − 0.5), kept between 0.5 and 3, so fertile, fast-burning people starve faster;
+  - the tolerance T(x) = 2 − 2 × x for x up to 0.5, and 1.5 − x above (2 at 0, 1 at 0.5, 0.5 at 1);
+  - climate = T(h) × (0.5 + c) in desert, T(c) × (0.5 + h) in tundra and mountain, and 1 on any other terrain.
+  For example, with every trait at 0.5 the loss is 35 everywhere; with f = 0.7 and the rest 0.5 it is round(35 × 1.56) = 55.
+- **Founders** start at their civ type's values, each plus a random amount from −0.1 to +0.1 (uniform), kept between 0 and 1. Starting values: Aggressive aggression 0.7 and strength 0.65; Cooperative cooperation 0.7; Expansionist fertility 0.58; Isolationist life expectancy 0.6; Nomadic metabolism 0.45, heat tolerance 0.6 and cold tolerance 0.6; every other trait 0.5. Civ types are not in the game yet, so every civ is type-less: all its starting values are 0.5.
+- **Inheritance and mutation.** A child gets each of its parent's traits plus a random amount from −*mutation* to +*mutation* (uniform, drawn separately for each trait), kept between 0 and 1. *Mutation* is a game setting (default 3%, that is ±0.03; see "Game settings"); at 0% children copy their parent exactly.
 
 ## A year
 
 Each year (tick) runs these steps in order. Within a step everyone decides first and the results apply together, so the order people are listed in never changes the outcome.
 
 1. **Birthdays.** Everyone's age goes up by 1.
-2. **Eating.** Each person eats 1 food from their hex.
-   - If the hex has at least as many whole food units as people, everyone there eats.
-   - Otherwise exactly ⌊food⌋ of the people there eat, picked at random (every person in the hex has the same chance); the rest go hungry.
-   - The food eaten is taken from the hex.
-   - A person who eats has hunger 0 and gains 25 health (up to 100). A person who does not eat has hunger + 1 and loses 35 health (down to 0).
+2. **Eating.** Each person needs 0.75 + 0.5 × their metabolism food a year (1 at metabolism 0.5). In a hex with n people whose needs add up to N:
+   - If the hex's food is at least N, everyone there eats.
+   - Otherwise exactly ⌊food × n ÷ N⌋ of the people there eat, picked at random (every person in the hex has the same chance); the rest go hungry. (With every metabolism at 0.5 that is ⌊food⌋ people.)
+   - The hex's food falls by the needs of those who ate, never below 0.
+   - A person who eats has hunger 0 and gains 25 health (up to 100). A person who does not eat has hunger + 1 and loses round(35 × B × climate) health (down to 0; see "Traits").
 3. **Deaths.**
-   - **Starvation:** a person whose health is 0 dies. From full health that is the third year in a row without food.
-   - **Old age:** otherwise, a person aged 45 or more dies with chance (age − 45) ÷ 40 that year: 2.5% at 46, 25% at 55, 50% at 65, and certain at 85, so nobody lives past 85.
-4. **Births.** Each person who ate this year, aged 16 to 40 (inclusive), in a hex with fewer people (all civs, counted after this year's deaths) than its food capacity, has a child with chance 5%. No partner is needed. The child starts at age 0 with full health and no hunger, in the parent's hex and civ, with that parent recorded.
+   - **Starvation:** a person whose health is 0 dies. From full health, with a loss of 35 a year, that is the third year in a row without food (sooner with a bigger loss).
+   - **Old age:** otherwise, a person whose age has reached their old-age start (35 + 20 × life expectancy) dies with chance min(1, (age − start) ÷ 40) that year. With life expectancy 0.5 the start is 45: 2.5% at 46, 25% at 55, 50% at 65, and certain at 85. Nobody lives past start + 40, at most 95.
+4. **Births.** Each person who ate this year, aged 16 to 40 (inclusive), in a hex with fewer people (all civs, counted after this year's deaths) than its food capacity, has a child with their birth chance, (2.5% + 5% × f) × (0.75 + 0.5 × m) (5% with fertility and metabolism 0.5). No partner is needed. The child starts at age 0 with full health and no hunger, in the parent's hex and civ, with that parent recorded and the parent's traits with mutation (see "Traits").
 5. **Migration** (see below).
 6. **Food regrowth.** Each hex regains food equal to 50% of its food capacity, never above its capacity.
 7. **Statistics** for the year are recorded (see "Statistics").
@@ -138,7 +159,7 @@ Each year (tick) runs these steps in order. Within a step everyone decides first
 
 ## Statistics
 
-Recorded at the end of every year, for each civ: people alive, hexes held (hexes with at least one of its people), births, deaths by old age, deaths by starvation, and the total age at death of those who died.
+Recorded at the end of every year, for each civ: people alive, hexes held (hexes with at least one of its people), births, deaths by old age, deaths by starvation, the total age at death of those who died, and the average of each of the 8 traits over its living people (none while it has nobody). When history rows are merged, the trait averages come from the later year, like people and hexes.
 
 - Kept for the whole run: total births and deaths by cause, average lifespan (average age at death), oldest age reached, peak population and the first year it was reached, most hexes held, and the year the civ died out (its people fell to 0), if it did.
 - The yearly history keeps one row per year for the first 8192 rows. When it is full, pairs of rows are merged (people and hexes from the later year, the other numbers added together) and each new row covers twice as many years, so a long game never runs out of memory.
@@ -176,7 +197,7 @@ Each civ has a colour and a shape emblem, chosen by civ number, so civs can be t
 - **Idling.** While time runs, each person drawn circles slowly around their spot, at a radius of 10% of the hex size, one lap every 4 to 8 seconds (picked from their id, either way round). Paused, they stop where they are. With the device's reduced-motion setting on, they stay still. This is drawing only and changes nothing in the game.
 - A person who migrates glides from where they were drawn to their spot in the new hex over 0.6 seconds. This is drawing only: in the game they move at once, as "Migration" says.
 - **Tap a hex** to see its terrain, food, deposits and its people per civ with each civ's emblem. Zoomed out (people not drawn), the tap also flies the camera to that hex over 0.4 seconds: the hex ends centred in the open map area, zoomed in until a hex is 180 pixels across (less if the view cannot zoom that far, but always at least far enough to show people). Panning, zooming or Fit during the flight stops it. *List people* opens the list of the people in the hex, lowest id first (the first 100, then how many more); tap a row to open that person.
-- **Tap a person** (zoomed in; the nearest person within 22 pixels of the tap) to see their id, civ, age, health, hunger, parent (their id, or none for founders; "died" if the parent is no longer alive) and their living children. Tapping the same person again closes the card. If the person dies while the card is open, it shows "Died" with the last values seen.
+- **Tap a person** (zoomed in; the nearest person within 22 pixels of the tap) to see their id, civ, age, health, hunger, parent (their id, or none for founders; "died" if the parent is no longer alive), their living children, the hex they are in, and their 8 traits (two decimals). Tapping the same person again closes the card. If the person dies while the card is open, it shows "Died" with the last values seen.
 
 ## Map settings
 
@@ -217,6 +238,7 @@ Chosen on the setup screen, after the map.
 |---|---|---|
 | Civ count | 3 | 1 to 8 |
 | Starting population | 20 people per civ | 2 to 200 |
+| Mutation | 3% (each trait of a child moves by up to ±0.03 from its parent's) | 0% to 10%, whole percent |
 | End conditions | none ticked (Sandbox: no end) | any combination of Last civ standing, Dominance, Year limit; ticking none is Sandbox |
 | Dominance share | 60% of land hexes | 25% to 100%, whole percent |
 | Dominance years | 300 | 10 to 10000 |
@@ -234,8 +256,8 @@ Out-of-range values are clamped to the range; values that are not numbers fall b
 | Highlands | 3 | 20 | Year limit 2500 |
 | Large world | 6 | 40 | Last civ standing, Dominance (60%, 300 years) |
 
-  Settings a preset does not list keep their defaults (dominance 60% and 300 years, year limit 2500).
-- Randomise on the setup screen picks 2 to 6 civs and 10 to 50 people each, ticks each of Last civ standing, Dominance and Year limit with chance 50% (none ticked is Sandbox), a dominance share of 50% to 80%, dominance years of 100, 200, 300 or 500, and a year limit of 1000, 2500, 5000 or 10000; it does not change the map. Randomise on the map screen does not change the civs or the end conditions.
+  Settings a preset does not list keep their defaults (dominance 60% and 300 years, year limit 2500). Every preset uses mutation 3%.
+- Randomise on the setup screen picks 2 to 6 civs and 10 to 50 people each, a mutation of 0% to 10% (whole percent), ticks each of Last civ standing, Dominance and Year limit with chance 50% (none ticked is Sandbox), a dominance share of 50% to 80%, dominance years of 100, 200, 300 or 500, and a year limit of 1000, 2500, 5000 or 10000; it does not change the map. Randomise on the map screen does not change the civs, the mutation or the end conditions.
 
 ## End of the game
 
@@ -264,6 +286,7 @@ A scrollable screen that opens when the game ends. Everything on it comes from t
 - **Cards:**
   - *Civs by final population* (most people first; ties by higher peak population, then lower civ number): people at the end, peak population and the first year it was reached, average lifespan (average age at death; "No deaths" if none died), most hexes held at once, and the year the civ died out (or No).
   - *Population over time:* one line per civ in its colour, from year 0 to the last year, all on the same scale (the top of the chart is the highest population any civ reached in the recorded history). It draws at most 400 points per civ, taken evenly from the recorded rows, plus the last row.
+  - *Traits:* for each civ that ever had people, the average of each of the 8 traits at the end (or in its last year with people, if it died out), to two decimals, with the change since its founders' averages at year 0.
   - *People:* the oldest person ever (id, civ, age, and the year they died or "alive") and the oldest person alive at the end (see "Records" under "Statistics").
   - *Deaths by cause:* deaths by old age and by starvation over the whole run, all civs together, with their share of all deaths.
   - *Records:* longest family line, the person with the most descendants, and the worst famine (see "Statistics").
@@ -271,4 +294,4 @@ A scrollable screen that opens when the game ends. Everything on it comes from t
 
 ## Not in the game yet
 
-Land degrading, inherited traits and mutation, civ types, contact and war, gathering materials and levels, boats, god powers, first to Kingdom (comes with levels). See [project/ROADMAP.md](project/ROADMAP.md).
+Land degrading, civ types, contact and war, gathering materials and levels, boats, god powers, first to Kingdom (comes with levels). See [project/ROADMAP.md](project/ROADMAP.md).

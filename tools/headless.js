@@ -3,13 +3,13 @@
 //
 //   node tools/headless.js [--seed s] [--ticks n] [--size n] [--water f] [--mountains f]
 //                          [--rivers n] [--plains f] [--forest f] [--desert f] [--tundra f]
-//                          [--civs n] [--start-pop n] [--preset name] [--every n] [--min-tps n] [--json]
+//                          [--civs n] [--start-pop n] [--mutation f] [--preset name] [--every n] [--min-tps n] [--json]
 //                          [--end lastCiv,dominance,years|sandbox] [--end-years n]
 //                          [--dominance-share f] [--dominance-years n]
 //
 // Prints the map summary, per-civ population every --every years (with the state
 // hash), per-civ totals (births, deaths by cause, lifespans, extinction year),
-// the end-screen records, the end conditions and how the run ended,
+// each civ's average traits, the end-screen records, the end conditions and how the run ended,
 // the map hash, the final state hash and ticks per second. --json prints the
 // same plus the recorded year-by-year history per civ.
 // --min-tps makes it exit non-zero if throughput is below the floor (used in CI).
@@ -37,6 +37,7 @@ if (args.seed) params.seed = String(args.seed);
 for (const key of ['size', 'water', 'mountains', 'rivers', 'plains', 'forest', 'desert', 'tundra']) if (args[key] !== undefined) params[key] = Number(args[key]);
 if (args.civs !== undefined) params.civCount = Number(args.civs);
 if (args['start-pop'] !== undefined) params.startPop = Number(args['start-pop']);
+if (args.mutation !== undefined) params.mutation = Number(args.mutation);
 if (args.end !== undefined) params.endConditions = String(args.end).split(',');
 if (args['end-years'] !== undefined) params.endTicks = Number(args['end-years']);
 if (args['dominance-share'] !== undefined) params.dominanceShare = Number(args['dominance-share']);
@@ -105,6 +106,7 @@ const result = {
   endConditions: p.endConditions,
   civCount: p.civCount,
   startPop: p.startPop,
+  mutation: p.mutation,
   population: stats.totalPop,
   civs: stats.civs.map((c, k) => {
     const h = sim.starts[k];
@@ -121,11 +123,17 @@ function civNamesOf(k) { return `Civ ${k + 1}`; }
 /** Recorded history as plain arrays: one entry per row (one row per year unless the run outgrew the history). */
 function historyJson(hist, names) {
   const fields = ['pop', 'hexes', 'births', 'deathsOldAge', 'deathsStarvation', 'lifespanSum'];
+  const tc = hist.traitCount;
+  const trait = (r, k, t) => {
+    const v = hist.traits[(r * hist.civs + k) * tc + t];
+    return Number.isNaN(v) ? null : Math.round(v * 1000) / 1000;
+  };
   return {
     yearsPerRow: hist.stride,
     years: Array.from(hist.years),
     civs: names.map((name, k) => Object.fromEntries([['name', name],
-      ...fields.map((f) => [f, Array.from({ length: hist.rows }, (_, r) => hist[f][r * hist.civs + k])])])),
+      ...fields.map((f) => [f, Array.from({ length: hist.rows }, (_, r) => hist[f][r * hist.civs + k])]),
+      ['traits', Object.fromEntries(hist.traitIds.map((id, t) => [id, Array.from({ length: hist.rows }, (_, r) => trait(r, k, t))]))]])),
   };
 }
 
@@ -136,7 +144,8 @@ if (args.json) {
   console.log(`seed "${result.seed}"  ${result.size} hexes  water ${p.water}  mountains ${p.mountains}  rivers ${p.rivers}  `
     + `lowland ${p.plains}/${p.forest}/${p.desert}/${p.tundra}  ${result.ticks} years`);
   console.log(`  ${Object.entries(terrain).map(([k, v]) => `${k} ${v}`).join(', ')}; ${rivers} river hexes`);
-  console.log(`  ${p.civCount} ${p.civCount === 1 ? 'civ' : 'civs'}, ${p.startPop} people each; ${stats.totalPop} people alive at year ${stats.tick}`);
+  console.log(`  ${p.civCount} ${p.civCount === 1 ? 'civ' : 'civs'}, ${p.startPop} people each, mutation ±${Math.round(p.mutation * 100)}%; `
+    + `${stats.totalPop} people alive at year ${stats.tick}`);
   for (const c of result.civs) {
     const deaths = c.deaths.oldAge + c.deaths.starvation;
     const where = c.start ? ` from (${c.start.col}, ${c.start.row})` : '';
@@ -144,6 +153,10 @@ if (args.json) {
     console.log(`  ${c.name}${where}: ${fate}; peak ${c.peakPop} people, ${c.peakHexes} ${c.peakHexes === 1 ? 'hex' : 'hexes'}; ${c.births} births; `
       + `${deaths} deaths (old age ${c.deaths.oldAge}, starvation ${c.deaths.starvation}); `
       + `average lifespan ${c.avgLifespan ?? '-'}; oldest ${c.oldestAge}`);
+  }
+  const short = { fertility: 'f', lifeExpectancy: 'l', strength: 'str', aggression: 'agg', cooperation: 'coop', metabolism: 'm', heatTolerance: 'h', coldTolerance: 'c' };
+  for (const c of result.civs) {
+    if (c.traits) console.log(`  ${c.name} traits${c.pop === 0 ? ' (when it died out)' : ''}: ${Object.entries(c.traits).map(([k, v]) => `${short[k]} ${v.toFixed(3)}`).join(', ')}`);
   }
   console.log(result.extinctions.length
     ? `  extinctions: ${result.extinctions.map((e) => `${e.civ} in year ${e.year}`).join(', ')}`

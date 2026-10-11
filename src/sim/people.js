@@ -2,6 +2,8 @@
 // Dead slots go on a free list and are reused by the next births, so the
 // arrays only grow when more people are alive at once than ever before.
 
+import { TRAITS, TRAIT_RULES, METABOLISM, foodNeed } from './traits.js';
+
 export const NO_PARENT = 0;
 
 export class People {
@@ -38,6 +40,14 @@ export class People {
     this.gen = grow(Uint16Array, old?.gen);
     /** Index of the founder this person descends from (0 … founders − 1), for descendant counts. */
     this.founder = grow(Uint16Array, old?.founder);
+    /** One Float32Array per trait (0 … 1), named as in TRAITS; traits[k] is the same array as this[TRAITS[k]]. */
+    this.traits = TRAITS.map((k) => {
+      const a = grow(Float32Array, old?.[k]);
+      this[k] = a;
+      return a;
+    });
+    /** Food this person eats a year, cached from their metabolism (call setTraits after changing traits). */
+    this.need = grow(Float32Array, old?.need);
     this.free = grow(Int32Array, old?.free);
     this.capacity = capacity;
   }
@@ -60,8 +70,16 @@ export class People {
     this.civ[i] = civ;
     this.gen[i] = gen;
     this.founder[i] = founder;
+    for (let k = 0; k < this.traits.length; k++) this.traits[k][i] = TRAIT_RULES.base;
+    this.need[i] = foodNeed(this.metabolism[i]);
     this.count++;
     return i;
+  }
+
+  /** Sets slot i's traits from values (TRAITS order, already 0 … 1) and refreshes the cached food need. */
+  setTraits(i, values) {
+    for (let k = 0; k < this.traits.length; k++) this.traits[k][i] = values[k];
+    this.need[i] = foodNeed(this.traits[METABOLISM][i]);
   }
 
   remove(i) {
@@ -73,7 +91,7 @@ export class People {
   /** The used part of every array (for hashing). Views, not copies. */
   views() {
     const n = this.high;
-    return [this.alive, this.id, this.parent, this.age, this.health, this.hunger, this.hex, this.civ]
+    return [this.alive, this.id, this.parent, this.age, this.health, this.hunger, this.hex, this.civ, ...this.traits]
       .map((a) => a.subarray(0, n));
   }
 }

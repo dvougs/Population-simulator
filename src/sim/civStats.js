@@ -5,6 +5,7 @@
 // stays bounded however long the game runs.
 
 import { DEATH_OLD_AGE } from './life.js';
+import { TRAITS, TRAIT_COUNT } from './traits.js';
 
 export const HISTORY_ROWS = 8192;
 /** History columns, per civ. pop and hexes are counts at the end of the row's last year; the rest are sums over the row. */
@@ -35,6 +36,13 @@ export class CivStats {
     this.rows = 0;
     this.years = new Int32Array(HISTORY_ROWS);
     this.history = new Float64Array(HISTORY_ROWS * civs * F);
+    /** Average of each trait per civ at the end of each row's last year (NaN while the civ has nobody): [(row × civs + civ) × TRAIT_COUNT + trait]. */
+    this.traitHistory = new Float32Array(HISTORY_ROWS * civs * TRAIT_COUNT);
+    /** This year's averages, and the last averages each civ had while it had people. */
+    this.traitNow = new Float64Array(civs * TRAIT_COUNT).fill(NaN);
+    this.traitLast = new Float64Array(civs * TRAIT_COUNT).fill(NaN);
+    /** The founders' averages (the first year recorded). */
+    this.traitStart = null;
   }
 
   birth(civ) {
@@ -49,9 +57,19 @@ export class CivStats {
     this.pending[civ * F + 5] += age;
   }
 
-  /** Close the year: pop and hexes per civ (counted by the caller), oldest age alive per civ. */
-  endYear(year, pop, hexes, oldest) {
+  /**
+   * Close the year: pop and hexes per civ (counted by the caller), oldest age
+   * alive per civ, and each civ's trait averages ([civ × TRAIT_COUNT + trait], NaN for an empty civ).
+   */
+  endYear(year, pop, hexes, oldest, traitAvg = null) {
     const c = this.civs;
+    if (traitAvg) {
+      this.traitNow.set(traitAvg);
+      if (!this.traitStart) this.traitStart = Float64Array.from(traitAvg);
+      for (let k = 0; k < c; k++) {
+        if (pop[k] > 0) for (let t = 0; t < TRAIT_COUNT; t++) this.traitLast[k * TRAIT_COUNT + t] = traitAvg[k * TRAIT_COUNT + t];
+      }
+    }
     for (let k = 0; k < c; k++) {
       if (this.pop[k] > 0 && pop[k] === 0) this.extinctYear[k] = year;
       this.pop[k] = pop[k];
@@ -71,6 +89,7 @@ export class CivStats {
     }
     this.years[this.rows] = year;
     this.history.set(this.pending, this.rows * c * F);
+    this.traitHistory.set(this.traitNow, this.rows * c * TRAIT_COUNT);
     this.rows++;
     this.pending.fill(0);
     this.pendingYears = 0;
@@ -86,6 +105,9 @@ export class CivStats {
       const b = a + w;
       for (let j = 0; j < w; j++) h[r * w + j] = j % F < SNAPSHOT_FIELDS ? h[b + j] : h[a + j] + h[b + j];
       this.years[r] = this.years[2 * r + 1];
+      // Trait averages are snapshots: keep the later row's.
+      const tw = this.civs * TRAIT_COUNT;
+      this.traitHistory.copyWithin(r * tw, (2 * r + 1) * tw, (2 * r + 2) * tw);
     }
     this.rows = half;
     this.stride *= 2;
@@ -109,9 +131,17 @@ export class CivStats {
         peakPopYear: this.peakPopYear[k],
         peakHexes: this.peakHexes[k],
         extinctYear: this.extinctYear[k] >= 0 ? this.extinctYear[k] : null,
+        traits: this.traitsOf(k, this.traitLast),
+        startTraits: this.traitStart ? this.traitsOf(k, this.traitStart) : null,
       });
     }
     return out;
+  }
+
+  /** Civ k's trait averages from a (traitLast: now, or the last before dying out), keyed by trait id; null if none. */
+  traitsOf(k, a) {
+    if (Number.isNaN(a[k * TRAIT_COUNT])) return null;
+    return Object.fromEntries(TRAITS.map((name, t) => [name, Math.round(a[k * TRAIT_COUNT + t] * 1000) / 1000]));
   }
 
   /**
@@ -127,6 +157,10 @@ export class CivStats {
       for (let r = 0; r < this.rows; r++) for (let k = 0; k < c; k++) a[r * c + k] = this.history[(r * c + k) * F + f];
       out[name] = a;
     });
+    /** traits[(row × civs + civ) × traitCount + trait], trait order as in traitIds. */
+    out.traitIds = TRAITS.slice();
+    out.traitCount = TRAIT_COUNT;
+    out.traits = this.traitHistory.slice(0, this.rows * c * TRAIT_COUNT);
     return out;
   }
 }

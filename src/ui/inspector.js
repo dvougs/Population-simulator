@@ -3,6 +3,7 @@
 import { h, formatNumber } from './dom.js';
 import { emblemSvg } from '../render/civStyle.js';
 import { MATERIAL_IDS, MATERIAL_NAMES } from '../sim/materials.js';
+import { TRAITS, TRAIT_NAMES } from '../sim/traits.js';
 
 const materialName = (id) => MATERIAL_NAMES[MATERIAL_IDS.indexOf(id)] ?? id;
 
@@ -175,6 +176,7 @@ export function renderPersonCard(el, person, { onClose, onShowHex, dead = false 
     ['Parent', person.parent === null ? 'None (founder)' : `#${person.parent}${person.parentAlive ? '' : ' (died)'}`],
     ['Children', `${person.children} living`],
     ['Hex', `(${person.col}, ${person.row})`],
+    ...TRAITS.map((k, t) => [TRAIT_NAMES[t], person.traits ? person.traits[k].toFixed(2) : '–']),
   ];
   const key = `p${person.id}`;
   if (el.dataset.shown === key && fillRows(el, rows)) return;

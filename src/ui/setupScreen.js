@@ -42,14 +42,17 @@ export class SetupScreen {
       h('legend', {}, 'Civilisations'),
       slider('f-civs', 'Civs', p.civCount, LIMITS.civCount.min, LIMITS.civCount.max, 1, String, (v) => { p.civCount = v; }),
       slider('f-start-pop', 'People each', p.startPop, LIMITS.startPop.min, LIMITS.startPop.max, 1, String, (v) => { p.startPop = v; }),
+      slider('f-mutation', 'Mutation', Math.round(p.mutation * 100), LIMITS.mutation.min * 100, LIMITS.mutation.max * 100, 1,
+        (v) => `±${v}%`, (v) => { p.mutation = v / 100; }),
       h('div', { class: 'row' },
         h('button', { type: 'button', class: 'btn grow', id: 'btn-civs-randomise',
           onclick: () => {
             const r = randomParams();
             const ends = Object.fromEntries(END_KEYS.map((k) => [k, r[k]]));
-            this.setParams({ ...this.params, civCount: r.civCount, startPop: r.startPop, ...ends });
+            this.setParams({ ...this.params, civCount: r.civCount, startPop: r.startPop, mutation: r.mutation, ...ends });
           } }, '🎲 Randomise')),
-      h('p', { class: 'civ-desc' }, 'Each civ starts with its people together on one fertile hex, spread apart from the others.'),
+      h('p', { class: 'civ-desc' }, 'Each civ starts with its people together on one fertile hex, spread apart from the others. '
+        + 'Children inherit their parent\'s traits (each 0 to 1), each nudged by up to ± the mutation: 3% is ±0.03.'),
     );
 
     this.form.replaceChildren(map, civs, end);

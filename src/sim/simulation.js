@@ -16,6 +16,7 @@ import {
   DEEP_WATER, TERRAIN_IDS, TERRAIN_NAMES, MOVE_COST, DEFENCE_BONUS,
 } from './terrain.js';
 import { MATERIAL_COUNT, MATERIAL_IDS } from './materials.js';
+import { TRAITS, TRAIT_COUNT } from './traits.js';
 
 export class Simulation {
   constructor(params) {
@@ -42,13 +43,15 @@ export class Simulation {
       migration: rng.fork('migration'),
     };
     const placement = rng.fork('placement');
+    // Founders' trait spread and every child's mutation; forked last so the other streams are as before traits.
+    this.rng.traits = rng.fork('traits');
     this.starts = pickStarts(map, civs, placement);
     this.civCount = civs;
     // Room for every hex filled to capacity, so the pool rarely has to grow.
     let capSum = 0;
     for (let h = 0; h < map.count; h++) capSum += map.foodCap[h];
     this.people = new People(Math.max(civs * this.params.startPop, Math.ceil(capSum * 1.25)));
-    found(this.people, this.starts, this.params.startPop, placement);
+    found(this.people, this.starts, this.params.startPop, placement, this.rng.traits);
     this.reach = buildReach(map);
 
     // Scratch arrays, allocated once (per-person ones again only if the pool grows).
@@ -56,6 +59,10 @@ export class Simulation {
     this.hexPop = new Int32Array(n);
     this.seen = new Int32Array(n);
     this.picked = new Int32Array(n);
+    this.needSum = new Float64Array(n);
+    this.eaten = new Float64Array(n);
+    /** Sum, then average, of each trait per civ: civTraits[civ × TRAIT_COUNT + trait]. */
+    this.civTraits = new Float64Array(civs * TRAIT_COUNT);
     this.spare = new Float64Array(n);
     this.civHex = new Uint8Array(n * civs);
     this.civHeld = new Uint8Array(n * civs);
@@ -90,18 +97,22 @@ export class Simulation {
     const people = this.people;
     const { alive, age } = people;
     for (let i = 0; i < people.high; i++) if (alive[i] && age[i] < 65535) age[i]++;
-    eat(people, this.map, this.rng.eat, this.hexPop, this.seen, this.picked);
+    eat(people, this.map, this.rng.eat, this.hexPop, this.seen, this.picked, this.needSum, this.eaten);
     deaths(people, this.rng.death, this.onDeath);
-    births(people, this.map, this.rng.birth, this.hexPop, this.parents, this.onBirth);
+    births(people, this.map, this.rng.birth, this.hexPop, this.parents, this.onBirth, this.rng.traits, this.params.mutation);
     if (this.dest.length < people.capacity) this.allocPersonScratch();
     migrate(people, this.map, this.reach, this.rng.migration, this.hexPop, this.spare, this.dest, this.civHeld);
     regrow(this.map);
   }
 
-  /** Count people, hexes held and the oldest person per civ, and append the year's stats row. */
+  /** Count people, hexes held, the oldest person and trait averages per civ, and append the year's stats row. */
   recordYear() {
     const p = this.people;
     const { alive, civ, hex, age } = p;
+    const ct = this.civTraits;
+    ct.fill(0);
+    // Locals, not traits[t][i]: this loop runs over everyone every year.
+    const [t0, t1, t2, t3, t4, t5, t6, t7] = p.traits;
     const n = this.map.count;
     this.civPop.fill(0);
     this.civHexes.fill(0);
@@ -117,8 +128,14 @@ export class Simulation {
       if (age[i] > this.civOldest[c]) this.civOldest[c] = age[i];
       const k = c * n + hex[i];
       if (!this.civHex[k]) { this.civHex[k] = 1; this.civHexes[c]++; }
+      const b = c * TRAIT_COUNT;
+      ct[b] += t0[i]; ct[b + 1] += t1[i]; ct[b + 2] += t2[i]; ct[b + 3] += t3[i];
+      ct[b + 4] += t4[i]; ct[b + 5] += t5[i]; ct[b + 6] += t6[i]; ct[b + 7] += t7[i];
     }
-    this.civStats.endYear(this.tickCount, this.civPop, this.civHexes, this.civOldest);
+    for (let c = 0; c < civs; c++) {
+      for (let t = 0; t < TRAIT_COUNT; t++) ct[c * TRAIT_COUNT + t] = this.civPop[c] > 0 ? ct[c * TRAIT_COUNT + t] / this.civPop[c] : NaN;
+    }
+    this.civStats.endYear(this.tickCount, this.civPop, this.civHexes, this.civOldest, ct);
     this.records.endYear(this.tickCount, this.civPop);
   }
 
@@ -284,6 +301,8 @@ export class Simulation {
       parent: parent === NO_PARENT ? null : parent,
       parentAlive: parent === NO_PARENT ? null : parentAlive,
       children,
+      /** The 8 traits (0 … 1), keyed by trait id (see traits.js TRAITS). */
+      traits: Object.fromEntries(TRAITS.map((k, t) => [k, p.traits[t][slot]])),
       hex: h,
       col: h % cols,
       row: Math.floor(h / cols),

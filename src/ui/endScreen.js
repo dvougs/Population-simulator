@@ -5,6 +5,7 @@ import { h, formatNumber } from './dom.js';
 import { emblem } from './inspector.js';
 import { civStyle } from '../render/civStyle.js';
 import { rgbCss } from '../render/palette.js';
+import { TRAITS, TRAIT_NAMES } from '../sim/traits.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 /** Chart points per civ at most; longer histories are sampled evenly (the last row always kept). */
@@ -26,6 +27,7 @@ export function renderEndScreen(el, report, actions) {
     buttons(report, actions),
     civsCard(report),
     chartCard(report),
+    traitsCard(report),
     peopleCard(report),
     deathsCard(report),
     recordsCard(report),
@@ -113,6 +115,25 @@ function point(hist, row, c, lastYear, maxPop, W, H) {
   const x = lastYear > 0 ? (hist.years[row] / lastYear) * W : 0;
   const y = H - (hist.pop[row * hist.civs + c] / maxPop) * H;
   return `${x.toFixed(1)},${y.toFixed(1)}`;
+}
+
+/** Each civ's average traits at the end (or when it died out), with the change since its founders. */
+function traitsCard(r) {
+  const civs = r.civs.filter((c) => c.traits);
+  if (civs.length === 0) return card('end-traits', 'Traits', h('p', { class: 'muted' }, 'No traits recorded.'));
+  const cell = (c, k) => {
+    const end = c.traits[k];
+    const d = c.startTraits ? end - c.startTraits[k] : 0;
+    const sign = d > 0.0005 ? '+' : d < -0.0005 ? '−' : '±';
+    return h('td', {}, end.toFixed(2), h('small', {}, ` ${sign}${Math.abs(d).toFixed(2)}`));
+  };
+  return card('end-traits', 'Traits',
+    h('p', { class: 'muted' }, 'Average of each trait (0 to 1) at the end, and the change since the founders.'),
+    h('div', { class: 'table-wrap' },
+      h('table', { class: 'end-traits' },
+        h('thead', {}, h('tr', {}, h('th', { scope: 'col' }, 'Trait'), civs.map((c) => h('th', { scope: 'col', 'data-civ': c.id }, civLabel(c.id))))),
+        h('tbody', {}, TRAITS.map((k, t) => h('tr', { 'data-trait': k },
+          h('th', { scope: 'row' }, TRAIT_NAMES[t]), civs.map((c) => cell(c, k))))))));
 }
 
 const personText = (p) => `#${p.id}, ${civName(p.civ)}, age ${p.age}`;

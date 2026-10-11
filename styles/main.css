@@ -123,6 +123,12 @@ input[type="range"] { width: 100%; height: var(--tap); accent-color: var(--accen
 .death-bar .starvation { background: var(--danger); }
 .end-log { gap: 4px; }
 .end-log li { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 10px; background: var(--surface-2); font-size: 0.9rem; }
+.table-wrap { overflow-x: auto; margin-top: 8px; }
+.end-traits { border-collapse: collapse; width: 100%; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.end-traits th, .end-traits td { padding: 4px 6px; text-align: right; white-space: nowrap; }
+.end-traits th[scope="row"], .end-traits thead th:first-child { text-align: left; color: var(--text-dim); font-weight: 500; }
+.end-traits tbody tr:nth-child(odd) { background: var(--surface-2); }
+.end-traits small { color: var(--text-dim); }
 .end-log .log-year { min-width: 5.5em; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 @media (min-width: 560px) { .end-actions { grid-template-columns: repeat(4, 1fr); } }
 

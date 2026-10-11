@@ -30,6 +30,7 @@ export const LIMITS = Object.freeze({
   dominanceYears: { min: 10, max: 10000 },
   civCount: { min: 1, max: 8 },
   startPop: { min: 2, max: 200 },
+  mutation: { min: 0, max: 0.1 },
   seedLength: 64,
 });
 
@@ -47,6 +48,8 @@ export const DEFAULT_PARAMS = Object.freeze({
   // Game settings: civilisations placed at the start and people in each.
   civCount: 3,
   startPop: 20,
+  // Largest change a trait can take from parent to child (± this, uniform).
+  mutation: 0.03,
   // End conditions ticked (none = sandbox) and their numbers.
   endConditions: Object.freeze([]),
   endTicks: 2500,
@@ -56,21 +59,23 @@ export const DEFAULT_PARAMS = Object.freeze({
 
 /** The end settings every preset starts from (sandbox); presets override some. */
 const END_DEFAULTS = { endConditions: [], endTicks: 2500, dominanceShare: 0.6, dominanceYears: 300 };
+/** Mutation every preset uses. */
+const MUTATION = { mutation: 0.03 };
 
 export const PRESETS = {
-  default: { label: 'Small world', params: { ...END_DEFAULTS } },
+  default: { label: 'Small world', params: { ...MUTATION, ...END_DEFAULTS } },
   continent: { label: 'Continent', params: {
     seed: 'continent', size: 30, water: 0.2, mountains: 0.12, rivers: 6, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
-    civCount: 4, startPop: 30, ...END_DEFAULTS, endConditions: ['dominance', 'years'], endTicks: 5000 } },
+    civCount: 4, startPop: 30, ...MUTATION, ...END_DEFAULTS, endConditions: ['dominance', 'years'], endTicks: 5000 } },
   archipelago: { label: 'Archipelago', params: {
     seed: 'islands', size: 30, water: 0.6, mountains: 0.08, rivers: 2, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
-    civCount: 5, startPop: 20, ...END_DEFAULTS, endConditions: ['lastCiv', 'years'], endTicks: 10000 } },
+    civCount: 5, startPop: 20, ...MUTATION, ...END_DEFAULTS, endConditions: ['lastCiv', 'years'], endTicks: 10000 } },
   highlands: { label: 'Highlands', params: {
     seed: 'peaks', size: 20, water: 0.15, mountains: 0.3, rivers: 5, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
-    civCount: 3, startPop: 20, ...END_DEFAULTS, endConditions: ['years'] } },
+    civCount: 3, startPop: 20, ...MUTATION, ...END_DEFAULTS, endConditions: ['years'] } },
   large: { label: 'Large world', params: {
     seed: 'vast', size: 50, water: 0.3, mountains: 0.12, rivers: 12, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
-    civCount: 6, startPop: 40, ...END_DEFAULTS, endConditions: ['lastCiv', 'dominance'] } },
+    civCount: 6, startPop: 40, ...MUTATION, ...END_DEFAULTS, endConditions: ['lastCiv', 'dominance'] } },
 };
 
 export function presetParams(key) {
@@ -96,6 +101,7 @@ export function normalizeParams(input = {}) {
   for (const k of LOWLAND_KEYS) p[k] = Math.round(range(input[k], k, d[k]) * 100) / 100;
   p.civCount = Math.round(range(input.civCount, 'civCount', d.civCount));
   p.startPop = Math.round(range(input.startPop, 'startPop', d.startPop));
+  p.mutation = Math.round(range(input.mutation, 'mutation', d.mutation) * 100) / 100;
   p.endConditions = normalizeEnds(input);
   p.endTicks = Math.round(range(input.endTicks, 'endTicks', d.endTicks));
   p.dominanceShare = Math.round(range(input.dominanceShare, 'dominanceShare', d.dominanceShare) * 100) / 100;
@@ -135,6 +141,7 @@ export function randomParams(random = Math.random) {
     tundra: random() * 0.3,
     civCount: 2 + Math.floor(random() * 5),
     startPop: 10 + Math.floor(random() * 41),
+    mutation: Math.floor(random() * 11) / 100,
     endConditions: END_CONDITIONS.filter(() => random() < 0.5),
     endTicks: YEAR_LIMIT_CHOICES[Math.floor(random() * YEAR_LIMIT_CHOICES.length)],
     dominanceShare: 0.5 + random() * 0.3,
