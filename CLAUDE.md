@@ -64,6 +64,7 @@ RULES.md                the player rulebook; always matches the code
 
 ## Workflow
 
+- Every question, request, approved proposal and task carries a priority; the director always writes a suggested one, which stands unless the owner changes it. Each build contains every ready P1 task; P2 tasks join when they share context with a P1 or while the build has fewer than 5 tasks; P3 tasks only when P1 and P2 together come to fewer than 5 (details in the director-cycle skill, step 5).
 - Each cycle produces at most one "Release candidate: …" pull request. CI (`.github/workflows/ci.yml`) must be green before the owner merges it.
 - No agent plays the game in a browser during a cycle, to save time and credits. The Playwright specs in `tests/e2e/` run in CI on every pull request instead.
 - unit-tester runs only in cycles that change game logic (src/sim, src/host, src/loop.js, other unit-tested modules, or RULES.md); in screen-only cycles the director runs `npm run test:unit` itself.

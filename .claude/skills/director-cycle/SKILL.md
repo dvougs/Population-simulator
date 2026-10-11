@@ -28,11 +28,12 @@ Otherwise (a scheduled run): stop now, without changing or pushing anything, if 
 Work on a local `main` that matches `origin/main` (`git checkout main && git reset --hard origin/main` only if there are no local commits; otherwise `git pull --ff-only`).
 
 For each answered question, each decided proposal and each request:
-- Add tasks to project/TASKS.md: next free ID (T-###), a short title, an owner (game-dev or unit-tester), status todo, source (the question or request ID, or the phase), and acceptance criteria someone can check. A task that changes a game rule says "update RULES.md" in its criteria, and gets a matching unit-tester task.
+- Work out its priority (P1, P2 or P3). Use the one on the entry: a "Priority:" line on a question or proposal, or a `[P#]` at the start of a request; a suggested priority the owner left unchanged counts as theirs. If there is none, read their words: "required", "must", "next build" or the like is P1; "low prio", "nice to have", "when there is time" is P3; anything else is P2. Never wait for the owner to confirm a priority.
+- Add tasks to project/TASKS.md: next free ID (T-###), a short title, an owner (game-dev or unit-tester), priority (the entry's), status todo, source (the question or request ID, or the phase), and acceptance criteria someone can check. TASKS.md keeps a Priority column after Owner, filled for every task; add it if it is missing, with P2 for older tasks unless their source carries a priority. Phase tasks with no owner input are P2. A task a P1 task cannot ship without becomes P1 too. A task that changes a game rule says "update RULES.md" in its criteria, and gets a matching unit-tester task.
 - Requests have no ID until you give them one: R-### in order.
 - A task still owned by functional-tester (an agent the studio no longer has): give it to unit-tester, with its criteria narrowed to keeping the existing e2e specs in step with the change so CI's e2e job passes. No new browser coverage.
 - A proposal is handled like an answered question. "yes": tasks for the agents that own the work (game-dev, plus a unit-tester task when it changes a rule), with "update RULES.md" in the criteria when it changes a rule or number. "changes": the same, with the user's changes applied; if they are unclear, ask a question instead and leave the proposal under "Proposals". "no" and "later": no tasks.
-- Move the entry, with its answer or decision, to "Answered" with today's date and the task IDs it produced. A rule change from the user also goes into CLAUDE.md or this skill through the next release-candidate pull request if it changes how the studio works.
+- Move the entry, with its answer or decision and its priority, to "Answered" with today's date and the task IDs it produced. A rule change from the user also goes into CLAUDE.md or this skill through the next release-candidate pull request if it changes how the studio works.
 
 ## 4. Close merged work
 
@@ -48,13 +49,17 @@ One release candidate at a time: if a "Release candidate:" pull request is still
 
 Otherwise:
 1. `git checkout -b claude/cycle-<YYYYMMDD>-<HHMM> origin/main`. Never edit project/ on the cycle branch: it gets project/ only by merging main in step 8. The agents get their tasks from you.
-2. Pick a batch of ready tasks that makes sense as one pull request (one phase step, a few related tasks). Set them to doing.
+2. Pick the batch by priority, counting every task row (game-dev and unit-tester alike) as one task:
+   - **Every ready P1 task, however many.** P1 work always ships in the next build; never hold one back for size or to keep the batch tidy.
+   - **P2 tasks**, oldest first: add one if it shares context with a P1 in the batch (same feature, screen or files), or while the batch has fewer than 5 tasks.
+   - **P3 tasks**, oldest first, only if the P1 and P2 tasks in the batch total fewer than 5: add them while the batch has fewer than 5 tasks.
+   Set the batch to doing. A P1 that is not ready (blocked by an open question or a broken dependency) goes at the top of the cycle log and the email, with what it waits on.
 3. Run the **game-dev** agent with the task rows verbatim, the branch name, and any relevant answers. Keep its report.
 4. Decide whether game logic changed. It did if `git diff --name-only origin/main` lists anything under src/sim/, src/host/ or src/loop.js, any other src/ module that tests/unit imports (`grep -rh "from '" tests/unit`), or RULES.md.
    - Logic changed: run the **unit-tester** agent with the task rows, the changed files, and game-dev's "Rules changed" and "Please test". It checks the existing tests for the changed areas, rewrites the ones that are out of date with RULES.md, and adds tests for the changes.
    - Screen-only change (styles, layout, rendering, UI wiring): skip unit-tester to save time and credits. Run `npm run test:unit` yourself; if it fails, treat the failures as bug reports for game-dev in step 5. Note the skip in the cycle log.
    - Either way, do not run the browser tests yourself; CI runs them on the pull request. A failing CI e2e job still goes to unit-tester (step 9), even in a screen-only cycle.
-5. If unit-tester (or your own `npm run test:unit`) reports bugs, give the bug reports verbatim to game-dev, then test again the same way. At most two fix rounds. If bugs remain after that, mark the affected tasks blocked, add an Open question describing the bug and the options, and leave out of the pull request any work that is broken (revert those commits on the branch if needed).
+5. If unit-tester (or your own `npm run test:unit`) reports bugs, give the bug reports verbatim to game-dev, then test again the same way. At most two fix rounds. If bugs remain after that, mark the affected tasks blocked, add an Open question describing the bug and the options, and leave out of the pull request any work that is broken (revert those commits on the branch if needed). A P1 left out this way is the first thing in the cycle log, the pull request's known issues and the email.
 6. Check RULES.md: for every rule changed this cycle (game-dev's "Rules changed" plus your own reading of `git diff origin/main -- src`), the number in RULES.md must equal the number in the code. If not, send game-dev back to fix RULES.md, then run unit-tester (a RULES.md change counts as a logic change).
 7. Check ownership: `git diff --name-only origin/main` must show no tests/ files in game-dev's commits and no src/ files in unit-tester's commits. If it does, revert those changes and record it in the log.
 
@@ -80,6 +85,7 @@ Run this on every full cycle, after the tests, even when nothing was built. Prop
 - Evidence: <what the run or the code showed: seeds, years, numbers, file:line>
 - Effort: <S | M | L>
 - Phone performance risk: <low | medium | high>: <why>
+- Priority: <P1 | P2 | P3> (suggested; stands unless the owner changes it)
 - Decision:
 ```
 
@@ -98,6 +104,7 @@ Ask only about decisions that belong to the user (design, scope, trade-offs) or 
   2. <option>: <consequence>
   3. <option>: <consequence>   (optional)
 - Recommendation: <option number and why>
+- Priority: <P1 | P2 | P3> (suggested; stands unless the owner changes it)
 - Answer:
 ```
 
@@ -109,7 +116,7 @@ Run this after every agent has finished (build, fix rounds, design review, quest
 
 1. Bookkeeping, on local `main`:
    - project/TASKS.md: final status of every task touched.
-   - project/QUESTIONS.md: new questions and proposals; answered and decided entries moved.
+   - project/QUESTIONS.md: new questions and proposals; answered and decided entries moved. Every open question, proposal and request shows a priority: give any entry without one a suggested "Priority:" line (or `[P#]` on a request), using the wording rule in step 3.
    - project/PROGRESS.md: update the status block at the top (phase, "Last full cycle: <YYYY-MM-DD HH:MM> UTC", what is live on GitHub Pages, open release candidate, blockers), then add a cycle-log entry under "Cycle log", newest first: what was decided, built, tested, opened, merged, blocked.
 2. Review every Markdown file in the repo (`git ls-files '*.md'`: RULES.md, CLAUDE.md, README.md, everything in project/, the agents and skills under .claude/, any others) against the code on the cycle branch (or `origin/main` if there is none), and update each so it reflects the latest state of the code, rules, questions, tasks and progress. Edit project/ files on local `main`; edit every other file on the cycle branch (with no cycle branch, leave non-project files for the next one and note the drift in the cycle log).
    - RULES.md describes intended behaviour. Where it and the code disagree: if a task or answer asked for the code's behaviour and RULES.md lagged, update RULES.md; if the code is wrong, that is a bug, so send it to game-dev and re-run the step 5 test loop, or, if you cannot tell which is intended, ask the user an Open question. Never change a rule to match buggy code.
@@ -127,7 +134,7 @@ Only when step 5 built or fixed a cycle branch.
 2. A new branch: open the pull request through the REST API (gh pr commands are blocked in cloud sessions):
    `gh api repos/<owner>/<repo>/pulls -f title="Release candidate: <summary>" -f head=<branch> -f base=main -f body=@<file>` (or `--input` with a JSON body). If `gh` fails, open it with the GitHub MCP `create_pull_request` tool.
    A fix to an open release candidate: update that pull request's description with the same sections for this cycle.
-3. The body lists: the task IDs (one line "Tasks: T-001, T-002"), what changed in player terms, rules changed with old → new values, the questions and proposals answered or decided this cycle and the ones opened this cycle (ID and one line each), unit test results (counts and any skipped areas), and known issues. The e2e results come from CI.
+3. The body lists: the task IDs by priority (one line each: "P1: T-001, T-002", "P2: …", "P3: …"), what changed in player terms, rules changed with old → new values, the questions and proposals answered or decided this cycle and the ones opened this cycle (ID and one line each), unit test results (counts and any skipped areas), and known issues. The e2e results come from CI.
 4. If CI's e2e job fails on the pull request (seen in step 1 of a later cycle, or now if you wait for CI): give the failure to game-dev when the game is wrong, or to unit-tester when a spec is out of date with an intended change, in the same fix loop as step 5.
 5. Never merge it.
 
