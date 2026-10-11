@@ -22,7 +22,7 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
   2. As 1, but Aggressive and Expansionist both always fight.
   3. As 1, but fights only cause fleeing, no deaths (a gentler game; war deaths appear only with L4 organised war).
 - Recommendation: 1, it gives each type one clear trait the player can see, keeps fights local and rare when food is plentiful, and uses the defence bonuses already in the terrain table.
-- Answer:
+- Answer: let's go with 1 (reading: option 1 as written, Cooperative never starts fights, Nomadic moves further, Aggressive always fights when sharing a hex, fights as described; no separate reviewer step asked for this one)
 
 ### Q-008: What numbers should gathering and level effects use?
 - Date: 2026-10-11
