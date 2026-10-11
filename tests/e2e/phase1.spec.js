@@ -183,6 +183,71 @@ test.afterEach(async ({ page }) => {
   expect(page.errors).toEqual([]);
 });
 
+/** Ids of the screens on show; exactly one should be. */
+const shownScreens = (page) => page.evaluate(() => [...document.querySelectorAll('.screen')].filter((s) => getComputedStyle(s).display !== 'none').map((s) => s.id));
+
+test.describe('home page and How to play', () => {
+  // RULES.md "Home page". These click the real buttons and check that the screen actually changes.
+  test('the home page is the only screen on show at first', async ({ page }, testInfo) => {
+    await page.goto('/');
+    await expect(page.locator('#home')).toBeVisible();
+    await expect(page.locator('#btn-new-game')).toBeVisible();
+    await expect(page.locator('#btn-how')).toBeVisible();
+    await expect.poll(() => shownScreens(page)).toEqual(['home']);
+    await expect(page.locator('#home-caption')).toContainText('Year');
+    await shot(page, testInfo, 'home');
+  });
+
+  test('How to play opens from the home page, and its Home button and Back both return', async ({ page }, testInfo) => {
+    await page.goto('/');
+    await page.locator('#btn-how').click();
+    await expect(page.locator('#how')).toBeVisible();
+    await expect.poll(() => shownScreens(page)).toEqual(['how']);
+    await expect(page).toHaveURL(/#how$/);
+    await expect(page.locator('#how-body h2').first()).toBeVisible();
+    await shot(page, testInfo, 'how');
+    await page.locator('#btn-how-back').click();
+    await expect.poll(() => shownScreens(page)).toEqual(['home']);
+    await expect(page).not.toHaveURL(/#how/);
+    // The browser's Back (the phone's back gesture) also returns home.
+    await page.locator('#btn-how').click();
+    await expect.poll(() => shownScreens(page)).toEqual(['how']);
+    await page.goBack();
+    await expect.poll(() => shownScreens(page)).toEqual(['home']);
+  });
+
+  test('New game from How to play opens the map-generation screen', async ({ page }) => {
+    // A fresh load of the #how address opens How to play directly.
+    await page.goto('/#how');
+    await page.reload();
+    await expect.poll(() => shownScreens(page)).toEqual(['how']);
+    await page.locator('#btn-how-new').click();
+    await expect.poll(() => shownScreens(page)).toEqual(['mapgen']);
+  });
+
+  test('the Home button on the map-generation screen returns to the home page', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#btn-new-game').click();
+    await expect.poll(() => shownScreens(page)).toEqual(['mapgen']);
+    await page.locator('#btn-home').click();
+    await expect.poll(() => shownScreens(page)).toEqual(['home']);
+    await expect(page.locator('#btn-home-resume')).toBeHidden();
+  });
+
+  test('after a game starts, Home then Back to game returns to it', async ({ page }) => {
+    await startGame(page);
+    await page.locator('#btn-setup').click();
+    await expect.poll(() => shownScreens(page)).toEqual(['setup']);
+    await page.locator('#btn-change-map').click();
+    await expect.poll(() => shownScreens(page)).toEqual(['mapgen']);
+    await page.locator('#btn-home').click();
+    await expect.poll(() => shownScreens(page)).toEqual(['home']);
+    await expect(page.locator('#btn-home-resume')).toBeVisible();
+    await page.locator('#btn-home-resume').click();
+    await expect.poll(() => shownScreens(page)).toEqual(['game']);
+  });
+});
+
 test.describe('map generation screen', () => {
   test('the home page is the first screen; New game opens this one with the RULES.md defaults', async ({ page }, testInfo) => {
     // RULES.md "Home page": the game opens on the home page; #new (used by every test here) skips it.

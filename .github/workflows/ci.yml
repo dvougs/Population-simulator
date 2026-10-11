@@ -46,6 +46,13 @@ jobs:
       - run: npm run test:e2e
         env:
           CI: 'true'
+      - name: Home page and How to play on the site exactly as Pages ships it
+        run: |
+          node tools/build-site.js _site
+          npx playwright test -g "home page and How to play"
+        env:
+          CI: 'true'
+          PW_SITE_DIR: _site
       - uses: actions/upload-artifact@v7
         if: failure()
         with:

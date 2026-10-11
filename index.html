@@ -14,7 +14,8 @@
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="stylesheet" href="styles/main.css">
   <title>Population Simulator</title>
-  <script type="module" src="src/main.js"></script>
+  <!-- If the code cannot load (a cached page from an older release points at files that are gone), reload once from the network. -->
+  <script type="module" src="src/main.js" onerror="if(!/[?&amp;]r=/.test(location.search))location.replace(location.pathname+'?r='+Date.now()+location.hash)"></script>
 </head>
 <body>
   <section id="home" class="screen home" aria-labelledby="home-title">
