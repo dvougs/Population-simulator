@@ -15,7 +15,7 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Evidence: Headless runs of seeds review-20261011d-1 to -3 on claude/cycle-20261011-1006 at 71fa0e5, default setup, 400 years: "0 events" and "worst famine none" on all three seeds, although the civs had 43 to 125 starvation deaths each over the run (seed -1: 110, 116, 125), spread thinly over the years. src/sim/records.js:13 sets a famine at 2% of the civ's people and at least 5 deaths in one year; src/sim/records.js:16 logs only famines and extinctions.
 - Effort: S
 - Phone performance risk: low: a few counters per civ checked once a year, written to the existing capped event log.
-- Decision:
+- Decision: Yes (reading: yes as proposed, including lowering the famine threshold in RULES.md from 2% to 1% of the civ's people in one year)
 
 ### P-009: Draw people by age and hunger, and let births and deaths show
 - Date: 2026-10-11
