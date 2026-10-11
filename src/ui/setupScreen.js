@@ -5,6 +5,8 @@ import { LIMITS, normalizeParams, randomParams, YEAR_LIMIT_CHOICES, END_CONDITIO
 import { CIV_TYPES, CIV_TYPE_NAMES, civTypeText, defaultCivType } from '../sim/civTypes.js';
 import { slider } from './mapgenScreen.js';
 import { emblem } from './inspector.js';
+import { civStyle } from '../render/civStyle.js';
+import { rgbCss } from '../render/palette.js';
 
 const END_KEYS = ['endConditions', 'endTicks', 'dominanceShare', 'dominanceYears'];
 
@@ -91,7 +93,7 @@ export class SetupScreen {
         onclick: () => setCount(p.civCount + 1, '#btn-add-civ:not([disabled])') }, '+ Add civ'));
     const list = h('ol', { class: 'civ-types', id: 'civ-types' }, p.civTypes.map((type, k) => {
       const desc = h('p', { class: 'type-desc', id: `f-civ-type-${k}-desc` }, civTypeText(type));
-      return h('li', { 'data-civ': k },
+      const li = h('li', { 'data-civ': k },
         h('div', { class: 'row' },
           h('label', { for: `f-civ-type-${k}`, class: 'civ-chip' }, emblem(k, 18), `Civ ${k + 1}`),
           h('select', { id: `f-civ-type-${k}`, class: 'grow', 'aria-describedby': desc.id,
@@ -100,6 +102,9 @@ export class SetupScreen {
           h('button', { type: 'button', class: 'btn', 'aria-label': `Remove Civ ${k + 1}`, disabled: p.civCount <= LIMITS.civCount.min,
             onclick: () => remove(k) }, '✕')),
         desc);
+      // The card's edge and glow take the civ's colour (styles/main.css .civ-types li).
+      li.style.setProperty('--civ', rgbCss(civStyle(k).rgb));
+      return li;
     }));
     return [countRow, list];
   }
