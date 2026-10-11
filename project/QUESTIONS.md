@@ -56,6 +56,24 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Phone performance risk: low: colours are baked once when the map is built; no per-frame cost.
 - Decision:
 
+### P-005: Let people prefer hexes their own civ already holds
+- Date: 2026-10-11
+- Category: gameplay
+- What: Today a migrant picks a new hex only by spare food, ignoring who lives there, so after a few centuries every civ is spread over most of the island and no civ has a homeland. Giving migrants a pull toward hexes where their own civ already lives (for example, spare food counted double there) would let civs form territories with borders, which Phase 4 contact and war can build on.
+- Evidence: Headless runs of seeds review-20261011b-1 to -3 on claude/cycle-20261011-0405 at 1656249, default setup, 400 years: the 3 civs together hold 146, 143 and 131 hex-slots on 64 land hexes (seed -1: civ 1 in 44, civ 2 in 47, civ 3 in 55), so almost every hex is shared. src/sim/migration.js:91-119 weights targets only by spare food; civ is never read.
+- Effort: S
+- Phone performance risk: low: one per-civ count per hex in the existing migration snapshot, no new loops per person.
+- Decision:
+
+### P-006: A food abundance setting, lower on big maps, to keep people in the thousands
+- Date: 2026-10-11
+- Category: scale
+- What: Add the roadmap's "food abundance" setup option (a multiplier on every hex's food capacity, default 100%) and set it lower in the Large world and Continent presets, so a 50 × 50 world settles at a few thousand people instead of tens of thousands and stays smooth on a phone.
+- Evidence: Headless run of seed review-20261011b-1 with the Large world preset (50 × 50, 6 civs × 40) on 1656249: 2,147 people at year 250, 12,598 at 500, 28,116 at 750, 35,072 at 1000, still rising; 770 ticks/s in Node for the whole run, about 330 ticks/s at the plateau (game-dev's measurement). CLAUDE.md targets "a few thousand people" on a mid-range iPhone; 20× speed needs 160 ticks/s. The default 10 × 10 map is fine (1,323 to 1,405 people at year 400).
+- Effort: S
+- Phone performance risk: low: it lowers the work per tick; the setting itself costs nothing at run time.
+- Decision:
+
 ## Requests
 
 ## Answered

@@ -2,13 +2,26 @@
 
 ## Status
 
-- Phase: 1 live; Phase 1 follow-ups (lowland sliders, whole-map water, water tide) in a release candidate. Phase 2 (people) tasks T-013 to T-017 seeded, not started.
-- Last full cycle: 2026-10-11 00:06 UTC
-- Live on GitHub Pages: Phase 1 (hex map, map-generation screen, PixiJS renderer), merged in PR #10. https://dvougs.github.io/Population-simulator/
-- Open release candidate: #13 "Release candidate: lowland terrain sliders, whole-map water, water tide" https://github.com/dvougs/Population-simulator/pull/13 (T-010, T-011, T-012).
-- Blockers: none. Open questions Q-003 (what 1.0 contains), Q-004 (traits and mutation), Q-005 (civ and people visuals); proposals P-003 (water slider dead zone, UI) and P-004 (height shading, visuals).
+- Phase: 1 live with its follow-ups (lowland sliders, whole-map water, water tide). Phase 2 (people) in a release candidate: life cycle, migration, per-civ stats (T-013, T-014, T-016, T-017). T-015 (people on screen, tap a person) blocked on Q-005.
+- Last full cycle: 2026-10-11 04:05 UTC
+- Live on GitHub Pages: Phase 1 and its follow-ups (PRs #10 and #13). https://dvougs.github.io/Population-simulator/
+- Open release candidate: #14 "Release candidate: Phase 2 people, life cycle, migration and per-civ stats" https://github.com/dvougs/Population-simulator/pull/14
+- Blockers: none. Open questions Q-003 (what 1.0 contains), Q-004 (traits and mutation), Q-005 (civ and people visuals; blocks T-015); proposals P-003, P-004, P-005 (civ homelands, gameplay), P-006 (food abundance, scale).
 
 ## Cycle log
+
+### 2026-10-11 04:05: Phase 2 people, life cycle, migration, stats
+
+- Owner input: none new (Q-003 to Q-005 still open, P-003 and P-004 undecided, no requests). Full cycle by the 3 h 50 min rule.
+- Merged since last cycle: #13 (T-010, T-011, T-012 now done) and #12 (studio change: unit-tester only in logic cycles, no task IDs).
+- T-015 marked blocked by Q-005 (how civs and people are drawn). T-013, T-014, T-016, T-017 built: none of the open questions blocks them (every Q-003 option includes people; traits from Q-004 layer on later).
+- Built on claude/cycle-20261011-0405 by game-dev: people pool in typed arrays with free-list reuse, yearly order birthdays → eating → deaths → births → migration → regrowth → statistics, civ count (default 3, 1–8) and starting population (default 20, 2–200) on the setup screen, migration within 3 movement points, per-civ yearly stats and history through SimHost, per-civ headless report; live population and people per civ in the HUD, sheet and hex card (no people drawn yet). RULES.md gained "Civilisations and people", "A year", "Migration" and "Statistics". npm run perf 536 ticks/s (floor 150).
+- unit-tester (T-017): 167 passed, 0 failed (was 98); e2e spec kept in step, local run 71 passed, 1 skipped. No bugs, no fix rounds.
+- RULES.md checked against src/sim/life.js, migration.js and params.js: values match. Ownership clean (game-dev: src/, RULES.md, README.md, index.html, tools/; unit-tester: tests/ only).
+- Design review on the cycle branch at 1656249, seeds review-20261011b-1/-2/-3, default setup, 400 years: final population 1354 (243/670/441), 1323 (166/414/743), 1405 (391/514/500), still rising; hashes 3e71ba66, ead3b24a, 09f127bb. Deaths: old age 3205/3531/3136, starvation 106/240/118. Average lifespan 50.6–52.1, oldest 64–69. No extinctions. Civs together hold 146/143/131 hex-slots on 64 land hexes. Levels not reported: they do not exist until Phase 4 (no headless task needed yet). Large world (seed -1, 1000 years): 35,072 people, still rising, 770 ticks/s. Proposals P-005 (civ homelands, gameplay) and P-006 (food abundance, scale).
+- No new questions (three still open).
+- Docs pass: README.md and RULES.md were updated by game-dev in the build; CLAUDE.md's "headless prints per-civ results" is now true. No other drift.
+- Opened PR #14. Email sent to the owner (proposals, release candidate).
 
 ### 2026-10-11 00:06: lowland sliders, whole-map water, water tide
 
