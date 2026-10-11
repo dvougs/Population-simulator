@@ -2,6 +2,8 @@ import { defineConfig, devices } from '@playwright/test';
 
 // PW_CHROMIUM_PATH lets environments with a preinstalled Chromium skip the download.
 const executablePath = process.env.PW_CHROMIUM_PATH || undefined;
+// PW_SITE_DIR serves a built site (tools/build-site.js) instead of the repo, to test exactly what Pages ships.
+const siteDir = process.env.PW_SITE_DIR || '';
 
 export default defineConfig({
   testDir: 'tests/e2e',
@@ -15,7 +17,7 @@ export default defineConfig({
     launchOptions: { executablePath },
   },
   webServer: {
-    command: 'node tools/serve.js 4173',
+    command: `node tools/serve.js 4173 ${siteDir}`.trim(),
     url: 'http://localhost:4173/',
     reuseExistingServer: !process.env.CI,
   },

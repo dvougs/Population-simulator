@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Minimal static file server for local testing (no dependencies).
-//   node tools/serve.js [port]      listens on all interfaces so a phone on the same Wi-Fi can connect
+//   node tools/serve.js [port] [dir]   listens on all interfaces so a phone on the same Wi-Fi can connect;
+//                                      dir (default: the repo) serves another folder, such as the built site
 
 import http from 'node:http';
 import fs from 'node:fs/promises';
@@ -8,7 +9,8 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const root = path.resolve(repo, process.argv[3] || '.');
 const port = Number(process.argv[2] || process.env.PORT || 8080);
 const types = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',

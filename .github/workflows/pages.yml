@@ -32,10 +32,8 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
-      - name: Collect the static site (only what the browser needs)
-        run: |
-          mkdir _site
-          cp -r index.html manifest.webmanifest icons styles src vendor _site/
+      - name: Collect the static site, code under a per-release address so phones never mix cached old files with new ones
+        run: node tools/build-site.js _site
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v3
         with:
