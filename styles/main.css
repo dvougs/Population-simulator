@@ -69,6 +69,11 @@ input[type="range"] { width: 100%; height: var(--tap); accent-color: var(--accen
 .row.check > input { width: 24px; height: 24px; margin: 0 0 0 4px; accent-color: var(--accent); flex: 0 0 auto; }
 .row.check > label { flex: 1 1 auto; min-height: var(--tap); display: flex; align-items: center; color: var(--text); cursor: pointer; }
 .civ-desc { margin: 8px 0 0; font-size: 0.85rem; color: var(--text-dim); }
+.civ-types { list-style: none; margin: 8px 0 4px; padding: 0; display: grid; gap: 10px; }
+.civ-types li { border-top: 1px solid var(--border); padding-top: 8px; min-width: 0; }
+.civ-types .row > label { min-width: 0; color: var(--text); white-space: nowrap; }
+/* 16px so the explanations stay readable on a 320px-wide phone. */
+.type-desc { margin: 4px 0 0; font-size: 16px; line-height: 1.4; color: var(--text-dim); overflow-wrap: anywhere; }
 
 /* ---------- Map-generation screen ---------- */
 .mapgen-layout { max-width: 720px; margin: 0 auto; display: grid; gap: 14px; }

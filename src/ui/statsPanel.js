@@ -20,7 +20,8 @@ export function renderStats(listEl, stats) {
 export function renderCivStats(listEl, stats) {
   listEl.replaceChildren(...stats.civs.map((c, k) => h('li', { 'data-civ': c.id, class: c.pop === 0 ? 'dead' : undefined },
     emblem(k),
-    h('span', { class: 'name' }, c.extinctYear !== null ? `${c.name} (died out, year ${c.extinctYear})` : c.name),
+    h('span', { class: 'name' }, c.extinctYear !== null ? `${c.name} (died out, year ${c.extinctYear})` : c.name,
+      c.typeName ? h('small', {}, ` ${c.typeName}`) : null),
     h('span', { class: 'num' }, formatNumber(c.pop), h('small', {}, 'people')),
     h('span', { class: 'num' }, formatNumber(c.hexes), h('small', {}, 'hexes')),
   )));

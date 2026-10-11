@@ -3,6 +3,7 @@
 // The map parameters (MAP_KEYS) alone decide the map.
 
 import { randomSeedString } from './rng.js';
+import { CIV_TYPES, defaultCivType } from './civTypes.js';
 
 /**
  * End conditions a run can have, in the order they are checked. None ticked
@@ -47,6 +48,8 @@ export const DEFAULT_PARAMS = Object.freeze({
   tundra: 0.15,
   // Game settings: civilisations placed at the start and people in each.
   civCount: 3,
+  // One type per civ (Civ 1 first); the default order gives every civ a different one.
+  civTypes: Object.freeze(['expansionist', 'aggressive', 'cooperative']),
   startPop: 20,
   // Largest change a trait can take from parent to child (± this, uniform).
   mutation: 0.03,
@@ -63,19 +66,19 @@ const END_DEFAULTS = { endConditions: [], endTicks: 2500, dominanceShare: 0.6, d
 const MUTATION = { mutation: 0.03 };
 
 export const PRESETS = {
-  default: { label: 'Small world', params: { ...MUTATION, ...END_DEFAULTS } },
+  default: { label: 'Small world', params: { civTypes: ['expansionist', 'aggressive', 'cooperative'], ...MUTATION, ...END_DEFAULTS } },
   continent: { label: 'Continent', params: {
     seed: 'continent', size: 30, water: 0.2, mountains: 0.12, rivers: 6, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
-    civCount: 4, startPop: 30, ...MUTATION, ...END_DEFAULTS, endConditions: ['dominance', 'years'], endTicks: 5000 } },
+    civCount: 4, civTypes: ['expansionist', 'aggressive', 'cooperative', 'isolationist'], startPop: 30, ...MUTATION, ...END_DEFAULTS, endConditions: ['dominance', 'years'], endTicks: 5000 } },
   archipelago: { label: 'Archipelago', params: {
     seed: 'islands', size: 30, water: 0.6, mountains: 0.08, rivers: 2, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
-    civCount: 5, startPop: 20, ...MUTATION, ...END_DEFAULTS, endConditions: ['lastCiv', 'years'], endTicks: 10000 } },
+    civCount: 5, civTypes: ['nomadic', 'expansionist', 'isolationist', 'cooperative', 'aggressive'], startPop: 20, ...MUTATION, ...END_DEFAULTS, endConditions: ['lastCiv', 'years'], endTicks: 10000 } },
   highlands: { label: 'Highlands', params: {
     seed: 'peaks', size: 20, water: 0.15, mountains: 0.3, rivers: 5, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
-    civCount: 3, startPop: 20, ...MUTATION, ...END_DEFAULTS, endConditions: ['years'] } },
+    civCount: 3, civTypes: ['isolationist', 'aggressive', 'nomadic'], startPop: 20, ...MUTATION, ...END_DEFAULTS, endConditions: ['years'] } },
   large: { label: 'Large world', params: {
     seed: 'vast', size: 50, water: 0.3, mountains: 0.12, rivers: 12, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
-    civCount: 6, startPop: 40, ...MUTATION, ...END_DEFAULTS, endConditions: ['lastCiv', 'dominance'] } },
+    civCount: 6, civTypes: ['expansionist', 'aggressive', 'cooperative', 'isolationist', 'nomadic', 'aggressive'], startPop: 40, ...MUTATION, ...END_DEFAULTS, endConditions: ['lastCiv', 'dominance'] } },
 };
 
 export function presetParams(key) {
@@ -100,6 +103,7 @@ export function normalizeParams(input = {}) {
   p.rivers = Math.round(range(input.rivers, 'rivers', d.rivers));
   for (const k of LOWLAND_KEYS) p[k] = Math.round(range(input[k], k, d[k]) * 100) / 100;
   p.civCount = Math.round(range(input.civCount, 'civCount', d.civCount));
+  p.civTypes = normalizeTypes(input.civTypes, p.civCount);
   p.startPop = Math.round(range(input.startPop, 'startPop', d.startPop));
   p.mutation = Math.round(range(input.mutation, 'mutation', d.mutation) * 100) / 100;
   p.endConditions = normalizeEnds(input);
@@ -118,6 +122,15 @@ function normalizeEnds(input) {
   return END_CONDITIONS.filter((k) => ticked.includes(k) || (k === 'years' && input.endCondition === 'ticks'));
 }
 
+/**
+ * One known type per civ: civCount decides how many; a missing or unknown
+ * entry takes the default type for that civ number (see defaultCivType).
+ */
+function normalizeTypes(types, count) {
+  const list = Array.isArray(types) ? types : [];
+  return Array.from({ length: count }, (_, k) => (CIV_TYPES.includes(list[k]) ? list[k] : defaultCivType(k)));
+}
+
 /** Just the parameters that decide the map. */
 export function mapParams(params) {
   const p = normalizeParams(params);
@@ -129,7 +142,7 @@ const DOMINANCE_YEAR_CHOICES = [100, 200, 300, 500];
 /** Random but sensible map and civs. Uses Math.random (UI only); the sim itself stays seeded. */
 export function randomParams(random = Math.random) {
   const size = 10 + Math.floor(random() * 41);
-  return normalizeParams({
+  const p = {
     seed: randomSeedString(),
     size,
     water: 0.1 + random() * 0.5,
@@ -146,5 +159,8 @@ export function randomParams(random = Math.random) {
     endTicks: YEAR_LIMIT_CHOICES[Math.floor(random() * YEAR_LIMIT_CHOICES.length)],
     dominanceShare: 0.5 + random() * 0.3,
     dominanceYears: DOMINANCE_YEAR_CHOICES[Math.floor(random() * DOMINANCE_YEAR_CHOICES.length)],
-  });
+  };
+  // Drawn last so the other settings get the same draws as before types existed.
+  p.civTypes = Array.from({ length: p.civCount }, () => CIV_TYPES[Math.floor(random() * CIV_TYPES.length)]);
+  return normalizeParams(p);
 }

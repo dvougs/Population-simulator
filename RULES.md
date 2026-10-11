@@ -2,7 +2,7 @@
 
 How the game works, as currently implemented. Every number here is the value the code uses. If the game and this file disagree, the game has a bug (see CLAUDE.md).
 
-This describes the current build (Phase 2, in progress): a generated hex map where civilisations of individual people eat, have children, grow old, starve and migrate, year by year, until an end condition you chose is met. Every person carries 8 inherited traits that set their birth chance, lifespan, food need and how hard hunger hits them; civ types come later. The full design is in [project/ROADMAP.md](project/ROADMAP.md); this file changes as each part of it ships.
+This describes the current build (Phase 2, in progress): a generated hex map where civilisations of individual people eat, have children, grow old, starve and migrate, year by year, until an end condition you chose is met. Every person carries 8 inherited traits that set their birth chance, lifespan, food need and how hard hunger hits them; each civ has a type that biases how its people move. The full design is in [project/ROADMAP.md](project/ROADMAP.md); this file changes as each part of it ships.
 
 ## Saving
 
@@ -101,7 +101,7 @@ Chance a hex holds a deposit (%); a terrain not listed is 0:
 
 ## Civilisations and people
 
-- The game starts with *civ count* civilisations (civs), named Civ 1, Civ 2 and so on, each with *starting population* people. Each civ has its own colour and shape emblem (see "How civs and people look").
+- The game starts with *civ count* civilisations (civs), named Civ 1, Civ 2 and so on, each with *starting population* people and a type (see "Civ types"). Each civ has its own colour and shape emblem (see "How civs and people look").
 - **Start hexes.** A good start hex is land with food capacity 40 or more (coast, plains, forest, and any river hex). The first civ starts on a random good hex. Each next civ starts on a random good hex at least 3 steps from every earlier start; if there is none, on the good hex farthest from the earlier starts (lowest index on ties). With no good hexes at all, any land hex counts as good. On very small land several civs can start on the same hex.
 - All of a civ's founders start together on its start hex, each with a random age from 0 to 39, full health (100) and no hunger, no parent, and traits drawn as "Traits" says.
 - Every person has an age (years), health (0 to 100), hunger (years in a row without food), a hex, a civ, a parent (the person who bore them; none for founders) and 8 traits.
@@ -126,8 +126,28 @@ Every person has 8 traits, each a number from 0 to 1: fertility (f), life expect
   - the tolerance T(x) = 2 − 2 × x for x up to 0.5, and 1.5 − x above (2 at 0, 1 at 0.5, 0.5 at 1);
   - climate = T(h) × (0.5 + c) in desert, T(c) × (0.5 + h) in tundra and mountain, and 1 on any other terrain.
   For example, with every trait at 0.5 the loss is 35 everywhere; with f = 0.7 and the rest 0.5 it is round(35 × 1.56) = 55.
-- **Founders** start at their civ type's values, each plus a random amount from −0.1 to +0.1 (uniform), kept between 0 and 1. Starting values: Aggressive aggression 0.7 and strength 0.65; Cooperative cooperation 0.7; Expansionist fertility 0.58; Isolationist life expectancy 0.6; Nomadic metabolism 0.45, heat tolerance 0.6 and cold tolerance 0.6; every other trait 0.5. Civ types are not in the game yet, so every civ is type-less: all its starting values are 0.5.
+- **Founders** start at their civ type's values, each plus a random amount from −0.1 to +0.1 (uniform), kept between 0 and 1. Starting values: Aggressive aggression 0.7 and strength 0.65; Cooperative cooperation 0.7; Expansionist fertility 0.58; Isolationist life expectancy 0.6; Nomadic metabolism 0.45, heat tolerance 0.6 and cold tolerance 0.6; every other trait 0.5.
 - **Inheritance and mutation.** A child gets each of its parent's traits plus a random amount from −*mutation* to +*mutation* (uniform, drawn separately for each trait), kept between 0 and 1. *Mutation* is a game setting (default 3%, that is ±0.03; see "Game settings"); at 0% children copy their parent exactly.
+
+## Civ types
+
+Each civ has one of 5 types, picked per civ on the setup screen. A type biases the odds on top of each person's own traits: it sets the founders' starting traits (see "Traits") and changes how its people migrate and fight. A person always acts by the type of the civ they belong to now.
+
+| Type | What it does differently | Starting traits (others 0.5) |
+|---|---|---|
+| Expansionist | Moves on early: a fed person sets out (20% a year) once their hex holds more people than 50% of its food capacity, instead of 80%. | fertility 0.58 |
+| Aggressive | Always fights any civ it shares a hex with (once contact ships; see "Not in the game yet"). | aggression 0.7, strength 0.65 |
+| Cooperative | Never starts a fight; its people switch away to another civ half as often (once contact ships). | cooperation 0.7 |
+| Isolationist | Stays home: its people set out only in a year they went hungry (50%), never because the hex is crowded. | life expectancy 0.6 |
+| Nomadic | Wanders far: 5 movement points a year instead of 3, and sets out at twice the usual chance (100% when hungry, 40% when fed in a crowded hex). | metabolism 0.45, heat tolerance 0.6, cold tolerance 0.6 |
+
+- The setup screen shows, next to each civ's type picker, the type's explanation: the sentence for that type below, then "Starts with" its starting traits and "other traits 0.5".
+  - Expansionist: "Moves on early: its people set out once their hex is half full, long before it is crowded."
+  - Aggressive: "Always fights any civ it shares a hex with."
+  - Cooperative: "Never starts a fight, and its people leave it for another civ half as often as others do."
+  - Isolationist: "Stays home: its people only set out when they go hungry, never because the hex is crowded."
+  - Nomadic: "Wanders far: 5 movement points a year instead of 3, and sets out twice as often."
+- Cooperative gathers 25% faster once gathering arrives (with levels).
 
 ## A year
 
@@ -152,7 +172,8 @@ Each year (tick) runs these steps in order. Within a step everyone decides first
 
 - A person who went hungry this year sets out with chance 50%.
 - A person who ate, in a crowded hex, sets out with chance 20%. A hex is crowded when it holds more people (all civs) than 80% of its food capacity.
-- **Reach.** A person has 3 movement points a year. Entering a hex costs its movement cost (coast and plains 1, desert and tundra 1.5, forest and hills 2, mountain 3). The hexes in reach are the land hexes that can be reached along a path of land hexes costing 3 or less in total. Seas and lakes cannot be entered or crossed.
+- **By civ type** (see "Civ types"): for Expansionist people a hex is already crowded above 50% of its food capacity; Isolationist people who ate never set out; Nomadic people set out at twice the chance (100% hungry, 40% fed in a crowded hex) and have 5 movement points. Aggressive and Cooperative people use the usual numbers.
+- **Reach.** A person has 3 movement points a year (Nomadic: 5). Entering a hex costs its movement cost (coast and plains 1, desert and tundra 1.5, forest and hills 2, mountain 3). The hexes in reach are the land hexes that can be reached along a path of land hexes costing no more than their movement points (3, or 5 for Nomadic) in total. Seas and lakes cannot be entered or crossed.
 - **Spare food** of a hex = the food it will hold after this year's regrowth (food + 50% of capacity, at most the capacity) − the people in it now (after this year's births).
 - A person who sets out picks one hex in reach whose spare food is above 0 and above their own hex's spare food, at random, with chances in proportion to each hex's weight. A hex's weight is its spare food, counted twice (×2) if it already holds at least one person of the mover's own civ. With no such hex, they stay.
 - Everyone chooses against the same counts (food, people and which civs are in each hex), taken before anyone moves; then everyone who chose moves at once.
@@ -171,7 +192,7 @@ Recorded at the end of every year, for each civ: people alive, hexes held (hexes
   - *Most descendants:* the founder with the most people born into their line (children, grandchildren and so on, alive or dead). It is always a founder, because a parent counts every descendant of their child plus the child. On a tie, the lower founder id. None if nobody was born.
   - *Worst famine:* the famine with the most starvation deaths (on a tie, the one that ended first). A **famine year** for a civ is a year in which its starvation deaths are at least 2% of its people at the start of that year, and at least 5. Famine years of the same civ in a row make one famine, from its first to its last year. A famine still going on when the game ends counts up to the last year.
 - **History log:** the key events with their year, kept for the whole run: each famine (civ, first and last year, starvation deaths) and each extinction (civ, year). At most 2048 events are kept; once full, later famines are left out (and counted) but extinctions are always kept.
-- While the game runs, the statistics sheet shows each civ's emblem, people and hexes held; the top bar shows the total population, how many civs are still alive, and each civ's emblem with its people alive. Tapping a hex shows its people per civ (see "How civs and people look").
+- While the game runs, the statistics sheet shows each civ's emblem, name and type, people and hexes held; the top bar shows the total population, how many civs are still alive, and each civ's emblem with its people alive. Tapping a hex shows its people per civ (see "How civs and people look").
 
 ## How civs and people look
 
@@ -237,6 +258,7 @@ Chosen on the setup screen, after the map.
 | Setting | Default | Range |
 |---|---|---|
 | Civ count | 3 | 1 to 8 |
+| Civ types | Civ 1 Expansionist, Civ 2 Aggressive, Civ 3 Cooperative (a new civ gets, by its number, Expansionist, Aggressive, Cooperative, Isolationist, Nomadic, then again from Expansionist) | one of the 5 types per civ |
 | Starting population | 20 people per civ | 2 to 200 |
 | Mutation | 3% (each trait of a child moves by up to ±0.03 from its parent's) | 0% to 10%, whole percent |
 | End conditions | none ticked (Sandbox: no end) | any combination of Last civ standing, Dominance, Year limit; ticking none is Sandbox |
@@ -244,20 +266,22 @@ Chosen on the setup screen, after the map.
 | Dominance years | 300 | 10 to 10000 |
 | Year limit | 2500 (choices 1000, 2500, 5000, 10000, or custom) | 10 to 100000 |
 
-Out-of-range values are clamped to the range; values that are not numbers fall back to the default. Unknown end conditions are ignored, and anything that is not a list of end conditions means Sandbox.
+Out-of-range values are clamped to the range; values that are not numbers fall back to the default. Unknown end conditions are ignored, and anything that is not a list of end conditions means Sandbox. The civ count decides how many civs there are; a missing or unknown type takes the default type for that civ's number.
+
+- **The civ list.** The setup screen lists the civs, each with its emblem, a type picker, the type's explanation (see "Civ types") and a remove button. *Add civ* adds a civ at the end (up to 8) with the default type for its number; remove takes that civ out (down to 1) and the later civs move up a number, keeping their types. The *Civs* number field sets the count directly (civs are added or taken off at the end).
 
 - Each map preset also sets the civs and the end conditions:
 
-| Preset | Civs | People each | End conditions |
-|---|---|---|---|
-| Small world | 3 | 20 | Sandbox |
-| Continent | 4 | 30 | Dominance (60%, 300 years), Year limit 5000 |
-| Archipelago | 5 | 20 | Last civ standing, Year limit 10000 |
-| Highlands | 3 | 20 | Year limit 2500 |
-| Large world | 6 | 40 | Last civ standing, Dominance (60%, 300 years) |
+| Preset | Civs | Types (Civ 1 first) | People each | End conditions |
+|---|---|---|---|---|
+| Small world | 3 | Expansionist, Aggressive, Cooperative | 20 | Sandbox |
+| Continent | 4 | Expansionist, Aggressive, Cooperative, Isolationist | 30 | Dominance (60%, 300 years), Year limit 5000 |
+| Archipelago | 5 | Nomadic, Expansionist, Isolationist, Cooperative, Aggressive | 20 | Last civ standing, Year limit 10000 |
+| Highlands | 3 | Isolationist, Aggressive, Nomadic | 20 | Year limit 2500 |
+| Large world | 6 | Expansionist, Aggressive, Cooperative, Isolationist, Nomadic, Aggressive | 40 | Last civ standing, Dominance (60%, 300 years) |
 
   Settings a preset does not list keep their defaults (dominance 60% and 300 years, year limit 2500). Every preset uses mutation 3%.
-- Randomise on the setup screen picks 2 to 6 civs and 10 to 50 people each, a mutation of 0% to 10% (whole percent), ticks each of Last civ standing, Dominance and Year limit with chance 50% (none ticked is Sandbox), a dominance share of 50% to 80%, dominance years of 100, 200, 300 or 500, and a year limit of 1000, 2500, 5000 or 10000; it does not change the map. Randomise on the map screen does not change the civs, the mutation or the end conditions.
+- Randomise on the setup screen picks 2 to 6 civs, each with a type picked at random from the 5 (equal chances), and 10 to 50 people each, a mutation of 0% to 10% (whole percent), ticks each of Last civ standing, Dominance and Year limit with chance 50% (none ticked is Sandbox), a dominance share of 50% to 80%, dominance years of 100, 200, 300 or 500, and a year limit of 1000, 2500, 5000 or 10000; it does not change the map. Randomise on the map screen does not change the civs, their types, the mutation or the end conditions.
 
 ## End of the game
 
@@ -284,7 +308,7 @@ A scrollable screen that opens when the game ends. Everything on it comes from t
   - *New map:* the map-generation screen with the same settings and a new random seed.
   - *Back to setup:* the setup screen with the settings of the game that ended.
 - **Cards:**
-  - *Civs by final population* (most people first; ties by higher peak population, then lower civ number): people at the end, peak population and the first year it was reached, average lifespan (average age at death; "No deaths" if none died), most hexes held at once, and the year the civ died out (or No).
+  - *Civs by final population* (most people first; ties by higher peak population, then lower civ number): people at the end, type, peak population and the first year it was reached, average lifespan (average age at death; "No deaths" if none died), most hexes held at once, and the year the civ died out (or No).
   - *Population over time:* one line per civ in its colour, from year 0 to the last year, all on the same scale (the top of the chart is the highest population any civ reached in the recorded history). It draws at most 400 points per civ, taken evenly from the recorded rows, plus the last row.
   - *Traits:* for each civ that ever had people, the average of each of the 8 traits at the end (or in its last year with people, if it died out), to two decimals, with the change since its founders' averages at year 0.
   - *People:* the oldest person ever (id, civ, age, and the year they died or "alive") and the oldest person alive at the end (see "Records" under "Statistics").
@@ -294,4 +318,4 @@ A scrollable screen that opens when the game ends. Everything on it comes from t
 
 ## Not in the game yet
 
-Land degrading, civ types, contact and war, gathering materials and levels, boats, god powers, first to Kingdom (comes with levels). See [project/ROADMAP.md](project/ROADMAP.md).
+Land degrading, contact and war (so Aggressive and Cooperative fight and switching rules have no effect yet), gathering materials and levels, boats, god powers, first to Kingdom (comes with levels). See [project/ROADMAP.md](project/ROADMAP.md).

@@ -9,7 +9,8 @@ import { indexToAxial } from './hex.js';
 import { Rng } from './rng.js';
 import { People, NO_PARENT } from './people.js';
 import { pickStarts, found, eat, deaths, births, regrow } from './life.js';
-import { buildReach, migrate } from './migration.js';
+import { buildReach, migrate, migrationRules } from './migration.js';
+import { CIV_TYPE_NAMES } from './civTypes.js';
 import { CivStats } from './civStats.js';
 import { Records, FAMINE } from './records.js';
 import {
@@ -47,12 +48,14 @@ export class Simulation {
     this.rng.traits = rng.fork('traits');
     this.starts = pickStarts(map, civs, placement);
     this.civCount = civs;
+    this.civTypes = this.params.civTypes.slice();
     // Room for every hex filled to capacity, so the pool rarely has to grow.
     let capSum = 0;
     for (let h = 0; h < map.count; h++) capSum += map.foodCap[h];
     this.people = new People(Math.max(civs * this.params.startPop, Math.ceil(capSum * 1.25)));
-    found(this.people, this.starts, this.params.startPop, placement, this.rng.traits);
+    found(this.people, this.starts, this.params.startPop, placement, this.rng.traits, this.civTypes);
     this.reach = buildReach(map);
+    this.migrationRules = migrationRules(this.civTypes, map, this.reach);
 
     // Scratch arrays, allocated once (per-person ones again only if the pool grows).
     const n = map.count;
@@ -101,7 +104,7 @@ export class Simulation {
     deaths(people, this.rng.death, this.onDeath);
     births(people, this.map, this.rng.birth, this.hexPop, this.parents, this.onBirth, this.rng.traits, this.params.mutation);
     if (this.dest.length < people.capacity) this.allocPersonScratch();
-    migrate(people, this.map, this.reach, this.rng.migration, this.hexPop, this.spare, this.dest, this.civHeld);
+    migrate(people, this.map, this.reach, this.rng.migration, this.hexPop, this.spare, this.dest, this.civHeld, this.migrationRules);
     regrow(this.map);
   }
 
@@ -205,7 +208,7 @@ export class Simulation {
     return {
       tick: this.tickCount,
       totalPop: this.people.count,
-      civs: this.civStats.summary(),
+      civs: this.civStats.summary().map((c, k) => ({ ...c, type: this.civTypes[k], typeName: CIV_TYPE_NAMES[this.civTypes[k]] })),
       terrainCounts: this.terrainCounts.slice(),
       finished: this.finished,
       endReason: this.endReason,
