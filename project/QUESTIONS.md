@@ -12,7 +12,7 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
   2. 1.0 = Phase 2 plus civs as named, coloured groups with a type, but no traits or mutation yet (those come in 1.1). Ships sooner; civs differ only by type.
   3. Keep the roadmap: 1.0 = people only (Phase 2); civ types, traits and mutation are 1.1.
 - Recommendation: 1, because civs without traits all behave alike and a population sim feels empty without visible differences between groups; we can still ship it in reviewed steps (one release candidate per step) before calling it 1.0.
-- Answer: see the owner's civ design summary below (reading: option 1, all 5 civ types with traits and mutation in 1.0, plus basic fighting from the owner's request R-004; levels 1 to 5 and materials are described in the summary but not explicitly placed in 1.0, so they stay in a later phase unless the owner says otherwise. The director turns the "not defined yet" list into questions or proposals.)
+- Answer: see the owner's civ design summary below (reading: option 1, all 5 civ types with traits and mutation in 1.0, plus basic fighting from the owner's request R-004; levels 1 to 5 and materials are described in the summary but not explicitly placed in 1.0, so they stay in a later phase unless the owner says otherwise. Follow-up 2026-10-11 07:33 UTC: "civ levels 1-5 should be in 1.0", with materials and level-up rules as given in R-006. The director turns the "not defined yet" list into questions or proposals.)
   Owner's civ design summary (given as the answer to Q-003 and Q-004):
   - How it works: a civ type is a behaviour bias layered on top of each person's own inherited traits. People differ inside the same civ; the type only pushes the odds.
   - Types (5): Expansionist migrates early, before its hex gets crowded. Isolationist stays put until starving (decided). Aggressive is one of the types that fight regardless of food ("some civs fight anyway" agreed, but not which). Cooperative and Nomadic: name only, no behaviour defined yet.
@@ -86,6 +86,29 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - R-003: Add an option on the setup screen to add and remove civs, and to pick each civ's type from the defined types (owner, 2026-10-11 07:19 UTC).
 - R-004: Introduce a basic set of fighting mechanics (owner, 2026-10-11 07:19 UTC).
 - R-005: Add a home page where the owner can start a new game or read the rules, explained in human-readable, compelling language that follows RULES.md. It should look fabulous and include in-game screens explaining how the game works (owner, 2026-10-11 07:19 UTC).
+- R-006: Materials and level-up rules for 1.0, replacing the current level rules (owner, 2026-10-11 07:33 UTC: "civ levels 1-5 should be in 1.0. here's the breakdown needed for 1.0"). Owner's spec:
+  - MATERIALS. Each land hex rolls for material deposits at map generation. Deposits never run out. Each one yields a fixed amount per gatherer per year, capped per hex.
+  - Chance a hex has it (%), by terrain (terrain not listed = 0):
+    - Common: Wood: forest 95, hills 40, river 40, plains 20, tundra 15, coast 10. Stone: mountain 90, hills 70, tundra 30, desert 25, coast 15. Clay: river 70, coast 40, plains 30, forest 10.
+    - Uncommon: Copper: mountain 25, hills 20, desert 8. Iron: mountain 20, hills 15, tundra 10. Salt: desert 30, coast 25.
+    - Exotic: Gold: river 5, mountain 4, hills 2. Gemstones: mountain 3, desert 2. Spices: desert 3, coast 2.
+  - Every map has at least one deposit of each exotic material; the generator re-rolls until it does. Kingdom is always reachable, but contested.
+  - Exotic deposits yield about a quarter of what a common one does.
+  - Gathering: each year adults split between food and materials. A civ sends people to materials only while its food is secure, favouring what its next level needs.
+  - Shared hexes split the yield by headcount. If the civs in a hex fight that year, the winner takes the whole yield.
+  - The stockpile is civ-wide, never decays, and is spent only on levelling.
+  - Cooperative civs gather 25% faster; each person's cooperation trait raises their own gathering.
+  - LEVELS (thresholds for a 10x10 map; population and hexes scale with map size). Columns: years at level, min pop, min hexes, materials spent.
+    - L1 -> L2: 150 years, 40 pop, 4 hexes, 80 wood, 30 stone, 30 clay.
+    - L2 -> L3: 300 years, 100 pop, 8 hexes, 200 wood, 150 stone, 100 clay, 30 copper.
+    - L3 -> L4: 500 years, 200 pop, 14 hexes, 300 stone, 80 copper, 60 iron, 40 salt.
+    - L4 -> L5: 800 years, 350 pop, 22 hexes, 150 iron, 30 gold, 15 gemstones, 20 spices.
+  - Fastest possible path to Kingdom: 1,750 years.
+  - Nomadic needs 25% more years per level, but migrates further.
+  - Isolationist needs 20% fewer years but 25% more materials.
+  - Falling back: if population stays below the current level's minimum for 100 years, the civ drops one level and keeps its stockpile.
+  - All numbers are starting values. Tune them from the headless sims, and ask the owner before changing any requirement by more than half.
+  - (reading: this replaces the RULES.md Terrain table's "Materials" column (forest 30 wood, hills 20 stone, others 0). In RULES.md a river is not a terrain but runs through a land hex; "river" chances are read as applying to river hexes in addition to their terrain's own chances, which the director should confirm with the owner if it matters.)
 
 ## Answered
 
