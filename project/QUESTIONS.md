@@ -56,6 +56,10 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 
 ## Answered
 
+### R-017: Buildings and wonders: a unique building per civ type for each era, needed to reach the next level and giving that type's own bonuses, plus one shared wonder per era that only the first civ to finish it gets, with an extreme bonus at a huge material cost; all visible on their hexes and tappable to show their bonuses; balance proven by thorough testing (owner, 2026-10-11 22:38 Greek, in the project chat).
+- Handled outside the director cycle: designed and built in the "Buildings and wonders" project thread, in its own pull request. Director: no task for this; do not build it.
+- Priority: P1
+
 ### R-012: "Currently no people at all die because of war. I don't think fight ever starts in the game. Fix that, by implementing some more comprehensive fight mechanics and triggers and, at the end of the process, create an one time agent to certify and approve the mechanics. If something is disapproved, fix it in the same build and have the said agent reverify it." (owner, 2026-10-11 13:31 UTC; reading: fighting (T-023, Q-007 option 1) is not built yet, so no war deaths exist. Build it with more comprehensive triggers than Q-007 alone, then a one-time reviewer agent certifies the mechanics, for example with headless runs that show fights and war deaths happen. Anything it rejects is fixed in the same build and re-verified by that agent before the release candidate opens.)
 - Date: 2026-10-11
 - Priority: P1
