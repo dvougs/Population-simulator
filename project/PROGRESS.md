@@ -2,13 +2,24 @@
 
 ## Status
 
-- Phase: 1 (map generation, hex map in PixiJS) built and tested; release candidate PR #10 open.
-- Last full cycle: 2026-10-10 23:06 UTC
-- Live on GitHub Pages: the original square-grid build (aggregate population, five civ types). https://dvougs.github.io/Population-simulator/ — Phase 1 goes live when PR #10 is merged.
-- Open release candidate: #10 "Release candidate: Phase 1 hex map, map-generation screen, PixiJS renderer" https://github.com/dvougs/Population-simulator/pull/10
-- Blockers: none. Open questions Q-001 (coast land or water), Q-002 (terrain mix setting); proposals P-001, P-002. None blocks work.
+- Phase: 1 live; Phase 1 follow-ups (lowland sliders, whole-map water, water tide) in a release candidate. Phase 2 (people) tasks T-013 to T-017 seeded, not started.
+- Last full cycle: 2026-10-11 00:06 UTC
+- Live on GitHub Pages: Phase 1 (hex map, map-generation screen, PixiJS renderer), merged in PR #10. https://dvougs.github.io/Population-simulator/
+- Open release candidate: "Release candidate: lowland terrain sliders, whole-map water, water tide" on claude/cycle-20261011-0006 (T-010, T-011, T-012).
+- Blockers: none. Open proposals P-003 (water slider dead zone, UI) and P-004 (height shading, visuals). No open questions.
 
 ## Cycle log
+
+### 2026-10-11 00:06: lowland sliders, whole-map water, water tide
+
+- Owner input: Q-001 answered 1 (coast stays land, no tasks); Q-002 answered 3 (separate forest, desert, tundra sliders); request R-001 (plains slider); P-001 decided yes with changes (water counts against the whole map); P-002 decided yes (water shimmer). Tasks T-010 to T-012 created; Phase 2 seeded as T-013 to T-017.
+- Merged since last cycle: #10 (Phase 1 release candidate, T-001 to T-009 now done), #8, #9 and #11 (studio changes, no task IDs). functional-tester retired (#11); T-009's owner noted as retired.
+- The game-dev and unit-tester agent types became unavailable mid-cycle; after the first game-dev run, the agents ran as general-purpose agents following .claude/agents/*.md verbatim.
+- Built on claude/cycle-20261011-0006: T-010 (plains/forest/desert/tundra weights 40/30/15/15, water = max(edge ring, round(water × size²)), RULES.md updated), T-012 (water tide overlay, reduced-motion static).
+- unit-tester (T-011): 98 passed, 0 failed; e2e spec PRESETS brought in step. BUG-1: the first shimmer redrew 8 overlays every 50 ms and starved software Chromium (7 e2e timeouts). One fix round: one overlay, at most 2.5 shimmer redraws a second. Retest: unit 98/98, e2e full spec 72/72 (game-dev), the BUG-1 subset 9/9 (director re-run).
+- RULES.md checked against src/sim/params.js and mapgen.js: values match. Ownership clean (game-dev: src/, RULES.md, tools/; unit-tester: tests/ only).
+- Design review on the cycle branch at 442a0e6, seeds review-20261011-1/-2/-3, default setup, 400 years: map hashes 50773508, e1a10cb7, d4e4cb6b; final hashes b0c5be86, 830611cc, c007228d; deep water 36 on every seed (edge ring only); land 64 (coast 17/16/21, plains 12/11/9, forest 9/9/8, hills 10, mountain 8, desert 4/5/4, tundra 4/5/4); 8, 9, 7 river hexes. Population, causes of death, levels and extinctions cannot be reported: no people until Phase 2; T-016 adds them to tools/headless.js. Proposals P-003 (UI) and P-004 (visuals).
+- Docs pass: README.md updated for the new sliders and the tide on the cycle branch. CLAUDE.md still says headless prints per-civ results; true once T-016 lands, left as is.
 
 ### 2026-10-10 23:06: Phase 1 release candidate
 

@@ -8,6 +8,24 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
 
 Ideas the director draws from headless simulation runs and the code. At most 6 wait here at a time.
 
+### P-003: Make the water slider's dead zone visible
+- Date: 2026-10-11
+- Category: UI
+- What: Since water counts against the whole map, the low end of the Water slider does nothing on small maps: on 10 × 10 every setting from 0% to 36% gives the same map (just the ocean ring). Either start the slider at the edge ring's share for the current size, or show "ocean ring only" next to the value while it is in that range, so moving the slider always means something.
+- Evidence: Headless runs of seeds review-20261011-1 to -3 on claude/cycle-20261011-0006 at 442a0e6, default setup, 400 years: deep water is exactly 36 on every seed (the 4 × 10 − 4 ring), so the default 25% is already inside the dead zone. RULES.md "How the map is made" step 2; slider range from LIMITS.water in src/ui/mapgenScreen.js:106. On 50 × 50 the ring is 196 hexes (7.8%).
+- Effort: S
+- Phone performance risk: low: a label or a slider bound recalculated when the size changes.
+- Decision:
+
+### P-004: Shade each hex slightly by its height
+- Date: 2026-10-11
+- Category: visuals
+- What: Every hex of one terrain is drawn in exactly the same flat colour, so plains or forest read as a single block. Lightening or darkening each land hex by a few percent from its elevation (and sea hexes by depth) would show the shape of the land, ridges and valleys, without changing any rule.
+- Evidence: src/render/palette.js:4-13 has one colour per terrain and hexRgb (src/render/palette.js:24-26) returns it unchanged; src/render/renderer.js setMap fills each hex with that colour. On the three review seeds the 64 land hexes use only 7 colours (e.g. seed review-20261011-1: 17 coast, 12 plains, 9 forest hexes, each block one flat tone). Elevation is already computed in src/sim/mapgen.js but not kept on the map.
+- Effort: S
+- Phone performance risk: low: colours are baked once when the map is built; no per-frame cost.
+- Decision:
+
 ## Requests
 
 ## Answered
