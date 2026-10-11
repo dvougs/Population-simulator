@@ -4,6 +4,36 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
 
 ## Open
 
+### Q-003: What goes into version 1.0?
+- Date: 2026-10-11
+- Why it matters: The roadmap puts people in Phase 2 and civ types, traits and mutation in Phase 3. You call Phase 2 "version 1.0, with civilizations in it", so 1.0 needs a clear line. Tasks T-013 to T-017 (people, migration, people on screen, stats) are already planned for Phase 2.
+- Options:
+  1. 1.0 = Phases 2 and 3 together: people, births, deaths, migration, plus 5 civ types (expansionist, cooperative, nomadic, isolationist, aggressive) biasing behaviour and inherited traits with mutation. Contact, war and levels stay for later. Bigger release, several cycles before it ships.
+  2. 1.0 = Phase 2 plus civs as named, coloured groups with a type, but no traits or mutation yet (those come in 1.1). Ships sooner; civs differ only by type.
+  3. Keep the roadmap: 1.0 = people only (Phase 2); civ types, traits and mutation are 1.1.
+- Recommendation: 1, because civs without traits all behave alike and a population sim feels empty without visible differences between groups; we can still ship it in reviewed steps (one release candidate per step) before calling it 1.0.
+- Answer:
+
+### Q-004: How should traits and mutation work?
+- Date: 2026-10-11
+- Why it matters: Traits drive births, deaths and migration, and mutation decides whether civs drift apart over centuries. The roadmap lists 8 traits (fertility, life expectancy, strength, aggression, cooperation, metabolism, heat tolerance, cold tolerance).
+- Options:
+  1. All 8 traits, each 0 to 1 around a civ-type starting value; a child copies its parent with a small random nudge (mutation rate a setup option, default about ±3% a trait). Rich drift; terrain picks winners (cold tolerance thrives in tundra).
+  2. 4 traits only (fertility, life expectancy, aggression, metabolism), same mutation. Easier to read in the inspector and on the end screen.
+  3. All 8 traits but no mutation: children copy parents exactly. Civs never change, only their mix of people does.
+- Recommendation: 1, it is what the roadmap describes and gives the long-run story (civs adapting to their land); the inspector can show the 8 as small bars.
+- Answer:
+
+### Q-005: How should civs and people look on the map?
+- Date: 2026-10-11
+- Why it matters: People are drawn as sprites from one texture only when zoomed in (CLAUDE.md), so zoomed out the map needs another way to show who lives where.
+- Options:
+  1. Each civ gets a colour; zoomed out, hexes get a tinted border or corner flag in the colour of their largest civ and a small population number; zoomed in, people are dots in civ colour that walk between hexes.
+  2. Each civ gets a colour and a simple emblem (shape: circle, square, triangle…); zoomed out, emblem plus number per hex; zoomed in, people are tiny emblems. Readable for colour-blind players.
+  3. Zoomed out, hexes are shaded by population density (no civ colours); civ colours only when zoomed in.
+- Recommendation: 2, the shape keeps civs apart for colour-blind players and on small phone screens, at the same cost as option 1 (one texture atlas).
+- Answer:
+
 ## Proposals
 
 Ideas the director draws from headless simulation runs and the code. At most 6 wait here at a time.
@@ -75,3 +105,7 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 ### R-001: Add a plains (fertile land) share slider next to the forest, desert and tundra sliders from Q-002
 - Date: 2026-10-11
 - Moved: 2026-10-11, tasks T-010, T-011
+
+### R-002: Start planning Phase 2 ("version 1.0") with civilizations: civ types, traits, mutations, their concepts and visuals
+- Date: 2026-10-11 00:29 UTC
+- Moved: 2026-10-11, planned as questions Q-003 (what 1.0 contains), Q-004 (traits and mutation) and Q-005 (how civs and people look); Phase 2 tasks T-013 to T-017 already seeded and get extended once these are answered
