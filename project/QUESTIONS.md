@@ -35,7 +35,7 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Evidence: Headless runs of seeds review-20261010-1 to -3 at commit 7216673 (cycle branch), default setup, 400 years: deep water 52 of 100 on every seed. That is 36 forced edge hexes (src/sim/mapgen.js:80-86) plus 25% of the 64 inner hexes. Desert and tundra are only 2–3 hexes each.
 - Effort: S
 - Phone performance risk: low: map generation only; a larger default size adds hexes to draw, still far below 50 × 50.
-- Decision:
+- Decision: add slider for the water coverage as well against the whole map, like we said before about the tundra, desert, fertile etc. (reading: yes, option 1. The existing water slider counts against all hexes, edge ring included, which changes the RULES.md rule "water amount = 25% of the non-edge hexes". Default stays 25% and size stays 10. A setting below the edge ring's share gives just the edge ring. It works like the separate terrain sliders from Q-002.)
 
 ### P-002: Gentle water animation so the map is not frozen
 - Date: 2026-10-10
@@ -47,5 +47,7 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Decision:
 
 ## Requests
+
+- Add a plains (fertile land) share slider next to the forest, desert and tundra sliders from Q-002 (owner mentioned "fertile" with them, 2026-10-11).
 
 ## Answered
