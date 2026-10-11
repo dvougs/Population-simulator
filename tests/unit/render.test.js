@@ -6,7 +6,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { TERRAIN_RGB, LAKE_RGB, RIVER_RGB, SHADE, hexColours, hexRgb } from '../../src/render/palette.js';
 import { CIV_STYLES, EMBLEM_SHAPES, EMBLEM_ORDER, civStyle, emblemSvg } from '../../src/render/civStyle.js';
-import { PEOPLE_ZOOM_PX, peopleShown, shortCount } from '../../src/render/peopleLayer.js';
+import { PEOPLE_ZOOM_PX, peopleShown, shortCount, hexTotal, largestCiv } from '../../src/render/peopleLayer.js';
+import { Renderer } from '../../src/render/renderer.js';
+import { Simulation } from '../../src/sim/simulation.js';
 import { HEX_SIZE } from '../../src/render/layout.js';
 import { createMap, generateMap } from '../../src/sim/mapgen.js';
 import { DEEP_WATER, COAST, PLAINS, FOREST, HILLS, MOUNTAIN, DESERT, TUNDRA } from '../../src/sim/terrain.js';
@@ -141,4 +143,95 @@ test('RULES.md: hex counts of 1000 or more are shortened (1.2k rounded down unde
   assert.equal(shortCount(1e6), '1M');
   assert.equal(shortCount(2e6), '2M');
   for (const n of [1, 999, 1000, 9999, 10000, 99999, 999499, 1e6, 5e8]) assert.ok(shortCount(n).length <= 4, `${n}: ${shortCount(n)}`);
+});
+
+test('RULES.md: a hex label counts the total people in the hex, all civs (hexCivPop[h × civs + c])', () => {
+  // 3 hexes × 3 civs.
+  const pop = Int32Array.from([
+    0, 0, 0,
+    5, 0, 7,
+    1200, 300, 4,
+  ]);
+  assert.equal(hexTotal(pop, 3, 0), 0, 'empty hex');
+  assert.equal(hexTotal(pop, 3, 1), 12);
+  assert.equal(hexTotal(pop, 3, 2), 1504);
+  assert.equal(shortCount(hexTotal(pop, 3, 2)), '1.5k');
+  // The same numbers read with a different civ count land in different hexes: layout is hex-major.
+  assert.equal(hexTotal(pop, 1, 4), 0);
+  assert.equal(hexTotal(pop, 1, 5), 7);
+  assert.equal(hexTotal(Int32Array.from([3]), 1, 0), 3, 'one civ');
+});
+
+test('RULES.md: a hex label shows its largest civ, the lower civ number on a tie, none (-1) for an empty hex', () => {
+  const pop = Int32Array.from([
+    0, 0, 0, 0, // empty
+    0, 0, 9, 0, // single civ 2
+    3, 8, 2, 8, // tie between 1 and 3 → 1
+    6, 6, 6, 6, // all tie → 0
+    0, 0, 1, 2, // largest is the last civ
+    5, 0, 0, 4, // largest is civ 0
+  ]);
+  assert.equal(largestCiv(pop, 4, 0), -1);
+  assert.equal(largestCiv(pop, 4, 1), 2);
+  assert.equal(largestCiv(pop, 4, 2), 1);
+  assert.equal(largestCiv(pop, 4, 3), 0);
+  assert.equal(largestCiv(pop, 4, 4), 3);
+  assert.equal(largestCiv(pop, 4, 5), 0);
+  // Boundary: one more person breaks the tie towards the higher civ number.
+  assert.equal(largestCiv(Int32Array.from([4, 5]), 2, 0), 1);
+  assert.equal(largestCiv(Int32Array.from([5, 5]), 2, 0), 0);
+  assert.equal(largestCiv(Int32Array.from([5, 4]), 2, 0), 0);
+});
+
+test('hex labels on a seeded run: totals add up to the population, largest civ holds the most people', () => {
+  const sim = new Simulation({ seed: 'labels', size: 24 });
+  for (let t = 0; t < 120; t++) sim.tick();
+  const snap = sim.population();
+  const { civs, hexCivPop } = snap;
+  const hexes = hexCivPop.length / civs;
+  assert.equal(hexes, 24 * 24);
+  let alive = 0;
+  for (let i = 0; i < snap.high; i++) alive += snap.alive[i] ? 1 : 0;
+  let sum = 0;
+  let labelled = 0;
+  for (let h = 0; h < hexes; h++) {
+    const total = hexTotal(hexCivPop, civs, h);
+    sum += total;
+    const best = largestCiv(hexCivPop, civs, h);
+    if (total === 0) { assert.equal(best, -1, `hex ${h}`); continue; }
+    labelled++;
+    for (let c = 0; c < civs; c++) {
+      const k = hexCivPop[h * civs + c];
+      if (c < best) assert.ok(k < hexCivPop[h * civs + best], `hex ${h} civ ${c}`);
+      else assert.ok(k <= hexCivPop[h * civs + best], `hex ${h} civ ${c}`);
+    }
+  }
+  assert.ok(alive > 0 && labelled > 0, 'people alive after 120 years');
+  assert.equal(sum, alive, 'hex totals add up to everyone alive');
+});
+
+test('RULES.md: while running, hex labels refresh at most every 0.4 seconds; a pan or tap redraw shows them at once', () => {
+  // No canvas or window needed: needsFrame is pure timing logic.
+  const r = new Renderer(null);
+  r.map = {}; // a map is drawn; no shimmer, no people layer (zoomed-out labels only)
+  assert.equal(r.needsFrame(1000), false, 'nothing changed');
+  r.lastDraw = 1000;
+  r.peopleDirty = true; // a new snapshot arrived just after a draw
+  assert.equal(r.needsFrame(1000), false);
+  assert.equal(r.needsFrame(1399), false, '0.399 s after the last draw: not yet');
+  assert.equal(r.needsFrame(1400), true, 'exactly 0.4 s');
+  assert.equal(r.needsFrame(1800), true);
+  // A redraw for any other reason (pan, tap) resets the clock.
+  r.lastDraw = 1500;
+  assert.equal(r.needsFrame(1899), false);
+  assert.equal(r.needsFrame(1900), true);
+  // At most 2.5 label redraws a second however many snapshots arrive.
+  let draws = 0;
+  r.lastDraw = -Infinity;
+  for (let now = 0; now < 10000; now += 16) {
+    r.peopleDirty = true; // a snapshot every frame, as at 20x
+    if (r.needsFrame(now)) { draws++; r.lastDraw = now; r.peopleDirty = false; }
+  }
+  assert.ok(draws <= 25, `${draws} redraws in 10 s`);
+  assert.ok(draws >= 24, `${draws} redraws in 10 s: labels still refresh`);
 });
