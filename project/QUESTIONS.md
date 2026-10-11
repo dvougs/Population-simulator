@@ -44,7 +44,7 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Evidence: The map is built once into static Graphics (src/render/renderer.js:1, 44-58). In 400-year headless runs of all three review seeds, the state hash changes only with the year and every hex keeps full food, so nothing on screen changes except the HUD year.
 - Effort: M
 - Phone performance risk: medium: an animated layer redraws every frame; it needs a single shader or tinted overlay, not per-hex Graphics updates.
-- Decision:
+- Decision: yes (reading: build the water shimmer as proposed, as one shader or tinted overlay)
 
 ## Requests
 
