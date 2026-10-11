@@ -2,20 +2,23 @@
 // panning and zooming only move and scale the world container, so a frame costs
 // a single GPU draw of geometry that never changes.
 //
-// Water shimmer: water hexes and rivers also go into a few white overlay
-// Graphics, one per phase band across the map. Each frame only their alpha
-// changes (driven by render time, never by the sim), so a wave of light drifts
-// slowly over the water without rebuilding any geometry.
+// Water shimmer: water hexes and rivers also go into one white overlay
+// Graphics built once with the map. The only per-frame change is that one
+// object's alpha (driven by render time, never by the sim), so the water
+// slowly brightens and dims like a tide. Shimmer-only redraws are rare (a few
+// a second at most, and only when the alpha has visibly moved), and any other
+// redraw (panning, a tick) already carries the new alpha, so the shimmer adds
+// almost no frame cost even in a software-rendered browser.
 
 import { Application, Container, Graphics } from '../../vendor/pixi.mjs';
 import { hexPolygon, riverSegments, HEX_SIZE } from './layout.js';
 import { hexRgb, rgbToHex, RIVER_RGB } from './palette.js';
 import { DEEP_WATER } from '../sim/terrain.js';
 
-const SHIMMER_PHASES = 8; // bands per wavelength; more bands give a smoother wave
-const SHIMMER_PERIOD_MS = 5000; // one full swell
-const SHIMMER_ALPHA = 0.09; // peak white over the water: gentle
-const SHIMMER_FRAME_MS = 50; // ~20 redraws a second is plenty for a slow wave and saves battery
+const SHIMMER_PERIOD_MS = 8000; // one full swell: slow, like a tide
+const SHIMMER_ALPHA = 0.1; // peak white over the water: gentle
+const SHIMMER_STEPS = 6; // alpha levels; a redraw is due only when the level changes
+const SHIMMER_FRAME_MS = 400; // shimmer-only redraws at most 2.5 a second (about 1.5 on average)
 
 export class Renderer {
   constructor(canvas) {
@@ -24,7 +27,8 @@ export class Renderer {
     this.world = null;
     this.map = null;
     this.selected = -1;
-    this.shimmer = [];
+    this.shimmer = null;
+    this.shimmerLevel = -1;
     this.lastShimmer = -Infinity;
     this.motionChanged = false;
     this.reducedMotion = false;
@@ -37,14 +41,15 @@ export class Renderer {
 
   /** True while the water is animating, so the frame loop keeps redrawing. */
   get animating() {
-    return this.shimmer.length > 0 && !this.reducedMotion;
+    return this.shimmer !== null && !this.reducedMotion;
   }
 
   /** Whether a redraw is due for the shimmer alone (nothing else changed). */
   needsFrame(now) {
     if (!this.map) return false;
     if (this.motionChanged) return true;
-    return this.animating && now - this.lastShimmer >= SHIMMER_FRAME_MS;
+    if (!this.animating || now - this.lastShimmer < SHIMMER_FRAME_MS) return false;
+    return shimmerLevel(now) !== this.shimmerLevel;
   }
 
   async init() {
@@ -82,15 +87,17 @@ export class Renderer {
     for (const [x0, y0, x1, y1] of riverSegments(map)) rivers.moveTo(x0, y0).lineTo(x1, y1);
     rivers.stroke({ width: HEX_SIZE * 0.22, color: rgbToHex(RIVER_RGB), cap: 'round', join: 'round' });
 
-    const shimmer = buildShimmer(map);
-    this.shimmer = shimmer;
+    this.shimmer = buildShimmer(map);
+    this.shimmerLevel = -1;
 
     const grid = new Graphics();
     for (let i = 0; i < map.cols * map.rows; i++) grid.poly(hexPolygon(map.cols, i));
     grid.stroke({ width: 1.2, color: 0x000000, alpha: 0.22 });
 
     this.selection = new Graphics();
-    this.world.addChild(terrain, rivers, ...shimmer, grid, this.selection);
+    this.world.addChild(terrain, rivers);
+    if (this.shimmer) this.world.addChild(this.shimmer);
+    this.world.addChild(grid, this.selection);
     this.selected = -1;
   }
 
@@ -118,54 +125,39 @@ export class Renderer {
   updateShimmer(now) {
     this.lastShimmer = now;
     this.motionChanged = false;
-    const still = this.reducedMotion;
-    for (let g = 0; g < this.shimmer.length; g++) {
-      const band = this.shimmer[g];
-      band.visible = !still;
-      if (still) continue;
-      const angle = 2 * Math.PI * (now / SHIMMER_PERIOD_MS - g / SHIMMER_PHASES);
-      band.alpha = SHIMMER_ALPHA * (0.5 + 0.5 * Math.sin(angle));
-    }
+    const band = this.shimmer;
+    if (!band) return;
+    band.visible = !this.reducedMotion;
+    if (this.reducedMotion) return;
+    const level = shimmerLevel(now);
+    if (level === this.shimmerLevel) return;
+    this.shimmerLevel = level;
+    band.alpha = (SHIMMER_ALPHA * level) / SHIMMER_STEPS;
   }
 }
 
-/**
- * One white overlay per phase band, holding the water hexes and river
- * segments in that band. Bands run diagonally (column + row), so the light
- * appears to drift across the water. Empty bands are dropped.
- */
+/** Quantised shimmer brightness at render time `now`: 0..SHIMMER_STEPS. */
+function shimmerLevel(now) {
+  const wave = 0.5 + 0.5 * Math.sin((2 * Math.PI * now) / SHIMMER_PERIOD_MS);
+  return Math.round(wave * SHIMMER_STEPS);
+}
+
+/** One white overlay holding every water hex and river segment, or null if there is no water. */
 function buildShimmer(map) {
-  const bands = [];
-  for (let g = 0; g < SHIMMER_PHASES; g++) bands.push(new Graphics());
-  const used = new Uint8Array(SHIMMER_PHASES);
-  const band = (i) => {
-    const col = i % map.cols;
-    return (col + (i - col) / map.cols) % SHIMMER_PHASES;
-  };
+  const g = new Graphics();
+  let any = false;
   for (let i = 0; i < map.cols * map.rows; i++) {
     if (map.terrain[i] !== DEEP_WATER) continue;
-    const g = band(i);
-    bands[g].poly(hexPolygon(map.cols, i)).fill({ color: 0xffffff });
-    used[g] = 1;
+    g.poly(hexPolygon(map.cols, i)).fill({ color: 0xffffff });
+    any = true;
   }
-  // Rivers shimmer with the band of the hex they start from.
   const segs = riverSegments(map);
-  let s = 0;
-  for (let i = 0; i < map.cols * map.rows; i++) {
-    if (!map.river[i] || map.riverTo[i] < 0) continue;
-    const [x0, y0, x1, y1] = segs[s++];
-    const g = band(i);
-    bands[g].moveTo(x0, y0).lineTo(x1, y1);
-    used[g] |= 2;
+  if (segs.length) {
+    for (const [x0, y0, x1, y1] of segs) g.moveTo(x0, y0).lineTo(x1, y1);
+    g.stroke({ width: HEX_SIZE * 0.22, color: 0xffffff, cap: 'round', join: 'round' });
+    any = true;
   }
-  for (let g = 0; g < SHIMMER_PHASES; g++) {
-    if (used[g] & 2) bands[g].stroke({ width: HEX_SIZE * 0.22, color: 0xffffff, cap: 'round', join: 'round' });
-  }
-  const out = [];
-  for (let g = 0; g < SHIMMER_PHASES; g++) {
-    if (used[g]) out.push(bands[g]);
-    else bands[g].destroy();
-  }
-  for (const b of out) b.alpha = 0;
-  return out;
+  if (!any) { g.destroy(); return null; }
+  g.alpha = 0;
+  return g;
 }
