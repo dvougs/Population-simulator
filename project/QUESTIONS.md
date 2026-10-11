@@ -4,6 +4,14 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
 
 ## Open
 
+## Proposals
+
+Ideas the director draws from headless simulation runs and the code. At most 6 wait here at a time.
+
+## Requests
+
+## Answered
+
 ### Q-001: Should coast be walkable land or shallow water?
 - Date: 2026-10-10
 - Why it matters: The Phase 1 build makes coast a walkable land terrain (land next to the sea, food 50, move 1). Shallow water instead would shrink usable land and make boats (level 4) matter more.
@@ -13,6 +21,7 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
   3. Make coast shallow water that is walkable at a high movement cost: wading across narrow straits.
 - Recommendation: 1, because it matches the roadmap (only seas and lakes are impassable) and gives the first civs fertile starting land.
 - Answer: yes (reading: option 1, keep coast as walkable land, as recommended)
+- Moved: 2026-10-11, tasks none (coast stays walkable land; no change needed)
 
 ### Q-002: Should the terrain mix be adjustable at map generation?
 - Date: 2026-10-10
@@ -23,10 +32,7 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
   3. Add separate sliders for forest, desert and tundra: full control, busier screen on a phone.
 - Recommendation: 2, one slider gives varied worlds without crowding the phone screen.
 - Answer: 3 (reading: separate sliders for forest, desert and tundra, not the recommended single climate slider)
-
-## Proposals
-
-Ideas the director draws from headless simulation runs and the code. At most 6 wait here at a time.
+- Moved: 2026-10-11, tasks T-010, T-011
 
 ### P-001: Count the default water share against the whole map
 - Date: 2026-10-10
@@ -36,6 +42,7 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Effort: S
 - Phone performance risk: low: map generation only; a larger default size adds hexes to draw, still far below 50 × 50.
 - Decision: add slider for the water coverage as well against the whole map, like we said before about the tundra, desert, fertile etc. (reading: yes, option 1. The existing water slider counts against all hexes, edge ring included, which changes the RULES.md rule "water amount = 25% of the non-edge hexes". Default stays 25% and size stays 10. A setting below the edge ring's share gives just the edge ring. It works like the separate terrain sliders from Q-002.)
+- Moved: 2026-10-11, tasks T-010, T-011
 
 ### P-002: Gentle water animation so the map is not frozen
 - Date: 2026-10-10
@@ -45,9 +52,8 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Effort: M
 - Phone performance risk: medium: an animated layer redraws every frame; it needs a single shader or tinted overlay, not per-hex Graphics updates.
 - Decision: yes (reading: build the water shimmer as proposed, as one shader or tinted overlay)
+- Moved: 2026-10-11, tasks T-012, T-011
 
-## Requests
-
-- Add a plains (fertile land) share slider next to the forest, desert and tundra sliders from Q-002 (owner mentioned "fertile" with them, 2026-10-11).
-
-## Answered
+### R-001: Add a plains (fertile land) share slider next to the forest, desert and tundra sliders from Q-002
+- Date: 2026-10-11
+- Moved: 2026-10-11, tasks T-010, T-011
