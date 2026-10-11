@@ -4,6 +4,44 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
 
 ## Open
 
+### Q-006: What numbers should the 8 traits use?
+- Date: 2026-10-11
+- Why it matters: Q-004 settled 8 inherited traits with mutation (T-021), but not how a trait value turns into a birth chance, a lifespan or a food need, nor each civ type's starting values. Today everyone has a 5% birth chance, old age from 45, and eats 1 food a year.
+- Options:
+  1. Each trait 0 to 1, with 0.5 giving today's values: fertility 0→2.5%, 1→7.5% birth chance; life expectancy shifts old age start 35 to 55; metabolism 0.75 to 1.25 food a year; heat tolerance halves to doubles starvation health loss in desert, cold tolerance the same in tundra and mountain; strength, aggression and cooperation 0 to 1 used by fights and switching. Founders start at their type's values (Aggressive: aggression 0.7, strength 0.65; Cooperative: cooperation 0.7; Expansionist: fertility 0.6; Isolationist: life expectancy 0.6; Nomadic: metabolism 0.4; all else 0.5) with ±0.1 random spread. Mutation: each trait ±3% a birth (setup option 0% to 10%).
+  2. Same as 1 but narrower effects (fertility 4% to 6%, old age 40 to 50): civs differ less, drift matters less.
+  3. Same as 1 but no type starting values: every civ starts at 0.5 and only terrain and mutation make them differ.
+- Recommendation: 1, it keeps today's balance at 0.5, gives each type a visible starting identity, and the director tunes the numbers from headless runs (asking you before moving any by more than half).
+- Answer:
+
+### Q-007: How do Cooperative and Nomadic behave, which types always fight, and how does a fight work?
+- Date: 2026-10-11
+- Why it matters: Blocks T-022 (civ types) and T-023 (fighting, R-004). Your summary leaves Cooperative and Nomadic undefined and says "some civs fight anyway" without naming them.
+- Options:
+  1. Cooperative: never starts fights, its people switch civ half as often as they would join it, gathers 25% faster (from R-006). Nomadic: 5 movement points instead of 3, and sets out at twice the usual chance. Aggressive always fights when sharing a hex; others fight only when the hex is short of food and one side's average aggression is above 0.5. A fight: each side's strength = sum of its people's strength, defenders (the civ with more people there last year) get the hex's defence bonus; the weaker side loses 20% of its people in the hex (war deaths) and the rest flee to a neighbouring hex; the stronger side loses 5%.
+  2. As 1, but Aggressive and Expansionist both always fight.
+  3. As 1, but fights only cause fleeing, no deaths (a gentler game; war deaths appear only with L4 organised war).
+- Recommendation: 1, it gives each type one clear trait the player can see, keeps fights local and rare when food is plentiful, and uses the defence bonuses already in the terrain table.
+- Answer:
+
+### Q-008: What numbers should gathering and level effects use?
+- Date: 2026-10-11
+- Why it matters: Blocks T-025. R-006 gives deposit chances and level thresholds but not the yield per gatherer, the hex cap, when food counts as "secure", or what each level actually does (how much more food at L2, how much longer life at L5, the birth bonus).
+- Options:
+  1. A common deposit yields 0.5 a gatherer a year, capped at 10 a hex a year (exotic 0.125 and 2.5); food is secure when nobody in the civ went hungry last year and its hexes hold at least 1.2 food per person; then up to 20% of its adults gather. Effects: birth chance +0.5 percentage points a level above 1; L2 plains and river hexes +25% food capacity; L3 desert, tundra and mountain hunger loss halved; L4 boats (can migrate across one sea or lake hex), alliances later; L5 all hexes +25% food capacity, old age starts 5 years later, may absorb a civ it shares hexes with when that civ is smaller.
+  2. Same effects as 1, but yields twice as high (faster levels, about 900 years to Kingdom instead of 1,750+).
+  3. Same yields as 1, but smaller level effects (+10% food, birth +0.25 points): levels matter less, populations stay closer together.
+- Recommendation: 1, it keeps your 1,750-year fastest path to Kingdom realistic on a 10 × 10 map, and the director checks it with headless runs before release.
+- Answer:
+
+## Proposals
+
+Ideas the director draws from headless simulation runs and the code. At most 6 wait here at a time.
+
+## Requests
+
+## Answered
+
 ### Q-003: What goes into version 1.0?
 - Date: 2026-10-11
 - Why it matters: The roadmap puts people in Phase 2 and civ types, traits and mutation in Phase 3. You call Phase 2 "version 1.0, with civilizations in it", so 1.0 needs a clear line. Tasks T-013 to T-017 (people, migration, people on screen, stats) are already planned for Phase 2.
@@ -20,6 +58,7 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
   - Civ-level: level 1-5 civ-wide (L1 Foragers gathering only; L2 Farmers more food from plains and rivers; L3 Builders shelter, harsh terrain survivable; L4 Organised alliances, organised war, boats; L5 Kingdom higher hex capacity, longer life, can absorb a co-living civ). Levelling: spend materials plus enough years at the current level. Birth bonus: higher level raises every member's yearly birth chance. Materials gathered from forest and hills.
   - Contact rules (all types): plenty of food leads to coexistence; scarcity plus aggressive people leads to fights; some types fight regardless (which ones: open). Co-living people can switch civ (the only way civs blend, since births need no partner).
   - Not defined yet: starting trait averages per type (e.g. aggressive = high aggression and strength); behaviour for Cooperative and Nomadic; which types always fight; all numbers (rates, thresholds, capacities). These should come back as director questions.
+- Moved: 2026-10-11, tasks T-021 to T-030 (1.0 = people, 5 civ types, 8 traits with mutation, contact and basic fighting, materials, levels 1 to 5, end conditions and end screen; ROADMAP updated). Undefined numbers and behaviours asked as Q-006, Q-007, Q-008
 
 ### Q-004: How should traits and mutation work?
 - Date: 2026-10-11
@@ -30,6 +69,7 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
   3. All 8 traits but no mutation: children copy parents exactly. Civs never change, only their mix of people does.
 - Recommendation: 1, it is what the roadmap describes and gives the long-run story (civs adapting to their land); the inspector can show the 8 as small bars.
 - Answer: see the owner's civ design summary under Q-003 (reading: option 1, all 8 inherited traits copied from the parent with a small random mutation, as recommended)
+- Moved: 2026-10-11, tasks T-021, T-030; trait numbers asked as Q-006
 
 ### Q-005: How should civs and people look on the map?
 - Date: 2026-10-11
@@ -40,10 +80,7 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
   3. Zoomed out, hexes are shaded by population density (no civ colours); civ colours only when zoomed in.
 - Recommendation: 2, the shape keeps civs apart for colour-blind players and on small phone screens, at the same cost as option 1 (one texture atlas).
 - Answer: color plus a shape (reading: option 2, a colour and a shape emblem per civ, as recommended)
-
-## Proposals
-
-Ideas the director draws from headless simulation runs and the code. At most 6 wait here at a time.
+- Moved: 2026-10-11, tasks T-015 (unblocked), T-020
 
 ### P-003: Make the water slider's dead zone visible
 - Date: 2026-10-11
@@ -53,6 +90,7 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Effort: S
 - Phone performance risk: low: a label or a slider bound recalculated when the size changes.
 - Decision: ignore this suggestion (reading: no)
+- Moved: 2026-10-11, tasks none (no)
 
 ### P-004: Shade each hex slightly by its height
 - Date: 2026-10-11
@@ -62,6 +100,7 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Effort: S
 - Phone performance risk: low: colours are baked once when the map is built; no per-frame cost.
 - Decision: agreed (reading: yes)
+- Moved: 2026-10-11, tasks T-018, T-020
 
 ### P-005: Let people prefer hexes their own civ already holds
 - Date: 2026-10-11
@@ -71,6 +110,7 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Effort: S
 - Phone performance risk: low: one per-civ count per hex in the existing migration snapshot, no new loops per person.
 - Decision: approved (reading: yes)
+- Moved: 2026-10-11, tasks T-019, T-020
 
 ### P-006: A food abundance setting, lower on big maps, to keep people in the thousands
 - Date: 2026-10-11
@@ -80,13 +120,23 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Effort: S
 - Phone performance risk: low: it lowers the work per tick; the setting itself costs nothing at run time.
 - Decision: ignore for now (reading: later)
+- Moved: 2026-10-11, tasks none (later; may come back once with new evidence)
 
-## Requests
+### R-003: Add an option on the setup screen to add and remove civs, and to pick each civ's type from the defined types (owner, 2026-10-11 07:19 UTC).
+- Date: 2026-10-11
+- Moved: 2026-10-11, tasks T-022, T-030 (types need Q-007)
 
-- R-003: Add an option on the setup screen to add and remove civs, and to pick each civ's type from the defined types (owner, 2026-10-11 07:19 UTC).
-- R-004: Introduce a basic set of fighting mechanics (owner, 2026-10-11 07:19 UTC).
-- R-005: Add a home page where the owner can start a new game or read the rules, explained in human-readable, compelling language that follows RULES.md. It should look fabulous and include in-game screens explaining how the game works (owner, 2026-10-11 07:19 UTC).
-- R-006: Materials and level-up rules for 1.0, replacing the current level rules (owner, 2026-10-11 07:33 UTC: "civ levels 1-5 should be in 1.0. here's the breakdown needed for 1.0"). Owner's spec:
+### R-004: Introduce a basic set of fighting mechanics (owner, 2026-10-11 07:19 UTC).
+- Date: 2026-10-11
+- Moved: 2026-10-11, tasks T-023, T-030 (fight rules asked as Q-007)
+
+### R-005: Add a home page where the owner can start a new game or read the rules, explained in human-readable, compelling language that follows RULES.md. It should look fabulous and include in-game screens explaining how the game works (owner, 2026-10-11 07:19 UTC).
+- Date: 2026-10-11
+- Moved: 2026-10-11, task T-028
+
+### R-006: Materials and level-up rules for 1.0, replacing the current level rules (owner, 2026-10-11 07:33 UTC: "civ levels 1-5 should be in 1.0. here's the breakdown needed for 1.0"). Owner's spec:
+- Date: 2026-10-11
+- Spec:
   - MATERIALS. Each land hex rolls for material deposits at map generation. Deposits never run out. Each one yields a fixed amount per gatherer per year, capped per hex.
   - Chance a hex has it (%), by terrain (terrain not listed = 0):
     - Common: Wood: forest 95, hills 40, river 40, plains 20, tundra 15, coast 10. Stone: mountain 90, hills 70, tundra 30, desert 25, coast 15. Clay: river 70, coast 40, plains 30, forest 10.
@@ -109,7 +159,11 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
   - Falling back: if population stays below the current level's minimum for 100 years, the civ drops one level and keeps its stockpile.
   - All numbers are starting values. Tune them from the headless sims, and ask the owner before changing any requirement by more than half.
   - (reading: this replaces the RULES.md Terrain table's "Materials" column (forest 30 wood, hills 20 stone, others 0). In RULES.md a river is not a terrain but runs through a land hex; "river" chances are read as applying to river hexes in addition to their terrain's own chances. Owner confirmed 2026-10-11 07:35 UTC: "that's right", so a river hex rolls both its terrain's chances and the river chances.)
-- R-007: End conditions and end screen, replacing the current end-condition and end-screen rules (owner, 2026-10-11 07:44 UTC). Owner's spec:
+- Moved: 2026-10-11, tasks T-024, T-025, T-029, T-030 (missing numbers asked as Q-008)
+
+### R-007: End conditions and end screen, replacing the current end-condition and end-screen rules (owner, 2026-10-11 07:44 UTC). Owner's spec:
+- Date: 2026-10-11
+- Spec:
   - END CONDITIONS (setup screen; tick any combination, the first one met ends the run):
     - Last civ standing.
     - First to Kingdom: a civ reaches L5 and stays at L5 for 200 years.
@@ -128,8 +182,7 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
     - History log: key events with their year (first contact, level-ups and drops, wars, absorptions, famines, extinctions). Key events only, not every death.
   - Nothing is saved between sessions. "Same settings again" reuses the settings held in memory. Record yearly stats and events during the run so the end screen opens instantly.
   - (reading: part of 1.0, alongside levels and fighting. It replaces RULES.md "End of the game" (end condition options None and Year limit, default None, no end screen) and the roadmap's "year limit with score". Which conditions are ticked by default is not stated, so the current default, no end (sandbox), stays. Disaster deaths and the god-power category appear only once those features exist.)
-
-## Answered
+- Moved: 2026-10-11, tasks T-026, T-027, T-029 (First to Kingdom comes with T-025)
 
 ### Q-001: Should coast be walkable land or shallow water?
 - Date: 2026-10-10
