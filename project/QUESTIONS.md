@@ -49,6 +49,11 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 
 ## Requests
 
+- R-008: Real-time reporting visible on desktop, in a column to the right of the map (owner, 2026-10-11 09:43 UTC).
+- R-009: Colour the hexes each civ occupies in that civ's colour, without losing the hex's terrain flavour (owner, 2026-10-11 09:43 UTC).
+- R-010: "End game conditions are still 2 at the start of the game. Update to the previous agreed terms." (owner, 2026-10-11 09:43 UTC; reading: the setup screen still offers only None and Year limit; the R-007 end conditions are already planned as T-026 (todo), so the owner wants T-026 built soon.)
+- R-011: Tapping a hex should zoom in and show the actual people living there. Overall, people should be visible, since the map does not feel alive during the simulation today (owner, 2026-10-11 09:43 UTC).
+
 ## Answered
 
 ### Q-003: What goes into version 1.0?
