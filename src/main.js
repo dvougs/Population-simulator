@@ -15,6 +15,7 @@ import { renderInspector, renderPersonCard } from './ui/inspector.js';
 import { formatNumber } from './ui/dom.js';
 import { renderStats, renderCivStats, renderHudCivs } from './ui/statsPanel.js';
 import { renderEndScreen } from './ui/endScreen.js';
+import { renderLevels, renderLevelGuide } from './ui/levelsPanel.js';
 import { mapParams } from './sim/params.js';
 import { randomSeedString } from './sim/rng.js';
 import { DEEP_WATER } from './sim/terrain.js';
@@ -25,6 +26,7 @@ const ui = {
   endNow: $('btn-end-now'),
   canvas: $('map'), year: $('hud-year'), pop: $('hud-pop'), hudCivs: $('hud-civs'), inspector: $('inspector'), toast: $('toast'),
   sheet: $('sheet'), handle: $('sheet-handle'), stats: $('stats'), civStats: $('civ-stats'),
+  civLevels: $('civ-levels'), levelGuide: $('level-guide-body'),
 };
 
 const host = new LocalSimHost();
@@ -96,6 +98,7 @@ async function startGame(params) {
   host.start(params);
   startParams = host.params;
   map = host.map();
+  renderLevelGuide(ui.levelGuide, map.cols, map.rows);
   renderer.setMap(map);
   renderer.setPopulation(host.population(), performance.now());
   camera.setBounds(worldBounds(map.cols, map.rows));
@@ -159,6 +162,7 @@ function updatePanels() {
   const alive = stats.civs.filter((c) => c.pop > 0).length;
   ui.pop.textContent = `${formatNumber(stats.totalPop)} people · ${alive} of ${stats.civs.length} civs · ${map.cols} × ${map.rows} hexes`;
   renderCivStats(ui.civStats, stats);
+  renderLevels(ui.civLevels, stats);
   renderHudCivs(ui.hudCivs, stats);
   renderStats(ui.stats, stats);
   // Keep the open card's values current.

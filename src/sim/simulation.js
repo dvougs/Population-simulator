@@ -296,6 +296,16 @@ export class Simulation {
     for (let i = 0; i < p.high; i++) if (p.alive[i] && p.hex[i] === d.index) byCiv[p.civ[i]]++;
     d.people = byCiv.reduce((a, b) => a + b, 0);
     d.peopleByCiv = byCiv;
+    // Who gathered here this year (step 1): materials worked, gatherers, and the amount each civ got
+    // (a fight's winner can get a yield it did not gather, with no materials or gatherers of its own).
+    const lv = this.levels;
+    d.gathering = [];
+    for (let c = 0; c < this.civCount; c++) {
+      const k = d.index * this.civCount + c;
+      if (lv.gatherers[k] > 0 || lv.gathered[k] > 0) {
+        d.gathering.push({ civ: c, materials: depositList(lv.gatherMask[k]), gatherers: lv.gatherers[k], amount: lv.gathered[k] });
+      }
+    }
     return d;
   }
 

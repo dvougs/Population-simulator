@@ -136,6 +136,13 @@ input[type="range"] { width: 100%; height: var(--tap); accent-color: var(--accen
 .end-traits tbody tr:nth-child(odd) { background: var(--surface-2); }
 .end-traits small { color: var(--text-dim); }
 .end-log .log-year { min-width: 5.5em; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.level-chart-wrap { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px; align-items: start; }
+.level-chart-wrap .chart-wrap { padding-top: 0; }
+.level-chart { height: 120px; }
+.level-axis { list-style: none; margin: 0; padding: 2px 0; height: 120px; display: flex; flex-direction: column; justify-content: space-between;
+  font-size: 0.7rem; color: var(--text-dim); white-space: nowrap; }
+.level-reached { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; font-size: 0.85rem; }
+.level-reached li { overflow-wrap: anywhere; }
 @media (min-width: 560px) { .end-actions { grid-template-columns: repeat(4, 1fr); } }
 
 /* ---------- Game screen ---------- */
@@ -211,6 +218,33 @@ input[type="range"] { width: 100%; height: var(--tap); accent-color: var(--accen
 .stats .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stats .num { text-align: right; min-width: 4.5em; }
 .stats .num small { display: block; color: var(--text-dim); font-size: 0.7rem; }
+
+/* Levels in the sheet: one block per civ with progress bars, then the level guide. */
+.levels { display: grid; gap: 6px; padding-bottom: 6px; }
+.level-civ { padding: 6px 8px; border-radius: 10px; background: var(--surface-2); font-size: 0.85rem; min-width: 0; }
+.level-civ.dead { opacity: 0.45; }
+.level-head { display: flex; align-items: center; gap: 8px; font-weight: 650; flex-wrap: wrap; }
+.level-head .name { flex: 1 1 auto; min-width: 0; }
+.tag { font-size: 0.75rem; font-weight: 500; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-dim); white-space: nowrap; }
+.tag.ok { color: #9fe0a4; border-color: #3f7a45; }
+.level-next { margin: 4px 0 2px; color: var(--text-dim); }
+.levels .muted { margin: 4px 0 0; color: var(--text-dim); }
+.levels .warn { color: var(--danger); }
+.progress { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.progress li { display: grid; grid-template-columns: minmax(4.5em, auto) 1fr auto; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; }
+.p-label { color: var(--text-dim); }
+.p-bar { height: 6px; border-radius: 3px; background: var(--bg); overflow: hidden; min-width: 24px; }
+.p-bar > span { display: block; height: 100%; background: var(--accent); }
+.progress li.done .p-bar > span { background: #6fcf76; }
+.p-num { text-align: right; white-space: nowrap; }
+.stock { margin: 4px 0 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.level-guide { margin: 0 0 8px; border-radius: 10px; background: var(--surface-2); font-size: 0.85rem; }
+.level-guide summary { min-height: var(--tap); display: flex; align-items: center; padding: 0 10px; cursor: pointer; font-weight: 650; touch-action: manipulation; }
+.level-guide-body { padding: 0 10px 10px; line-height: 1.4; overflow-wrap: anywhere; }
+.level-guide-body p { margin: 6px 0; }
+.level-guide-body h3 { margin: 10px 0 4px; font-size: 0.8rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+.guide-levels, .guide-materials { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+.guide-levels small { display: block; color: var(--text-dim); }
 
 /* Landscape phones: the sheet becomes a panel in the bottom-right corner so the map keeps its height. */
 @media (orientation: landscape) and (max-height: 560px), (min-width: 900px) {

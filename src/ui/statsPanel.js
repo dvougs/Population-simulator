@@ -16,12 +16,13 @@ export function renderStats(listEl, stats) {
   )));
 }
 
-/** One row per civ: people alive and hexes held; extinct civs are dimmed with their year. */
+/** One row per civ: type and level, people alive and hexes held; extinct civs are dimmed with their year. */
 export function renderCivStats(listEl, stats) {
   listEl.replaceChildren(...stats.civs.map((c, k) => h('li', { 'data-civ': c.id, class: c.pop === 0 ? 'dead' : undefined },
     emblem(k),
     h('span', { class: 'name' }, c.extinctYear !== null ? `${c.name} (died out, year ${c.extinctYear})` : c.name,
-      c.typeName ? h('small', {}, ` ${c.typeName}`) : null),
+      c.typeName ? h('small', {}, ` ${c.typeName}`) : null,
+      c.level ? h('small', { class: 'lvl' }, ` · L${c.level}`) : null),
     h('span', { class: 'num' }, formatNumber(c.pop), h('small', {}, 'people')),
     h('span', { class: 'num' }, formatNumber(c.hexes), h('small', {}, 'hexes')),
   )));
