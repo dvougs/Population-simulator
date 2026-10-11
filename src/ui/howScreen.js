@@ -4,6 +4,11 @@
 // where they meet, their traits and levels, and the end screen's chart. The
 // world is run once, while the home page is idle (or when the page first
 // opens); the pictures are redrawn only when the page changes size.
+//
+// Presentation: the section links sit in the sticky header and follow the
+// reader (the section in the middle of the screen is marked current), a thin
+// bar under the header shows how far down the page is, and each section
+// fades up as it scrolls into view (not with reduced motion; see main.css).
 
 import { h, formatNumber } from './dom.js';
 import { emblem } from './inspector.js';
@@ -27,10 +32,19 @@ const smooth = () => (window.matchMedia?.('(prefers-reduced-motion: reduce)').ma
 const chip = (c) => h('span', { class: 'civ-chip' }, emblem(c), civName(c));
 
 export class HowScreen {
-  /** body: the page's content element; onNewGame: the New game buttons. */
-  constructor(body, { onNewGame }) {
+  /** body: the page's content element; onNewGame: the New game buttons; nav: where the section links go; progress: the reading bar. */
+  constructor(body, { onNewGame, nav = null, progress = null }) {
     this.body = body;
     this.onNewGame = onNewGame;
+    this.nav = nav;
+    this.progress = progress;
+    this.scroller = body.closest('.screen') ?? body;
+    this.current = null;
+    // Sections scroll to just under the sticky header, whatever its height on this screen.
+    const header = this.scroller.querySelector?.('.how-header');
+    if (header) {
+      new ResizeObserver(() => this.scroller.style.setProperty('--how-head', `${header.offsetHeight}px`)).observe(header);
+    }
     this.built = false;
     this.data = null;
     this.figures = []; // [canvas, draw()]
@@ -138,9 +152,13 @@ export class HowScreen {
       end: () => [endFigure(report, year)],
     };
 
-    const toc = h('nav', { class: 'how-toc', 'aria-label': 'Sections' }, text.sections.map((s) => h('button', {
-      type: 'button', class: 'btn small', onclick: () => this.body.querySelector(`[data-section="${s.id}"]`)?.scrollIntoView({ behavior: smooth(), block: 'start' }),
-    }, s.title)));
+    const links = text.sections.map((s, k) => h('button', {
+      type: 'button', class: 'btn small', 'data-for': s.id,
+      onclick: () => this.body.querySelector(`[data-section="${s.id}"]`)?.scrollIntoView({ behavior: smooth(), block: 'start' }),
+    }, h('span', { class: 'toc-num', 'aria-hidden': 'true' }, String(k + 1)), s.title));
+    let toc = null;
+    if (this.nav) this.nav.replaceChildren(...links);
+    else toc = h('nav', { class: 'how-toc', 'aria-label': 'Sections' }, links);
 
     const sections = text.sections.map((s, k) => {
       const parts = [
@@ -152,18 +170,61 @@ export class HowScreen {
       const extra = extras[s.id]?.(s) ?? [];
       // Levels places its own "after" paragraphs between the materials and the ladder.
       const after = s.id === 'levels' ? [] : [].concat(s.after ?? []).map((p) => h('p', {}, p));
-      return h('section', { class: 'how-section', 'data-section': s.id }, parts, extra, after);
+      return h('section', { class: 'how-section reveal', 'data-section': s.id }, parts, extra, after);
     });
 
     this.body.replaceChildren(
       h('p', { class: 'how-intro' }, text.intro),
-      toc,
+      ...(toc ? [toc] : []),
       ...sections,
-      h('section', { class: 'how-section how-outro' },
+      h('section', { class: 'how-section how-outro reveal' },
         h('h2', {}, 'Your world is waiting'),
         h('p', {}, 'Pick a map, place your peoples, press start, and see what history they make.'),
         h('button', { type: 'button', class: 'btn primary how-cta', onclick: () => this.onNewGame() }, 'New game')),
     );
+    this.watch(sections);
+  }
+
+  /** Reveal sections as they scroll in, keep the current section's link marked, and move the reading bar. */
+  watch(sections) {
+    const root = this.scroller;
+    const reveal = new IntersectionObserver((entries) => {
+      for (const e of entries) if (e.isIntersecting) { e.target.classList.add('in'); reveal.unobserve(e.target); }
+    }, { root, rootMargin: '0px 0px -8% 0px', threshold: 0.04 });
+    for (const el of this.body.querySelectorAll('.reveal')) reveal.observe(el);
+    // A section is current while it crosses a line a third of the way down the screen.
+    const spy = new IntersectionObserver((entries) => {
+      for (const e of entries) if (e.isIntersecting) this.mark(e.target.dataset.section);
+    }, { root, rootMargin: '-33% 0px -66% 0px' });
+    for (const el of sections) spy.observe(el);
+    if (sections.length) this.mark(sections[0].dataset.section);
+    if (this.progress) {
+      let queued = 0;
+      const move = () => {
+        queued = 0;
+        const max = root.scrollHeight - root.clientHeight;
+        this.progress.style.transform = `scaleX(${max > 0 ? Math.min(1, root.scrollTop / max) : 0})`;
+      };
+      root.addEventListener('scroll', () => { queued ||= requestAnimationFrame(move); }, { passive: true });
+      move();
+    }
+  }
+
+  mark(id) {
+    if (!this.nav || id === this.current) return;
+    this.current = id;
+    for (const b of this.nav.children) {
+      if (b.dataset.for === id) {
+        b.setAttribute('aria-current', 'true');
+        // Keep the marked link in the middle of the strip without scrolling the page itself.
+        const nr = this.nav.getBoundingClientRect(); const br = b.getBoundingClientRect();
+        if (this.nav.scrollWidth > this.nav.clientWidth) {
+          this.nav.scrollTo({ left: Math.max(0, this.nav.scrollLeft + br.left - nr.left - (nr.width - br.width) / 2), behavior: smooth() });
+        } else if (this.nav.scrollHeight > this.nav.clientHeight) {
+          this.nav.scrollTo({ top: Math.max(0, this.nav.scrollTop + br.top - nr.top - (nr.height - br.height) / 2), behavior: smooth() });
+        }
+      } else b.removeAttribute('aria-current');
+    }
   }
 }
 

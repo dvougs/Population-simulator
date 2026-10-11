@@ -1,4 +1,6 @@
 // Map-generation screen: map settings with a live preview. Shown before setup.
+// A new map (another seed, preset or size) settles into the preview with a
+// short fade and a light sweep; slider drags only redraw, so it never flickers.
 
 import { h } from './dom.js';
 import { PRESETS, LIMITS, presetParams, randomParams, normalizeParams, MAP_KEYS, LOWLAND_KEYS } from '../sim/params.js';
@@ -23,6 +25,8 @@ export class MapgenScreen {
     this.preset = 'default';
     this.map = null;
     this.frame = 0;
+    this.pulseAt = -Infinity;
+    this.lastHash = null;
     this.render();
     new ResizeObserver(() => { if (this.map && !this.form.closest('[hidden]')) drawPreview(this.canvas, this.map); }).observe(canvas);
   }
@@ -62,6 +66,22 @@ export class MapgenScreen {
     const rivers = this.map.river.reduce((s, v) => s + v, 0);
     this.info.textContent = `${this.map.cols} × ${this.map.rows} hexes · ${this.map.cols * this.map.rows - water} land · ${rivers} river hexes`;
     this.canvas.dataset.hash = this.map.hash;
+    if (this.map.hash !== this.lastHash) this.pulse();
+    this.lastHash = this.map.hash;
+  }
+
+  /** Fade the fresh map in and sweep a highlight across it, at most once per animation. */
+  pulse() {
+    const now = performance.now();
+    if (now - this.pulseAt < 450 || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    this.pulseAt = now;
+    this.canvas.animate?.([
+      { opacity: 0.35, transform: 'scale(0.975)' },
+      { opacity: 1, transform: 'none' },
+    ], { duration: 420, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    this.canvas.parentElement?.querySelector('.preview-sheen')?.animate?.([
+      { transform: 'translateX(-110%)', opacity: 0 }, { opacity: 1, offset: 0.3 }, { transform: 'translateX(110%)', opacity: 0 },
+    ], { duration: 700, easing: 'ease-out' });
   }
 
   /** Apply a new set of map values without rebuilding the form (keeps focus while typing). */
@@ -127,9 +147,13 @@ export class MapgenScreen {
 
 export function slider(id, label, value, min, max, step, fmt, onInput) {
   const out = h('output', { id: `${id}-out`, for: id }, fmt(value));
-  return h('div', { class: 'row' },
+  // --fill paints the track up to the thumb (styles/main.css).
+  const fill = (el, v) => el.style.setProperty('--fill', `${max > min ? ((v - min) / (max - min)) * 100 : 0}%`);
+  const input = h('input', { id, type: 'range', class: 'grow', min, max, step, value,
+    oninput: (e) => { const v = Number(e.target.value); out.textContent = fmt(v); fill(e.target, v); onInput(v); } });
+  fill(input, Number(value));
+  return h('div', { class: 'row range-row' },
     h('label', { for: id }, label),
-    h('input', { id, type: 'range', class: 'grow', min, max, step, value,
-      oninput: (e) => { const v = Number(e.target.value); out.textContent = fmt(v); onInput(v); } }),
+    input,
     out);
 }
