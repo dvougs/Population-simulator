@@ -210,5 +210,5 @@ test('pinned state hash (re-pinned when traits, civ types, contact and levels sh
     return [s.hash(), s.people.count];
   };
   assert.deepEqual(run(), run());
-  assert.deepEqual(run(), ['0e6818a2', 2761]);
+  assert.deepEqual(run(), ['6591e3df', 2885]);
 });

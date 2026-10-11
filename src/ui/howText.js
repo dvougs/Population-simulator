@@ -138,7 +138,7 @@ export function buildingsSection() {
         + 'An empty wonder stands abandoned, its bonus silent, until someone settles it. A wonder near a border is a prize worth a war.',
       `Who tries? A civ thinks about it once its own building for the level stands, and again every ${W.checkYears} years. `
         + `It weighs its type's lean (${andList(lean)}), how safe it is (the share of its hexes away from threats it cannot beat) `
-        + `and whether it already holds the land its next level needs (counting up to × ${num(W.landCap)}). If the three multiplied come to ${num(W.commitScore)} or more, it commits.`,
+        + `and whether it already holds the land its next level needs (counting up to × ${num(W.landCap)}), and each wonder it already owns multiplies its keenness by ${num(W.perOwned)}. If it all multiplies to ${num(W.commitScore)} or more, it commits.`,
       'A committed civ will not level up until it starts the wonder: it gathers the materials, and building begins. '
         + `It gives up after ${W.giveUpYears} years without starting, or as soon as its safety falls below ${num(W.giveUpSafety)}.`,
     ],

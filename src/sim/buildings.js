@@ -96,6 +96,8 @@ export const WONDERS = Object.freeze([
 export const WONDER_RULES = Object.freeze({
   /** How strongly each type leans towards a wonder (the go-for-it score's first factor). */
   lean: Object.freeze({ expansionist: 0.75, aggressive: 0.8, cooperative: 1.2, isolationist: 1.3, nomadic: 1 }),
+  /** The score is multiplied by this once for each wonder the civ already owns, so wonders spread out. */
+  perOwned: 0.7,
   /** The land factor (hexes held ÷ hexes the next level needs) counts at most this. */
   landCap: 1.5,
   /** A civ commits when the score is at least this. */
@@ -395,9 +397,10 @@ export class Buildings {
     this.totals();
   }
 
-  /** Go-for-it score of civ c for era L's wonder: type lean × safety × land (capped). */
+  /** Go-for-it score of civ c for era L's wonder: type lean × safety × land (capped) × 0.7 per wonder it owns. */
   score(c, L, cnt, danger, lv) {
-    const lean = WONDER_RULES.lean[this.types[c]] ?? 1;
+    let lean = WONDER_RULES.lean[this.types[c]] ?? 1;
+    for (let e = 0; e < ERAS; e++) if (this.wOwner[e] === c) lean *= WONDER_RULES.perOwned;
     const need = lv.minHexesFor(c, L + 1);
     const land = need > 0 ? Math.min(WONDER_RULES.landCap, lv.civHexes[c] / need) : WONDER_RULES.landCap;
     return lean * this.safety(c, cnt, danger) * land;

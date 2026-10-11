@@ -548,6 +548,24 @@ test('RULES.md "The decision": the land factor counts at most 1.5', () => {
   assert.ok(committed(ok.step()));
 });
 
+test('RULES.md "The decision": × 0.7 for each wonder the civ already owns', () => {
+  // Isolationist with 7 of the 8 hexes: 1.3 × 0.875 = 1.14 commits; owning one wonder makes it 0.80.
+  assert.ok(committed(wonderWorld('isolationist', 7).step()));
+  const owner = wonderWorld('isolationist', 7);
+  owner.bd.wOwner[1] = 0;
+  owner.bd.wHex[1] = sparse(7)[1];
+  assert.ok(!committed(owner.step()));
+  // With all the land it can use (1.5): 1.95 × 0.7 = 1.37 still commits, × 0.7 again = 0.96 does not.
+  const big = wonderWorld('isolationist', 12);
+  big.bd.wOwner[1] = 0;
+  big.bd.wHex[1] = sparse(12)[1];
+  assert.ok(committed(big.step()));
+  const two = wonderWorld('isolationist', 12);
+  two.bd.wOwner[1] = 0; two.bd.wHex[1] = sparse(12)[1];
+  two.bd.wOwner[2] = 0; two.bd.wHex[2] = sparse(12)[2];
+  assert.ok(!committed(two.step()));
+});
+
 test('RULES.md "The decision": safety = 1 − the share of its hexes holding, or next to, people of a threat it does not beat', () => {
   const w = wonderWorld('cooperative', 8);
   w.bd.state[0] = STANDING;
