@@ -12,7 +12,7 @@
 
 import { Application, Container, Graphics } from '../../vendor/pixi.mjs';
 import { hexPolygon, riverSegments, HEX_SIZE } from './layout.js';
-import { hexRgb, rgbToHex, RIVER_RGB } from './palette.js';
+import { hexColours, rgbToHex, RIVER_RGB } from './palette.js';
 import { DEEP_WATER } from '../sim/terrain.js';
 
 const SHIMMER_PERIOD_MS = 8000; // one full swell: slow, like a tide
@@ -79,8 +79,9 @@ export class Renderer {
     for (const child of this.world.removeChildren()) child.destroy();
 
     const terrain = new Graphics();
+    const colours = hexColours(map);
     for (let i = 0; i < map.cols * map.rows; i++) {
-      terrain.poly(hexPolygon(map.cols, i)).fill({ color: rgbToHex(hexRgb(map, i)) });
+      terrain.poly(hexPolygon(map.cols, i)).fill({ color: rgbToHex(colours[i]) });
     }
 
     const rivers = new Graphics();

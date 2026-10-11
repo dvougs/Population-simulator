@@ -55,6 +55,23 @@ When several hexes tie on a value, the one with the lower index (row × size + c
 - Food capacity is in food units; a person eats 1 food a year (see "People").
 - Movement cost limits how far people migrate in a year (see "Migration"). The defence bonus and materials have no effect yet: they are used once fights and levels arrive.
 
+### Terrain colours
+
+| Terrain | Colour (RGB) |
+|---|---|
+| Sea | 29, 78, 122 |
+| Lake | 56, 118, 170 |
+| Coast | 232, 222, 178 |
+| Plains | 134, 172, 88 |
+| Forest | 52, 112, 58 |
+| Hills | 150, 136, 92 |
+| Mountain | 128, 120, 116 |
+| Desert | 226, 170, 88 |
+| Tundra | 190, 204, 206 |
+| River (line through the hex) | 86, 164, 226 |
+
+- **Shading by height.** Each hex keeps its elevation from step 1 of "How the map is made" (same settings, same values). Land hexes are drawn up to 6% darker or lighter by elevation: the lowest land hex on the map is 6% darker, the highest 6% lighter, and the rest in proportion between. Sea and lake hexes are drawn darker with depth: the highest water hex keeps its colour and the lowest is 25% darker, in proportion between. The shading is only drawn; it changes no rule. The map-generation preview uses the same colours.
+
 ## Civilisations and people
 
 - The game starts with *civ count* civilisations (civs), named Civ 1, Civ 2 and so on, each with *starting population* people.

@@ -14,6 +14,7 @@ function mapData(map) {
     lake: map.lake,
     river: map.river,
     riverTo: map.riverTo,
+    elevation: map.elevation,
     terrainCounts: countTerrain(map),
     hash: hashMap(map),
     params: { ...map.params },
