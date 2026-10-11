@@ -12,7 +12,14 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
   2. 1.0 = Phase 2 plus civs as named, coloured groups with a type, but no traits or mutation yet (those come in 1.1). Ships sooner; civs differ only by type.
   3. Keep the roadmap: 1.0 = people only (Phase 2); civ types, traits and mutation are 1.1.
 - Recommendation: 1, because civs without traits all behave alike and a population sim feels empty without visible differences between groups; we can still ship it in reviewed steps (one release candidate per step) before calling it 1.0.
-- Answer:
+- Answer: see the owner's civ design summary below (reading: option 1, all 5 civ types with traits and mutation in 1.0, plus basic fighting from the owner's request R-004; levels 1 to 5 and materials are described in the summary but not explicitly placed in 1.0, so they stay in a later phase unless the owner says otherwise. The director turns the "not defined yet" list into questions or proposals.)
+  Owner's civ design summary (given as the answer to Q-003 and Q-004):
+  - How it works: a civ type is a behaviour bias layered on top of each person's own inherited traits. People differ inside the same civ; the type only pushes the odds.
+  - Types (5): Expansionist migrates early, before its hex gets crowded. Isolationist stays put until starving (decided). Aggressive is one of the types that fight regardless of food ("some civs fight anyway" agreed, but not which). Cooperative and Nomadic: name only, no behaviour defined yet.
+  - Per-person inherited traits (copied from the parent with small random mutation): fertility (chance of a birth each year), life_expectancy (base lifespan, shifted by terrain, hunger, health), strength (combat), aggression (likelihood to fight), cooperation (likelihood to coexist or switch civ), metabolism (food needed per year), heat_tolerance (survival in desert and hot terrain), cold_tolerance (survival in tundra and mountains). Life state: age, health, hunger, hex, civ, parent.
+  - Civ-level: level 1-5 civ-wide (L1 Foragers gathering only; L2 Farmers more food from plains and rivers; L3 Builders shelter, harsh terrain survivable; L4 Organised alliances, organised war, boats; L5 Kingdom higher hex capacity, longer life, can absorb a co-living civ). Levelling: spend materials plus enough years at the current level. Birth bonus: higher level raises every member's yearly birth chance. Materials gathered from forest and hills.
+  - Contact rules (all types): plenty of food leads to coexistence; scarcity plus aggressive people leads to fights; some types fight regardless (which ones: open). Co-living people can switch civ (the only way civs blend, since births need no partner).
+  - Not defined yet: starting trait averages per type (e.g. aggressive = high aggression and strength); behaviour for Cooperative and Nomadic; which types always fight; all numbers (rates, thresholds, capacities). These should come back as director questions.
 
 ### Q-004: How should traits and mutation work?
 - Date: 2026-10-11
@@ -22,7 +29,7 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
   2. 4 traits only (fertility, life expectancy, aggression, metabolism), same mutation. Easier to read in the inspector and on the end screen.
   3. All 8 traits but no mutation: children copy parents exactly. Civs never change, only their mix of people does.
 - Recommendation: 1, it is what the roadmap describes and gives the long-run story (civs adapting to their land); the inspector can show the 8 as small bars.
-- Answer:
+- Answer: see the owner's civ design summary under Q-003 (reading: option 1, all 8 inherited traits copied from the parent with a small random mutation, as recommended)
 
 ### Q-005: How should civs and people look on the map?
 - Date: 2026-10-11
@@ -32,7 +39,7 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
   2. Each civ gets a colour and a simple emblem (shape: circle, square, triangle…); zoomed out, emblem plus number per hex; zoomed in, people are tiny emblems. Readable for colour-blind players.
   3. Zoomed out, hexes are shaded by population density (no civ colours); civ colours only when zoomed in.
 - Recommendation: 2, the shape keeps civs apart for colour-blind players and on small phone screens, at the same cost as option 1 (one texture atlas).
-- Answer:
+- Answer: color plus a shape (reading: option 2, a colour and a shape emblem per civ, as recommended)
 
 ## Proposals
 
@@ -45,7 +52,7 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Evidence: Headless runs of seeds review-20261011-1 to -3 on claude/cycle-20261011-0006 at 442a0e6, default setup, 400 years: deep water is exactly 36 on every seed (the 4 × 10 − 4 ring), so the default 25% is already inside the dead zone. RULES.md "How the map is made" step 2; slider range from LIMITS.water in src/ui/mapgenScreen.js:106. On 50 × 50 the ring is 196 hexes (7.8%).
 - Effort: S
 - Phone performance risk: low: a label or a slider bound recalculated when the size changes.
-- Decision:
+- Decision: ignore this suggestion (reading: no)
 
 ### P-004: Shade each hex slightly by its height
 - Date: 2026-10-11
@@ -54,7 +61,7 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Evidence: src/render/palette.js:4-13 has one colour per terrain and hexRgb (src/render/palette.js:24-26) returns it unchanged; src/render/renderer.js setMap fills each hex with that colour. On the three review seeds the 64 land hexes use only 7 colours (e.g. seed review-20261011-1: 17 coast, 12 plains, 9 forest hexes, each block one flat tone). Elevation is already computed in src/sim/mapgen.js but not kept on the map.
 - Effort: S
 - Phone performance risk: low: colours are baked once when the map is built; no per-frame cost.
-- Decision:
+- Decision: agreed (reading: yes)
 
 ### P-005: Let people prefer hexes their own civ already holds
 - Date: 2026-10-11
@@ -63,7 +70,7 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Evidence: Headless runs of seeds review-20261011b-1 to -3 on claude/cycle-20261011-0405 at 1656249, default setup, 400 years: the 3 civs together hold 146, 143 and 131 hex-slots on 64 land hexes (seed -1: civ 1 in 44, civ 2 in 47, civ 3 in 55), so almost every hex is shared. src/sim/migration.js:91-119 weights targets only by spare food; civ is never read.
 - Effort: S
 - Phone performance risk: low: one per-civ count per hex in the existing migration snapshot, no new loops per person.
-- Decision:
+- Decision: approved (reading: yes)
 
 ### P-006: A food abundance setting, lower on big maps, to keep people in the thousands
 - Date: 2026-10-11
@@ -72,9 +79,13 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Evidence: Headless run of seed review-20261011b-1 with the Large world preset (50 × 50, 6 civs × 40) on 1656249: 2,147 people at year 250, 12,598 at 500, 28,116 at 750, 35,072 at 1000, still rising; 770 ticks/s in Node for the whole run, about 330 ticks/s at the plateau (game-dev's measurement). CLAUDE.md targets "a few thousand people" on a mid-range iPhone; 20× speed needs 160 ticks/s. The default 10 × 10 map is fine (1,323 to 1,405 people at year 400).
 - Effort: S
 - Phone performance risk: low: it lowers the work per tick; the setting itself costs nothing at run time.
-- Decision:
+- Decision: ignore for now (reading: later)
 
 ## Requests
+
+- R-003: Add an option on the setup screen to add and remove civs, and to pick each civ's type from the defined types (owner, 2026-10-11 07:19 UTC).
+- R-004: Introduce a basic set of fighting mechanics (owner, 2026-10-11 07:19 UTC).
+- R-005: Add a home page where the owner can start a new game or read the rules, explained in human-readable, compelling language that follows RULES.md. It should look fabulous and include in-game screens explaining how the game works (owner, 2026-10-11 07:19 UTC).
 
 ## Answered
 
