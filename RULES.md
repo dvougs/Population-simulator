@@ -2,7 +2,7 @@
 
 How the game works, as currently implemented. Every number here is the value the code uses. If the game and this file disagree, the game has a bug (see CLAUDE.md).
 
-This describes the current build (Phase 1): a generated hex map with time passing. There are no people yet; they arrive in Phase 2. The full design is in [project/ROADMAP.md](project/ROADMAP.md); this file changes as each part of it ships.
+This describes the current build (Phase 2, in progress): a generated hex map where civilisations of individual people eat, have children, grow old, starve and migrate, year by year. All people share the same base values for now; inherited traits and civ types come later. The full design is in [project/ROADMAP.md](project/ROADMAP.md); this file changes as each part of it ships.
 
 ## Time
 
@@ -10,7 +10,7 @@ This describes the current build (Phase 1): a generated hex map with time passin
 - At 1× the game runs 8 years per second. Speeds: 1×, 2×, 5×, 20× and Max (as many years as fit in 9 ms of each frame).
 - Pause stops time; Step advances exactly one year, paused or not.
 - If the device cannot keep up with the chosen speed, years are skipped rather than queued.
-- Nothing on the map changes as years pass yet: with no people, nothing eats, so every hex keeps its full food.
+- Each year runs the steps in "A year" below, in that order.
 
 ## The map
 
@@ -52,8 +52,52 @@ When several hexes tie on a value, the one with the lower index (row × size + c
 - **Rivers** run through land hexes. A river hex keeps its terrain's movement cost, defence bonus and materials (rivers are walkable) and gets +30 food capacity (rivers are fertile).
 - Seas and lakes are impassable.
 - Every hex starts with food equal to its food capacity.
-- Food capacity is in food units; when people arrive, a person will eat 1 food a year.
-- The defence bonus, materials and movement cost have no effect yet: they are used once people, fights and levels arrive.
+- Food capacity is in food units; a person eats 1 food a year (see "People").
+- Movement cost limits how far people migrate in a year (see "Migration"). The defence bonus and materials have no effect yet: they are used once fights and levels arrive.
+
+## Civilisations and people
+
+- The game starts with *civ count* civilisations (civs), named Civ 1, Civ 2 and so on, each with *starting population* people.
+- **Start hexes.** A good start hex is land with food capacity 40 or more (coast, plains, forest, and any river hex). The first civ starts on a random good hex. Each next civ starts on a random good hex at least 3 steps from every earlier start; if there is none, on the good hex farthest from the earlier starts (lowest index on ties). With no good hexes at all, any land hex counts as good. On very small land several civs can start on the same hex.
+- All of a civ's founders start together on its start hex, each with a random age from 0 to 39, full health (100) and no hunger, and no parent.
+- Every person has an age (years), health (0 to 100), hunger (years in a row without food), a hex, a civ and a parent (the person who bore them; none for founders).
+- Several civs can live in the same hex. They do not interact yet: no contact, fights or switching civ.
+- Every person uses the same base values below (birth chance, fertile ages, old age). Inherited traits will replace them per person later.
+
+## A year
+
+Each year (tick) runs these steps in order. Within a step everyone decides first and the results apply together, so the order people are listed in never changes the outcome.
+
+1. **Birthdays.** Everyone's age goes up by 1.
+2. **Eating.** Each person eats 1 food from their hex.
+   - If the hex has at least as many whole food units as people, everyone there eats.
+   - Otherwise exactly ⌊food⌋ of the people there eat, picked at random (every person in the hex has the same chance); the rest go hungry.
+   - The food eaten is taken from the hex.
+   - A person who eats has hunger 0 and gains 25 health (up to 100). A person who does not eat has hunger + 1 and loses 35 health (down to 0).
+3. **Deaths.**
+   - **Starvation:** a person whose health is 0 dies. From full health that is the third year in a row without food.
+   - **Old age:** otherwise, a person aged 45 or more dies with chance (age − 45) ÷ 40 that year: 2.5% at 46, 25% at 55, 50% at 65, and certain at 85, so nobody lives past 85.
+4. **Births.** Each person who ate this year, aged 16 to 40 (inclusive), in a hex with fewer people (all civs, counted after this year's deaths) than its food capacity, has a child with chance 5%. No partner is needed. The child starts at age 0 with full health and no hunger, in the parent's hex and civ, with that parent recorded.
+5. **Migration** (see below).
+6. **Food regrowth.** Each hex regains food equal to 50% of its food capacity, never above its capacity.
+7. **Statistics** for the year are recorded (see "Statistics").
+
+## Migration
+
+- A person who went hungry this year sets out with chance 50%.
+- A person who ate, in a crowded hex, sets out with chance 20%. A hex is crowded when it holds more people (all civs) than 80% of its food capacity.
+- **Reach.** A person has 3 movement points a year. Entering a hex costs its movement cost (coast and plains 1, desert and tundra 1.5, forest and hills 2, mountain 3). The hexes in reach are the land hexes that can be reached along a path of land hexes costing 3 or less in total. Seas and lakes cannot be entered or crossed.
+- **Spare food** of a hex = the food it will hold after this year's regrowth (food + 50% of capacity, at most the capacity) − the people in it now (after this year's births).
+- A person who sets out picks one hex in reach whose spare food is above 0 and above their own hex's spare food, at random, with chances in proportion to each hex's spare food. With no such hex, they stay.
+- Everyone chooses against the same counts, taken before anyone moves; then everyone who chose moves at once.
+
+## Statistics
+
+Recorded at the end of every year, for each civ: people alive, hexes held (hexes with at least one of its people), births, deaths by old age, deaths by starvation, and the total age at death of those who died.
+
+- Kept for the whole run: total births and deaths by cause, average lifespan (average age at death), oldest age reached, peak population, most hexes held, and the year the civ died out (its people fell to 0), if it did.
+- The yearly history keeps one row per year for the first 8192 rows. When it is full, pairs of rows are merged (people and hexes from the later year, the other numbers added together) and each new row covers twice as many years, so a long game never runs out of memory.
+- While the game runs, the statistics sheet shows each civ's people and hexes held; the top bar shows the total population and how many civs are still alive. Tapping a hex shows its people per civ.
 
 ## Map settings
 
@@ -92,8 +136,15 @@ Chosen on the setup screen, after the map.
 
 | Setting | Default | Range |
 |---|---|---|
+| Civ count | 3 | 1 to 8 |
+| Starting population | 20 people per civ | 2 to 200 |
 | End condition | None (run forever) | None, Year limit |
 | Year limit | 1000 | 10 to 100000 |
+
+Out-of-range values are clamped to the range; values that are not numbers fall back to the default.
+
+- Each map preset also sets the civs: Small world 3 civs of 20 people, Continent 4 of 30, Archipelago 5 of 20, Highlands 3 of 20, Large world 6 of 40.
+- Randomise on the setup screen picks 2 to 6 civs and 10 to 50 people each; it does not change the map. Randomise on the map screen does not change the civs.
 
 ## End of the game
 
@@ -102,4 +153,4 @@ Chosen on the setup screen, after the map.
 
 ## Not in the game yet
 
-People, civilisations, births and deaths, migration, food use and regrowth, land degrading, traits and mutation, contact and war, materials and levels, boats, god powers and the end screen. See [project/ROADMAP.md](project/ROADMAP.md).
+People drawn on the map and tapping a person, land degrading, inherited traits and mutation, civ types, contact and war, materials and levels, boats, god powers, more end conditions and the end screen. See [project/ROADMAP.md](project/ROADMAP.md).

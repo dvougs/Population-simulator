@@ -27,14 +27,19 @@ test('one tick is one year; tick(n) runs n years when there is no end condition'
   assert.equal(sim.finished, false);
 });
 
-test('nothing on the map changes as years pass (every hex keeps full food)', () => {
+test('the map itself does not change as years pass; food stays between 0 and capacity (RULES.md "A year")', () => {
   const sim = new Simulation({ seed: 'still', size: 20 });
   const mapHash = sim.mapHash();
-  const food = sim.map.food.slice();
-  sim.tick(500);
+  const terrain = sim.map.terrain.slice();
+  sim.tick(300);
   assert.equal(sim.mapHash(), mapHash);
-  assert.deepEqual(sim.map.food, food);
-  for (let i = 0; i < sim.map.count; i++) assert.equal(sim.map.food[i], sim.map.foodCap[i]);
+  assert.deepEqual(sim.map.terrain, terrain);
+  let eaten = 0;
+  for (let i = 0; i < sim.map.count; i++) {
+    assert.ok(sim.map.food[i] >= 0 && sim.map.food[i] <= sim.map.foodCap[i], `hex ${i}`);
+    if (sim.map.food[i] < sim.map.foodCap[i]) eaten++;
+  }
+  assert.ok(eaten > 0, 'people have eaten from some hexes');
 });
 
 test('year limit: the game ends when that year is reached', () => {
@@ -58,13 +63,15 @@ test('year limit boundaries: below 10 is clamped to 10; the limit only applies w
   assert.equal(none.finished, false);
 });
 
-test('stats report year, no people yet, terrain counts and end state', () => {
+test('stats report year, population, civs, terrain counts and end state', () => {
   const sim = new Simulation({ seed: 'stats', endCondition: 'ticks', endTicks: 10 });
+  assert.equal(sim.stats().totalPop, 60, 'default 3 civs of 20 people');
   sim.tick(10);
   const s = sim.stats();
   assert.equal(s.tick, 10);
-  assert.equal(s.totalPop, 0);
-  assert.deepEqual(s.civs, []);
+  assert.equal(s.totalPop, sim.people.count);
+  assert.equal(s.civs.length, 3);
+  assert.equal(s.civs.reduce((a, c) => a + c.pop, 0), s.totalPop);
   assert.deepEqual(s.terrainCounts, countTerrain(sim.map));
   assert.equal(s.finished, true);
   assert.equal(s.endReason, 'Reached year 10');

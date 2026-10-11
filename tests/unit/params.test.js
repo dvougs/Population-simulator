@@ -13,7 +13,8 @@ function lcg(seed) {
 test('defaults match RULES.md "Map settings" and "Game settings"', () => {
   assert.deepEqual({ ...DEFAULT_PARAMS }, {
     seed: 'pangaea', size: 10, water: 0.25, mountains: 0.12, rivers: 2,
-    plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15, endCondition: 'none', endTicks: 1000,
+    plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15, civCount: 3, startPop: 20,
+    endCondition: 'none', endTicks: 1000,
   });
   assert.deepEqual(normalizeParams(), { ...DEFAULT_PARAMS });
   assert.deepEqual(normalizeParams({}), { ...DEFAULT_PARAMS });

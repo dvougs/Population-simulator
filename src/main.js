@@ -11,7 +11,8 @@ import { SetupScreen } from './ui/setupScreen.js';
 import { initBottomSheet } from './ui/bottomSheet.js';
 import { initControls } from './ui/controls.js';
 import { renderInspector } from './ui/inspector.js';
-import { renderStats } from './ui/statsPanel.js';
+import { formatNumber } from './ui/dom.js';
+import { renderStats, renderCivStats } from './ui/statsPanel.js';
 import { mapParams } from './sim/params.js';
 import { DEEP_WATER } from './sim/terrain.js';
 
@@ -19,7 +20,7 @@ const $ = (id) => document.getElementById(id);
 const ui = {
   mapgen: $('mapgen'), setup: $('setup'), game: $('game'), resume: $('btn-resume'),
   canvas: $('map'), year: $('hud-year'), pop: $('hud-pop'), inspector: $('inspector'), toast: $('toast'),
-  sheet: $('sheet'), handle: $('sheet-handle'), stats: $('stats'),
+  sheet: $('sheet'), handle: $('sheet-handle'), stats: $('stats'), civStats: $('civ-stats'),
 };
 
 const host = new LocalSimHost();
@@ -111,9 +112,12 @@ function updatePanels() {
   const stats = host.stats();
   if (!stats) return;
   ui.year.textContent = `Year ${stats.tick}${stats.finished ? ' (ended)' : ''}`;
-  const land = map.cols * map.rows - stats.terrainCounts[DEEP_WATER];
-  ui.pop.textContent = `${map.cols} × ${map.rows} hexes · ${land} land · no people yet`;
+  const alive = stats.civs.filter((c) => c.pop > 0).length;
+  ui.pop.textContent = `${formatNumber(stats.totalPop)} people · ${alive} of ${stats.civs.length} civs · ${map.cols} × ${map.rows} hexes`;
+  renderCivStats(ui.civStats, stats);
   renderStats(ui.stats, stats);
+  // Keep the open hex card's people and food current.
+  if (selected >= 0) renderInspector(ui.inspector, host.inspect(selected % map.cols, Math.floor(selected / map.cols)), () => select(-1));
 }
 
 function select(index) {

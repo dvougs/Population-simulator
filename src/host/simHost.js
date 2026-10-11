@@ -45,7 +45,10 @@ export class LocalSimHost {
   get tickCount() { return this.sim?.tickCount ?? 0; }
 
   map() { return this.sim ? mapData(this.sim.map) : null; }
+  /** Live totals: year, population, per-civ summary (plain data). */
   stats() { return this.sim?.stats() ?? null; }
+  /** Per-civ yearly history recorded during the run: plain data and typed arrays (copies). */
+  history() { return this.sim?.history() ?? null; }
   inspect(col, row) { return this.sim?.inspect(col, row) ?? null; }
   hash() { return this.sim?.hash() ?? null; }
   mapHash() { return this.sim?.mapHash() ?? null; }

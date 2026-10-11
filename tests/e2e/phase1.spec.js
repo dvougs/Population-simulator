@@ -1,6 +1,5 @@
 // Phase 1 browser tests (T-009): map generation, setup, the hex map, time controls and layout.
-// Expected values come from RULES.md. Phase 1 has no people, so population, people on the map,
-// the person inspector and the end screen are not covered here.
+// Expected values come from RULES.md. The sim now has people, but only the HUD text, the inspector and the setup fields are checked here; people on the map and the end screen are not covered.
 
 import { test, expect, devices } from '@playwright/test';
 
@@ -124,8 +123,15 @@ async function expectInspectorMatchesRules(page, sample) {
   const cap = rule.food + (h.river ? RIVER_BONUS : 0);
   await expect(insp.locator('h3')).toContainText(rule.name);
   await expect(insp.locator('h3')).toContainText(`(${sample.col}, ${sample.row})`);
-  // RULES.md: every hex starts with food equal to its capacity, and nothing eats in Phase 1.
-  await expect(insp.locator('dd[data-field="food"]')).toHaveText(`${cap} / ${cap}`);
+  // RULES.md "A year": people eat and food regrows, so food is anywhere from 0 to the capacity.
+  // The game is paused when the sample is taken, so the card shows the sampled values.
+  await expect(insp.locator('dd[data-field="food"]')).toHaveText(`${Math.round(h.food)} / ${cap}`);
+  expect(h.food).toBeGreaterThanOrEqual(0);
+  expect(h.food).toBeLessThanOrEqual(cap);
+  // RULES.md "Statistics": tapping a hex shows its people per civ.
+  const peopleDd = insp.locator('dd[data-field="people"]');
+  if (h.people === 0) await expect(peopleDd).toHaveText('None');
+  else await expect(peopleDd).toHaveText(new RegExp(`^${h.people} \\(Civ \\d+: \\d+`));
   await expect(insp.locator('dd[data-field="food-capacity"]')).toHaveText(String(cap));
   await expect(insp.locator('dd[data-field="materials"]')).toHaveText(rule.materials);
   await expect(insp.locator('dd[data-field="movement-cost"]')).toHaveText(rule.move);
@@ -274,6 +280,12 @@ test.describe('setup screen', () => {
     await expect(page.locator('#mapgen')).toBeHidden();
     await expect(page.locator('#setup-map-summary')).toHaveText('20 × 20 hexes, seed “peaks”, water 15%, mountains 30%, 5 rivers');
     // RULES.md "Game settings" defaults.
+    await expect(page.locator('#f-civs')).toHaveValue('3');
+    await expect(page.locator('#f-start-pop')).toHaveValue('20');
+    await expect(page.locator('#f-civs')).toHaveAttribute('min', '1');
+    await expect(page.locator('#f-civs')).toHaveAttribute('max', '8');
+    await expect(page.locator('#f-start-pop')).toHaveAttribute('min', '2');
+    await expect(page.locator('#f-start-pop')).toHaveAttribute('max', '200');
     await expect(page.locator('#f-end')).toHaveValue('none');
     await expect(page.locator('#f-end-ticks')).toBeHidden();
     await page.locator('#f-end').selectOption('ticks');
@@ -299,7 +311,8 @@ test.describe('setup screen', () => {
     await expect.poll(() => year(page), { timeout: 10_000 }).toBeGreaterThan(3);
     await expect(page.locator('#hud-year')).toHaveText(/^Year [1-9]\d*$/);
     await expect(page.locator('#hud-pop')).toContainText('14 × 14 hexes');
-    await expect(page.locator('#hud-pop')).toContainText('no people yet');
+    // RULES.md "Statistics": total population and civs still alive; Small world has 3 civs of 20.
+    await expect(page.locator('#hud-pop')).toHaveText(/^[\d,.]+[kM]? people · [1-3] of 3 civs · 14 × 14 hexes$/);
     await shot(page, testInfo, 'game');
   });
 });
@@ -354,19 +367,19 @@ test.describe('game', () => {
     expect(rate).toBeLessThanOrEqual(200);
   });
 
-  test('the sim is still running after 60 years at Max speed and food stays full', async ({ page }) => {
+  test('the sim is still running after 60 years at Max speed and food stays in range', async ({ page }) => {
     await startGame(page);
     await page.locator('#speed button', { hasText: 'Max' }).click();
     await expect.poll(() => year(page), { timeout: 10_000 }).toBeGreaterThan(60);
     const y = await year(page);
     await expect.poll(() => year(page)).toBeGreaterThan(y);
-    // RULES.md: with no people, every hex keeps its full food.
+    // RULES.md "A year": food is eaten and regrows, never below 0 or above capacity.
     const notFull = await page.evaluate(() => {
       const size = window.popsim.mapParams().size;
       const bad = [];
       for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) {
         const h = window.popsim.hex(c, r);
-        if (h.food !== h.foodCap) bad.push(h);
+        if (h.food < 0 || h.food > h.foodCap) bad.push(h);
       }
       return bad;
     });
