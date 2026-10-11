@@ -14,7 +14,7 @@ test('defaults match RULES.md "Map settings" and "Game settings"', () => {
   assert.deepEqual({ ...DEFAULT_PARAMS }, {
     seed: 'pangaea', size: 10, water: 0.25, mountains: 0.12, rivers: 2,
     plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15, civCount: 3, startPop: 20,
-    endCondition: 'none', endTicks: 1000,
+    endConditions: [], endTicks: 2500, dominanceShare: 0.6, dominanceYears: 300,
   });
   assert.deepEqual(normalizeParams(), { ...DEFAULT_PARAMS });
   assert.deepEqual(normalizeParams({}), { ...DEFAULT_PARAMS });
@@ -29,7 +29,9 @@ test('ranges match RULES.md', () => {
   for (const k of ['plains', 'forest', 'desert', 'tundra']) assert.deepEqual(LIMITS[k], { min: 0, max: 1 }, k);
   assert.deepEqual(LIMITS.endTicks, { min: 10, max: 100000 });
   assert.equal(LIMITS.seedLength, 64);
-  assert.deepEqual(END_CONDITIONS, ['none', 'ticks']);
+  assert.deepEqual(END_CONDITIONS, ['lastCiv', 'dominance', 'years']);
+  assert.deepEqual(LIMITS.dominanceShare, { min: 0.25, max: 1 });
+  assert.deepEqual(LIMITS.dominanceYears, { min: 10, max: 10000 });
   assert.deepEqual(MAP_KEYS, ['seed', 'size', 'water', 'mountains', 'rivers', 'plains', 'forest', 'desert', 'tundra']);
   assert.deepEqual(LOWLAND_KEYS, ['plains', 'forest', 'desert', 'tundra']);
 });
@@ -103,26 +105,53 @@ test('rivers: 0 to 20, whole number, clamped', () => {
   assert.equal(r(2.4), 2);
 });
 
-test('year limit: 10 to 100000, clamped; end condition none or ticks', () => {
+test('year limit: 10 to 100000, clamped (RULES.md "Game settings")', () => {
   const t = (v) => normalizeParams({ endTicks: v }).endTicks;
   assert.equal(t(9), 10);
   assert.equal(t(10), 10);
   assert.equal(t(11), 11);
   assert.equal(t(100000), 100000);
   assert.equal(t(100001), 100000);
-  assert.equal(normalizeParams({ endCondition: 'ticks' }).endCondition, 'ticks');
-  assert.equal(normalizeParams({ endCondition: 'none' }).endCondition, 'none');
-  assert.equal(normalizeParams({ endCondition: 'never' }).endCondition, 'none');
+});
+
+test('dominance share 25% to 100% whole percent; dominance years 10 to 10000', () => {
+  const sh = (v) => normalizeParams({ dominanceShare: v }).dominanceShare;
+  assert.equal(sh(0.24), 0.25);
+  assert.equal(sh(0.25), 0.25);
+  assert.equal(sh(0.26), 0.26);
+  assert.equal(sh(1), 1);
+  assert.equal(sh(1.01), 1);
+  assert.equal(sh(0.555), 0.56);
+  const yr = (v) => normalizeParams({ dominanceYears: v }).dominanceYears;
+  assert.equal(yr(9), 10);
+  assert.equal(yr(10), 10);
+  assert.equal(yr(10000), 10000);
+  assert.equal(yr(10001), 10000);
+  assert.equal(yr(299.6), 300);
+});
+
+test('end conditions: any combination, unknown ignored, duplicates once, non-list means Sandbox, legacy ticks', () => {
+  const e = (v) => normalizeParams({ endConditions: v }).endConditions;
+  assert.deepEqual(e([]), []);
+  assert.deepEqual(e(['years']), ['years']);
+  assert.deepEqual(e(['years', 'lastCiv', 'dominance']), ['lastCiv', 'dominance', 'years']);
+  assert.deepEqual(e(['years', 'years', 'bogus', 'lastCiv']), ['lastCiv', 'years']);
+  for (const bad of ['years', 'lastCiv', 5, null, undefined, {}, true]) assert.deepEqual(e(bad), [], String(bad));
+  assert.deepEqual(normalizeParams({ endCondition: 'ticks' }).endConditions, ['years']);
+  assert.deepEqual(normalizeParams({ endCondition: 'none' }).endConditions, []);
+  assert.deepEqual(normalizeParams({ endCondition: 'never' }).endConditions, []);
 });
 
 test('values that are not numbers fall back to the default', () => {
   for (const bad of ['lots', '', null, undefined, NaN, Infinity, {}, 'NaN']) {
-    const p = normalizeParams({ size: bad, water: bad, mountains: bad, rivers: bad, endTicks: bad });
+    const p = normalizeParams({ size: bad, water: bad, mountains: bad, rivers: bad, endTicks: bad, dominanceShare: bad, dominanceYears: bad });
     assert.equal(p.size, 10, `size ${String(bad)}`);
     assert.equal(p.water, 0.25);
     assert.equal(p.mountains, 0.12);
     assert.equal(p.rivers, 2);
-    assert.equal(p.endTicks, 1000);
+    assert.equal(p.endTicks, 2500);
+    assert.equal(p.dominanceShare, 0.6);
+    assert.equal(p.dominanceYears, 300);
   }
 });
 
@@ -188,9 +217,19 @@ test('randomise ranges match RULES.md (size 10–50, water 10–60%, mountains 5
   assert.equal(hi.mountains, 0.3);
   assert.equal(hi.rivers, 12);
   assert.deepEqual([hi.plains, hi.forest, hi.desert, hi.tundra], [0.6, 0.5, 0.3, 0.3]);
+  assert.deepEqual(lo.endConditions, ['lastCiv', 'dominance', 'years']);
+  assert.equal(lo.endTicks, 1000);
+  assert.equal(lo.dominanceShare, 0.5);
+  assert.equal(lo.dominanceYears, 100);
+  assert.deepEqual(hi.endConditions, []);
+  assert.equal(hi.endTicks, 10000);
+  assert.equal(hi.dominanceShare, 0.8);
+  assert.equal(hi.dominanceYears, 500);
 
   const random = lcg(99);
   const sizes = new Set();
+  const ticked = [0, 0, 0, 0];
+  const each = { lastCiv: 0, dominance: 0, years: 0 };
   for (let k = 0; k < 300; k++) {
     const p = randomParams(random);
     assert.deepEqual(normalizeParams(p), p);
@@ -202,9 +241,32 @@ test('randomise ranges match RULES.md (size 10–50, water 10–60%, mountains 5
     assert.ok(p.forest >= 0.1 && p.forest <= 0.5, `forest ${p.forest}`);
     assert.ok(p.desert >= 0 && p.desert <= 0.3, `desert ${p.desert}`);
     assert.ok(p.tundra >= 0 && p.tundra <= 0.3, `tundra ${p.tundra}`);
-    assert.equal(p.endCondition, 'none');
+    assert.ok(Array.isArray(p.endConditions) && p.endConditions.every((k) => END_CONDITIONS.includes(k)));
+    assert.ok([1000, 2500, 5000, 10000].includes(p.endTicks), `endTicks ${p.endTicks}`);
+    assert.ok(p.dominanceShare >= 0.5 && p.dominanceShare <= 0.8, `share ${p.dominanceShare}`);
+    assert.ok([100, 200, 300, 500].includes(p.dominanceYears));
+    ticked[p.endConditions.length]++;
+    for (const k of p.endConditions) each[k]++;
     assert.ok(typeof p.seed === 'string' && p.seed.length > 0 && p.seed.length <= 64);
     sizes.add(p.size);
   }
   assert.ok(sizes.size > 20, 'sizes spread over the range');
+  assert.ok(ticked.every((n) => n > 0), 'all of 0 to 3 ticked occur');
+  for (const k of Object.keys(each)) assert.ok(each[k] > 90 && each[k] < 210, `${k} ticked about half the time: ${each[k]}`);
+});
+
+test('presets set the end conditions per RULES.md "Game settings"', () => {
+  const ends = (k) => presetParams(k).endConditions;
+  assert.deepEqual(ends('default'), []);
+  assert.deepEqual(ends('continent'), ['dominance', 'years']);
+  assert.equal(presetParams('continent').endTicks, 5000);
+  assert.deepEqual(ends('archipelago'), ['lastCiv', 'years']);
+  assert.equal(presetParams('archipelago').endTicks, 10000);
+  assert.deepEqual(ends('highlands'), ['years']);
+  assert.equal(presetParams('highlands').endTicks, 2500);
+  assert.deepEqual(ends('large'), ['lastCiv', 'dominance']);
+  for (const k of Object.keys(PRESETS)) {
+    assert.equal(presetParams(k).dominanceShare, 0.6, k);
+    assert.equal(presetParams(k).dominanceYears, 300, k);
+  }
 });
