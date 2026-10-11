@@ -36,7 +36,8 @@ let shownEnd = false;
 const loop = new Loop({
   tick: (n) => host.tick(n),
   frame: (ran, now) => {
-    if (dirty) { renderer.draw(camera, selected); dirty = false; }
+    // The water shimmer keeps redrawing on its own clock; the sim never sees it.
+    if (dirty || (!ui.game.hidden && renderer.needsFrame(now))) { renderer.draw(camera, selected, now); dirty = false; }
     if (ran > 0 && now - lastPanelUpdate > 100) { updatePanels(); lastPanelUpdate = now; }
     if (host.finished && !shownEnd) {
       shownEnd = true;
