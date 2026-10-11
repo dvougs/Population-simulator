@@ -7,7 +7,10 @@
 //
 // Movement is render-side only: when a person's hex changes between two
 // population snapshots, their sprite glides from where it was drawn to the new
-// spot over MOVE_MS of render time. The sim never sees any of this.
+// spot over MOVE_MS of render time. On top of that, while time runs, everyone
+// idles: a slow circle of DRIFT_R around their spot, at a pace picked from their
+// id, driven by a drift clock the renderer only advances while the game is not
+// paused. The sim never sees any of this.
 
 import { Container, Graphics, Rectangle, Sprite, Texture, CanvasSource } from '../../vendor/pixi.mjs';
 import { hexCentre, HEX_SIZE } from './layout.js';
@@ -15,7 +18,9 @@ import { CIV_STYLES, traceEmblem, civStyle, EMBLEM_ORDER } from './civStyle.js';
 import { rgbToHex } from './palette.js';
 
 /** People are drawn one by one once a hex is at least this many CSS px across (corner to corner) on screen. */
-export const PEOPLE_ZOOM_PX = 200;
+export const PEOPLE_ZOOM_PX = 120;
+/** Tapping a hex while zoomed out flies the camera in until a hex is this many CSS px across. */
+export const PEOPLE_FLY_PX = 180;
 /** Render time a migrating person takes to glide to their new hex. */
 const MOVE_MS = 600;
 
@@ -28,6 +33,10 @@ const DIGIT_SPRITE = 0.62 * HEX_SIZE; // whole cell, so the digit itself is abou
 const DIGIT_ADVANCE = 0.3 * HEX_SIZE;
 const PERSON_R = 0.075 * HEX_SIZE;
 const SPREAD_R = 0.6 * HEX_SIZE; // people sit in a disc this wide around the hex centre
+/** Idle drift: radius of each person's slow circle around their spot, and the slowest and fastest lap. */
+export const DRIFT_R = 0.1 * HEX_SIZE;
+export const DRIFT_LAP_MIN_S = 4;
+export const DRIFT_LAP_MAX_S = 8;
 const TAP_PX = 22; // half of the 44 px touch target
 
 export function peopleShown(scale) {
@@ -104,13 +113,28 @@ export function largestCiv(hexCivPop, civs, h) {
   return best;
 }
 
-/** Stable spot for a person inside their hex, from their id (uniform over a disc). */
+/** Stable bits from a person's id: their spot inside the hex (uniform over a disc) and their drift. */
 function hash32(id) {
   let x = Math.imul(id ^ 0x9e3779b9, 0x85ebca6b);
   x ^= x >>> 13;
   x = Math.imul(x, 0xc2b2ae35);
   x ^= x >>> 16;
   return x >>> 0;
+}
+
+/** Seconds person `id` takes for one lap of their idle drift: DRIFT_LAP_MIN_S to DRIFT_LAP_MAX_S. */
+export function driftLap(id) {
+  const hash = hash32(id ^ 0x5bd1e995);
+  return DRIFT_LAP_MIN_S + ((DRIFT_LAP_MAX_S - DRIFT_LAP_MIN_S) * ((hash >>> 1) & 0xffff)) / 65535;
+}
+
+/** Person `id`'s drift speed in radians per second, signed for which way round they go. */
+function driftRate(id) {
+  return ((2 * Math.PI) / driftLap(id)) * (hash32(id ^ 0x5bd1e995) & 1 ? 1 : -1);
+}
+
+function driftPhase(id) {
+  return (2 * Math.PI * (hash32(id ^ 0x5bd1e995) >>> 17)) / 32768;
 }
 
 export class PeopleLayer {
@@ -148,6 +172,7 @@ export class PeopleLayer {
     this.animUntil = 0;
     this.shown = false;
     this.picked = { slot: -1, id: 0 };
+    this.driftT = 0; // seconds of drift clock, set by the renderer each frame
   }
 
   grow(cap) {
@@ -163,6 +188,8 @@ export class PeopleLayer {
     this.t0 = g(Float64Array, this.t0);
     this.drawX = g(Float32Array, this.drawX);
     this.drawY = g(Float32Array, this.drawY);
+    this.dPhase = g(Float32Array, this.dPhase);
+    this.dRate = g(Float32Array, this.dRate);
     this.cap = cap;
   }
 
@@ -183,8 +210,8 @@ export class PeopleLayer {
       const tx = this.hexX[h] + r * Math.cos(a);
       const ty = this.hexY[h] + r * Math.sin(a);
       if (same) {
-        // Moved: glide from wherever they are drawn now.
-        this.position(i, now);
+        // Moved: glide from wherever they are on their way now (drift rides on top throughout).
+        this.glide(i, now);
         this.fromX[i] = this.drawX[i];
         this.fromY[i] = this.drawY[i];
         this.t0[i] = now;
@@ -193,6 +220,8 @@ export class PeopleLayer {
         this.fromX[i] = tx;
         this.fromY[i] = ty;
         this.t0[i] = -Infinity;
+        this.dPhase[i] = driftPhase(id);
+        this.dRate[i] = driftRate(id);
       }
       this.pAlive[i] = 1;
       this.pId[i] = id;
@@ -205,13 +234,21 @@ export class PeopleLayer {
     this.high = data.high;
   }
 
-  /** Drawn position of slot i at render time now, into drawX/drawY. */
-  position(i, now) {
+  /** Where slot i is on its glide at render time now (no drift), into drawX/drawY. */
+  glide(i, now) {
     const t = (now - this.t0[i]) / MOVE_MS;
     if (t >= 1) { this.drawX[i] = this.toX[i]; this.drawY[i] = this.toY[i]; return; }
     const e = t <= 0 ? 0 : t * t * (3 - 2 * t);
     this.drawX[i] = this.fromX[i] + (this.toX[i] - this.fromX[i]) * e;
     this.drawY[i] = this.fromY[i] + (this.toY[i] - this.fromY[i]) * e;
+  }
+
+  /** Drawn position of slot i at render time now, glide plus idle drift, into drawX/drawY. */
+  position(i, now) {
+    this.glide(i, now);
+    const a = this.dPhase[i] + this.dRate[i] * this.driftT;
+    this.drawX[i] += DRIFT_R * Math.cos(a);
+    this.drawY[i] += DRIFT_R * Math.sin(a);
   }
 
   /** True while people are drawn and someone is still gliding, so the frame loop keeps redrawing. */
@@ -223,8 +260,9 @@ export class PeopleLayer {
     this.picked = { slot, id };
   }
 
-  /** Bring the layer up to date for this frame. */
-  update(camera, now) {
+  /** Bring the layer up to date for this frame; driftT is the drift clock in seconds. */
+  update(camera, now, driftT = this.driftT) {
+    this.driftT = driftT;
     const shown = peopleShown(camera.scale);
     this.shown = shown;
     this.labels.visible = !shown;

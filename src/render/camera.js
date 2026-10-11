@@ -66,6 +66,13 @@ export class Camera {
     this.y += Math.min(this.viewH - margin, Math.max(margin - h, top)) - top;
   }
 
+  /** Scale and place the camera so world point (wx, wy) sits at screen point (sx, sy); no clamping. */
+  viewAt(wx, wy, scale, sx, sy) {
+    this.scale = scale;
+    this.x = sx - wx * scale;
+    this.y = sy - wy * scale;
+  }
+
   screenToWorld(sx, sy) {
     return { x: (sx - this.x) / this.scale, y: (sy - this.y) / this.scale };
   }
@@ -73,4 +80,23 @@ export class Camera {
   worldToScreen(wx, wy) {
     return { x: this.x + wx * this.scale, y: this.y + wy * this.scale };
   }
+}
+
+/** Time the tap-to-zoom flight takes, in ms. */
+export const FLY_MS = 400;
+
+/**
+ * Camera at fraction t (0 to 1) of a flight that brings world point `to`
+ * (x, y) to screen point (sx, sy) while zooming from scale0 to scale1. `from`
+ * is the world point at (sx, sy) when the flight starts. Eased with smoothstep;
+ * the world point under (sx, sy) moves in a straight line and the scale changes
+ * geometrically (by equal factors per step), so zooming feels even.
+ * Returns { scale, wx, wy }: the world point to put at (sx, sy).
+ */
+export function flightAt(from, to, scale0, scale1, t) {
+  const u = t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
+  const scale = scale0 * (scale1 / scale0) ** u;
+  // Keep the world point moving at constant screen speed relative to the zoom.
+  const k = scale1 === scale0 ? u : (1 / scale - 1 / scale0) / (1 / scale1 - 1 / scale0);
+  return { scale, wx: from.x + (to.x - from.x) * k, wy: from.y + (to.y - from.y) * k };
 }

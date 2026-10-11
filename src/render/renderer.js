@@ -17,11 +17,14 @@
 // people dirty and is drawn on the shimmer's throttled clock: together they
 // cause at most one redraw per PEOPLE_FRAME_MS, no more than the shimmer alone
 // was allowed. Any other redraw (pan, tap) shows the latest counts at once.
-// Only gliding people (zoomed in) redraw every frame, so glides stay smooth.
+// Only gliding or idling people (zoomed in) redraw every frame, so they move smoothly.
 //
 // Civ overlays (tint, rings, territory outlines; see territoryLayer.js) are
 // rebuilt only when the people per hex changed, at most once per
 // PEOPLE_FRAME_MS, even while panning redraws every frame.
+//
+// Idle drift: people circle their spot on a drift clock that only advances
+// while the game runs (setMoving), so pausing freezes them in place.
 
 import { Application, Container, Graphics } from '../../vendor/pixi.mjs';
 import { hexPolygon, riverSegments, HEX_SIZE } from './layout.js';
@@ -52,6 +55,9 @@ export class Renderer {
     this.motionChanged = false;
     this.territory = null;
     this.lastTerritory = -Infinity;
+    this.moving = false;
+    this.driftT = 0;
+    this.lastDriftNow = -1;
     this.reducedMotion = false;
     if (typeof window !== 'undefined' && window.matchMedia) {
       const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -70,10 +76,21 @@ export class Renderer {
     if (!this.map) return false;
     if (this.motionChanged) return true;
     if (this.people?.animating(now)) return true;
+    if (this.drifting) return true;
     if (this.peopleDirty && now - this.lastDraw >= PEOPLE_FRAME_MS) return true;
     if (this.territory?.pending && now - this.lastTerritory >= PEOPLE_FRAME_MS) return true;
     if (!this.animating || now - this.lastShimmer < SHIMMER_FRAME_MS) return false;
     return shimmerLevel(now) !== this.shimmerLevel;
+  }
+
+  /** True while people are drawn and idling (time running, motion allowed). */
+  get drifting() {
+    return this.moving && !this.reducedMotion && !!this.people?.shown;
+  }
+
+  /** Whether game time is running; people only idle while it is. */
+  setMoving(moving) {
+    this.moving = moving;
   }
 
   async init() {
@@ -165,6 +182,11 @@ export class Renderer {
     this.lastDraw = now;
     this.peopleDirty = false;
     this.updateShimmer(now);
+    // The drift clock: frame time while the game runs, capped so a stalled tab does not jump.
+    if (this.lastDriftNow >= 0 && this.moving && !this.reducedMotion) {
+      this.driftT += Math.min(100, Math.max(0, now - this.lastDriftNow)) / 1000;
+    }
+    this.lastDriftNow = now;
     if (this.territory) {
       const rings = !peopleShown(camera.scale);
       if (this.territory.pending && now - this.lastTerritory >= PEOPLE_FRAME_MS) {
@@ -183,7 +205,7 @@ export class Renderer {
     }
     this.world.position.set(camera.x, camera.y);
     this.world.scale.set(camera.scale);
-    this.people?.update(camera, now);
+    this.people?.update(camera, now, this.driftT);
     this.app.render();
   }
 

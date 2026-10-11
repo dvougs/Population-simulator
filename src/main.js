@@ -2,8 +2,9 @@
 
 import { LocalSimHost } from './host/simHost.js';
 import { Loop } from './loop.js';
-import { Camera } from './render/camera.js';
+import { Camera, FLY_MS, flightAt } from './render/camera.js';
 import { Renderer } from './render/renderer.js';
+import { peopleShown, PEOPLE_ZOOM_PX, PEOPLE_FLY_PX } from './render/peopleLayer.js';
 import { hexAtWorld, hexCentre, worldBounds, HEX_SIZE } from './render/layout.js';
 import { attachGestures } from './input/gestures.js';
 import { MapgenScreen } from './ui/mapgenScreen.js';
@@ -40,10 +41,14 @@ let lastPanelUpdate = 0;
 let shownEnd = false;
 /** Settings of the game last started, for "Same settings again" (kept in memory only). */
 let startParams = null;
+/** Tap-to-zoom flight in progress: { from, to, scale0, scale1, sx, sy, t0 }, or null. */
+let flight = null;
 
 const loop = new Loop({
   tick: (n) => host.tick(n),
   frame: (ran, now) => {
+    renderer.setMoving(!loop.paused);
+    if (flight) stepFlight(now);
     // New head counts are drawn on the renderer's throttled clock, not every tick frame.
     if (ran > 0) renderer.setPopulation(host.population(), now);
     // The water shimmer keeps redrawing on its own clock; the sim never sees it.
@@ -96,6 +101,7 @@ async function startGame(params) {
   camera.setBounds(worldBounds(map.cols, map.rows));
   selected = -1;
   person = null;
+  flight = null;
   renderer.selectPerson(-1);
   shownEnd = false;
   userMovedCamera = false;
@@ -188,16 +194,53 @@ function showPersonCard() {
   });
 }
 
-function select(index) {
+function select(index, panIfCovered = true) {
   selected = index;
   person = null;
   renderer.selectPerson(-1);
   if (index < 0) renderInspector(ui.inspector, null);
   else {
     showHexCard();
-    placeInspector(true);
+    placeInspector(panIfCovered);
   }
   dirty = true;
+}
+
+/** Centre of the open map area (CSS px): below the top bar, clear of the collapsed sheet. */
+function mapCentre() {
+  const inset = sheetInsets();
+  const top = 64;
+  return {
+    x: (camera.viewW - (inset.right ?? 0)) / 2,
+    y: top + (camera.viewH - top - (inset.bottom ?? 0)) / 2,
+  };
+}
+
+/** Fly the camera to hex `index`, zoomed in far enough to see its people (RULES.md "How civs and people look"). */
+function flyTo(index, now = performance.now()) {
+  const c = mapCentre();
+  let scale1 = Math.max(camera.scale, Math.min(camera.maxScale, PEOPLE_FLY_PX / (2 * HEX_SIZE)));
+  if (!peopleShown(scale1)) {
+    scale1 = PEOPLE_ZOOM_PX / (2 * HEX_SIZE);
+    camera.maxScale = Math.max(camera.maxScale, scale1);
+  }
+  flight = {
+    from: camera.screenToWorld(c.x, c.y), to: hexCentre(map.cols, index),
+    scale0: camera.scale, scale1, sx: c.x, sy: c.y, t0: now,
+  };
+  userMovedCamera = true;
+}
+
+function stepFlight(now) {
+  const t = Math.min(1, (now - flight.t0) / FLY_MS);
+  const v = flightAt(flight.from, flight.to, flight.scale0, flight.scale1, t);
+  camera.viewAt(v.wx, v.wy, v.scale, flight.sx, flight.sy);
+  camera.clamp();
+  dirty = true;
+  if (t >= 1) {
+    flight = null;
+    placeInspector(true);
+  } else placeInspector();
 }
 
 function selectPerson(slot, id) {
@@ -300,8 +343,8 @@ new ResizeObserver(() => { if (!ui.game.hidden) resize(); }).observe(ui.canvas);
 window.addEventListener('orientationchange', () => setTimeout(resize, 200));
 
 attachGestures(ui.canvas, {
-  onPan: (dx, dy) => { camera.pan(dx, dy); userMovedCamera = true; dirty = true; placeInspector(); },
-  onZoom: (f, x, y) => { camera.zoomAt(f, x, y); userMovedCamera = true; dirty = true; placeInspector(); },
+  onPan: (dx, dy) => { flight = null; camera.pan(dx, dy); userMovedCamera = true; dirty = true; placeInspector(); },
+  onZoom: (f, x, y) => { flight = null; camera.zoomAt(f, x, y); userMovedCamera = true; dirty = true; placeInspector(); },
   onTap: (x, y) => {
     if (!map) return;
     // Zoomed in, a tap on a person opens their card (tapping them again closes it).
@@ -315,11 +358,17 @@ attachGestures(ui.canvas, {
     const hex = hexAtWorld(map.cols, map.rows, w.x, w.y);
     // Water, off the map, or the selected hex again: close the inspector.
     if (!hex || map.terrain[hex.index] === DEEP_WATER || hex.index === selected) { select(-1); return; }
+    // Zoomed out, a hex also flies the camera in to its people; the card finds its corner on landing.
+    if (!peopleShown(camera.scale)) {
+      select(hex.index, false);
+      flyTo(hex.index);
+      return;
+    }
     select(hex.index);
   },
 });
 
-$('btn-fit').addEventListener('click', () => { userMovedCamera = false; fitCamera(); placeInspector(); });
+$('btn-fit').addEventListener('click', () => { flight = null; userMovedCamera = false; fitCamera(); placeInspector(); });
 $('btn-setup').addEventListener('click', () => {
   controls.setPaused(true);
   setup.setParams(host.params);
@@ -365,4 +414,6 @@ window.popsim = {
   report: () => host.report(),
   /** Whether people are drawn one by one at the current zoom. */
   peopleShown: () => renderer.people?.shown ?? false,
+  /** Whether the camera is flying to a tapped hex. */
+  flying: () => flight !== null,
 };
