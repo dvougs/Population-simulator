@@ -322,8 +322,8 @@ export function howText() {
         ],
         points: [
           'it is Aggressive: then it always does;',
-          `the hex is short of food and its people's average aggression is above ${C.hungerAggression};`,
-          `the hex is full and their aggression is above ${C.crowdAggression};`,
+          `someone in the hex went hungry this year and its people's average aggression is above ${C.hungerAggression};`,
+          `the hex is crowded and their aggression is above ${C.crowdAggression};`,
           `it outnumbers the other civ ${C.numbersRatio} to 1 there and their aggression is above ${C.numbersAggression};`,
           `the other civ beat it in the last ${C.revengeYears} years: revenge.`,
         ],

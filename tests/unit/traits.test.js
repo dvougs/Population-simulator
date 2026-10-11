@@ -243,7 +243,7 @@ test('RULES.md A year 5 Births: chance (2.5% + 5% f)(0.75 + 0.5 m) + 0.5% per le
 test('RULES.md Traits: founders start at their civ type values plus up to 0.1, clamped; every other trait 0.5', () => {
   assert.deepEqual(typeTraits('aggressive'), [0.5, 0.5, 0.65, 0.7, 0.5, 0.5, 0.5, 0.5]);
   assert.deepEqual(typeTraits('cooperative'), [0.5, 0.5, 0.5, 0.5, 0.7, 0.5, 0.5, 0.5]);
-  assert.deepEqual(typeTraits('expansionist'), [0.58, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]);
+  assert.deepEqual(typeTraits('expansionist'), [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.55, 0.55]);
   assert.deepEqual(typeTraits('isolationist'), [0.5, 0.6, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]);
   assert.deepEqual(typeTraits('nomadic'), [0.5, 0.5, 0.5, 0.5, 0.5, 0.45, 0.6, 0.6]);
   assert.deepEqual(typeTraits('none'), Array(8).fill(0.5));

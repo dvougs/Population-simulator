@@ -15,8 +15,12 @@ export const MIGRATION = Object.freeze({
    * civ types with movePoints of their own (Nomadic) walk; everyone else moves one hex (buildStepReach).
    */
   movePoints: 3,
-  /** A hex is crowded when it holds more than this share of its food capacity in people. */
-  crowdedShare: 0.8,
+  /**
+   * A hex is crowded when it holds more than this share of its food capacity in people. Food
+   * regrows by half the capacity a year (LIFE.foodRegrowth), so a settled hex holds about half its
+   * capacity: a share above that is only reached in a famine, and fed people never moved on.
+   */
+  crowdedShare: 0.5,
   /** Yearly chance a hungry person sets out. */
   hungryChance: 0.5,
   /** Yearly chance a fed person in a crowded hex sets out. */

@@ -23,7 +23,7 @@ export const defaultCivType = (k) => CIV_TYPES[k % CIV_TYPES.length];
  * values in migration.js MIGRATION.
  */
 export const TYPE_RULES = Object.freeze({
-  expansionist: Object.freeze({ crowdedShare: 0.5 }),
+  expansionist: Object.freeze({ crowdedShare: 0.3 }),
   aggressive: Object.freeze({ alwaysFights: true }),
   cooperative: Object.freeze({ neverStartsFights: true, switchAwayFactor: 0.5 }),
   isolationist: Object.freeze({ fedNeverSetsOut: true }),
@@ -36,7 +36,7 @@ export const TYPE_RULES = Object.freeze({
  * the text cannot drift from the numbers.
  */
 const BEHAVIOUR = {
-  expansionist: 'Moves on early: its people set out once their hex is half full, long before it is crowded.',
+  expansionist: 'Moves on early: its people set out once their hex holds 30% of its food capacity, long before it is crowded at 50%.',
   aggressive: 'Always fights any civ it shares a hex with.',
   cooperative: 'Never starts a fight, and its people leave it for another civ half as often as others do.',
   isolationist: 'Stays home: its people only set out when they go hungry, never because the hex is crowded.',
