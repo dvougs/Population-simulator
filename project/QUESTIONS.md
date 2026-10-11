@@ -22,7 +22,7 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
   2. Add a "climate" slider (cold/dry ↔ wet/warm) that shifts tundra, desert and forest together: one more control.
   3. Add separate sliders for forest, desert and tundra: full control, busier screen on a phone.
 - Recommendation: 2, one slider gives varied worlds without crowding the phone screen.
-- Answer:
+- Answer: 3 (reading: separate sliders for forest, desert and tundra, not the recommended single climate slider)
 
 ## Proposals
 
