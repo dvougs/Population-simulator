@@ -1,11 +1,12 @@
 // Map-generation screen: map settings with a live preview. Shown before setup.
 
 import { h } from './dom.js';
-import { PRESETS, LIMITS, presetParams, randomParams, normalizeParams, MAP_KEYS } from '../sim/params.js';
+import { PRESETS, LIMITS, presetParams, randomParams, normalizeParams, MAP_KEYS, LOWLAND_KEYS } from '../sim/params.js';
 import { randomSeedString } from '../sim/rng.js';
 import { drawPreview } from '../render/preview.js';
 
 const pct = (v) => `${Math.round(v * 100)}%`;
+const LOWLAND_LABELS = { plains: 'Plains', forest: 'Forest', desert: 'Desert', tundra: 'Tundra' };
 
 export class MapgenScreen {
   /**
@@ -107,6 +108,13 @@ export class MapgenScreen {
         slider('m-mountains', 'Mountains', Math.round(p.mountains * 100), LIMITS.mountains.min * 100, LIMITS.mountains.max * 100, 1,
           (v) => pct(v / 100), (v) => this.apply({ mountains: v / 100 })),
         slider('m-rivers', 'Rivers', p.rivers, LIMITS.rivers.min, LIMITS.rivers.max, 1, (v) => String(v), (v) => this.apply({ rivers: v })),
+      ),
+      h('fieldset', { class: 'group' },
+        h('legend', {}, 'Lowland'),
+        ...LOWLAND_KEYS.map((k) => slider(`m-${k}`, LOWLAND_LABELS[k], Math.round(p[k] * 100), LIMITS[k].min * 100, LIMITS[k].max * 100, 1,
+          (v) => pct(v / 100), (v) => this.apply({ [k]: v / 100 }))),
+        h('p', { class: 'civ-desc' },
+          'Relative weights for the inland land that is not coast, hills or mountain. All at 0% gives all plains.'),
       ),
     );
     this.form.onsubmit = (e) => {

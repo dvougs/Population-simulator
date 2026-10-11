@@ -1,11 +1,13 @@
 // Setup parameters: defaults, presets, randomise and validation.
 // Params are plain JSON so they can be saved, shared and sent to a worker.
-// The map parameters (seed, size, water, mountains, rivers) alone decide the map.
+// The map parameters (MAP_KEYS) alone decide the map.
 
 import { randomSeedString } from './rng.js';
 
 export const END_CONDITIONS = ['none', 'ticks'];
-export const MAP_KEYS = ['seed', 'size', 'water', 'mountains', 'rivers'];
+/** Lowland terrain weights, in the order they appear on the map-generation screen. */
+export const LOWLAND_KEYS = ['plains', 'forest', 'desert', 'tundra'];
+export const MAP_KEYS = ['seed', 'size', 'water', 'mountains', 'rivers', ...LOWLAND_KEYS];
 
 /** Valid ranges, shared by validation, the setup screens and RULES.md. */
 export const LIMITS = Object.freeze({
@@ -13,6 +15,10 @@ export const LIMITS = Object.freeze({
   water: { min: 0, max: 0.7 },
   mountains: { min: 0, max: 0.4 },
   rivers: { min: 0, max: 20 },
+  plains: { min: 0, max: 1 },
+  forest: { min: 0, max: 1 },
+  desert: { min: 0, max: 1 },
+  tundra: { min: 0, max: 1 },
   endTicks: { min: 10, max: 100000 },
   seedLength: 64,
 });
@@ -23,16 +29,25 @@ export const DEFAULT_PARAMS = Object.freeze({
   water: 0.25,
   mountains: 0.12,
   rivers: 2,
+  // Relative weights of the inland lowland; the defaults give 40 / 30 / 15 / 15 of it.
+  plains: 0.4,
+  forest: 0.3,
+  desert: 0.15,
+  tundra: 0.15,
   endCondition: 'none',
   endTicks: 1000,
 });
 
 export const PRESETS = {
   default: { label: 'Small world', params: {} },
-  continent: { label: 'Continent', params: { seed: 'continent', size: 30, water: 0.2, mountains: 0.12, rivers: 6 } },
-  archipelago: { label: 'Archipelago', params: { seed: 'islands', size: 30, water: 0.6, mountains: 0.08, rivers: 2 } },
-  highlands: { label: 'Highlands', params: { seed: 'peaks', size: 20, water: 0.15, mountains: 0.3, rivers: 5 } },
-  large: { label: 'Large world', params: { seed: 'vast', size: 50, water: 0.3, mountains: 0.12, rivers: 12 } },
+  continent: { label: 'Continent', params: {
+    seed: 'continent', size: 30, water: 0.2, mountains: 0.12, rivers: 6, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15 } },
+  archipelago: { label: 'Archipelago', params: {
+    seed: 'islands', size: 30, water: 0.6, mountains: 0.08, rivers: 2, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15 } },
+  highlands: { label: 'Highlands', params: {
+    seed: 'peaks', size: 20, water: 0.15, mountains: 0.3, rivers: 5, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15 } },
+  large: { label: 'Large world', params: {
+    seed: 'vast', size: 50, water: 0.3, mountains: 0.12, rivers: 12, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15 } },
 };
 
 export function presetParams(key) {
@@ -55,6 +70,7 @@ export function normalizeParams(input = {}) {
   p.water = Math.round(range(input.water, 'water', d.water) * 100) / 100;
   p.mountains = Math.round(range(input.mountains, 'mountains', d.mountains) * 100) / 100;
   p.rivers = Math.round(range(input.rivers, 'rivers', d.rivers));
+  for (const k of LOWLAND_KEYS) p[k] = Math.round(range(input[k], k, d[k]) * 100) / 100;
   p.endCondition = END_CONDITIONS.includes(input.endCondition) ? input.endCondition : d.endCondition;
   p.endTicks = Math.round(range(input.endTicks, 'endTicks', d.endTicks));
   return p;
@@ -75,6 +91,10 @@ export function randomParams(random = Math.random) {
     water: 0.1 + random() * 0.5,
     mountains: 0.05 + random() * 0.25,
     rivers: Math.floor(random() * (Math.floor(size / 4) + 1)),
+    plains: 0.2 + random() * 0.4,
+    forest: 0.1 + random() * 0.4,
+    desert: random() * 0.3,
+    tundra: random() * 0.3,
     endCondition: 'none',
   });
 }
