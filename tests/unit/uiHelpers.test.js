@@ -57,7 +57,7 @@ test('How to play text: has the sections in the RULES.md order and every number 
     '1 to 8 civilisations', '2 to 200 people (20 by default)', 'at least 3 steps',
     'up to ±3%', '0% to 10%',
     'above 0.5', 'above 0.4', '3 to 1', 'above 0.45', 'last 20 years', 'loses 20% of its people', 'the winner loses 5%, rounded down', 'about 1% a year',
-    'There are 9 materials', 'at least 1.2 food per person', 'sends 20% of its adults', 'Each brings in 0.5 a year (0.125 of an exotic)', 'at most 10 a deposit a year (2.5 for exotics)',
+    'There are 9 materials', 'at most 20% of its people went hungry', 'sends 20% of its adults', 'Each brings in 0.5 a year (0.125 of an exotic)', 'at most 10 a deposit a year (2.5 for exotics)',
     '100 years in a row falls back',
     'at least 60% of the land for 300 years', '1000, 2500, 5000 or 10000 years',
   ]) assert.ok(text.includes(must), `missing "${must}"`);
@@ -75,11 +75,11 @@ test('levelFacts: five levels with the RULES.md names, effects and requirement r
   assert.deepEqual(f.map((l) => l.name), ['Foragers', 'Farmers', 'Builders', 'Organised', 'Kingdom']);
   assert.equal(f[0].needs, null);
   const rows = table('| From → to |');
-  rows.forEach(([, years, pop, hexes, mats], k) => {
+  rows.forEach(([, years, landPct, perHex, mats], k) => {
     const l = f[k + 1];
     assert.ok(l.needs.includes(`${years} years`), `level ${k + 2} years`);
-    assert.ok(l.needs.includes(`${pop} people`));
-    assert.ok(l.needs.includes(`${hexes} hexes`));
+    assert.ok(l.needs.includes(`${landPct} of its share of the land`), `"${landPct}" in "${l.needs}"`);
+    assert.ok(l.needs.includes(`(${perHex} people per hex)`));
     for (const part of mats.split(',')) {
       const [n, name] = part.trim().split(' ');
       assert.ok(l.needs.includes(`${n} ${name}`), `${part} in "${l.needs}"`);
@@ -88,7 +88,7 @@ test('levelFacts: five levels with the RULES.md names, effects and requirement r
   assert.match(f[1].does, /25% more/);
   assert.match(f[2].does, /half as much in desert, tundra and mountain/);
   assert.match(f[3].does, /one sea or lake hex/);
-  assert.match(f[4].does, /25% more.*5 years later.*join the Kingdom/);
+  assert.match(f[4].does, /25% more.*5 years later.*× 5 strength.*no other civ can move in/);
   assert.deepEqual(f.map((l) => /Birth chance \+([\d.]+) percentage point/.exec(l.does)?.[1] ?? null), [null, '0.5', '1', '1.5', '2']);
 });
 

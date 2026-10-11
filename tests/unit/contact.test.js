@@ -475,3 +475,51 @@ test('a seeded run with fights: same params and seed give the same state hash an
   assert.equal(ea, eb);
   assert.ok(JSON.parse(ea).some((e) => e.type === 'fight'), 'fights were logged');
 });
+
+test('RULES.md "Strength": a Kingdom has × 5 strength against a civ that is not a Kingdom, either side; two Kingdoms fight as usual', () => {
+  // Civ 0 (Aggressive, always attacks) has strength 10; civ 1 has 10 people of strength 0.25: 2.5, or 12.5 as a Kingdom.
+  const fight = (levels, holderLast = null) => {
+    const w = scene(['aggressive', 'cooperative'], [[HEX, 0, 10, { str: 1 }], [HEX, 1, 10, { str: 0.25 }]]);
+    w.contact.level = Uint8Array.from(levels);
+    const last = counts(w);
+    if (holderLast !== null) last[HEX * 2 + holderLast] += 1;
+    return run(w, { lastPop: last }).fights[0].winner;
+  };
+  assert.equal(fight([1, 1]), 0, 'no Kingdom: 10 beats 2.5');
+  assert.equal(fight([4, 5]), 1, 'civ 1 a Kingdom: 12.5 beats 10');
+  assert.equal(fight([4, 5], 1), 1, 'as the holder too');
+  assert.equal(fight([5, 5]), 0, 'two Kingdoms: 10 beats 2.5');
+  // The Kingdom as the weaker attacker: 10 × 0.25 × 5 = 12.5 beats 10.
+  const w = scene(['aggressive', 'cooperative'], [[HEX, 0, 10, { str: 0.25 }], [HEX, 1, 10, { str: 1 }]]);
+  w.contact.level = Uint8Array.of(5, 2);
+  assert.equal(run(w).fights[0].winner, 0);
+  // Exactly × 5 on top of the defence bonus: civ 1 holds hills (+50%) as a Kingdom: 2.5 × 1.5 × 5 = 18.75 v 18.5 and 19.
+  const hold = (str0) => {
+    const v = scene(['aggressive', 'cooperative'], [[HEX, 0, 10, { str: str0 }], [HEX, 1, 10, { str: 0.25 }]], { terrain: HILLS });
+    v.contact.level = Uint8Array.of(1, 5);
+    const last = counts(v); last[HEX * 2 + 1] += 1;
+    return run(v, { lastPop: last }).fights[0].winner;
+  };
+  assert.equal(hold(1.85), 1);
+  assert.equal(hold(1.9), 0);
+});
+
+test('RULES.md "Fights": losers never flee into a hex enclosed by a Kingdom other than their own civ', () => {
+  const w = scene(['aggressive', 'cooperative', 'expansionist'], [[HEX, 0, 10, { str: 1 }], [HEX, 1, 10, { str: 0 }]]);
+  w.map.food.fill(10);
+  w.map.food[16] = 30; // the best refuge, but civ 2's Kingdom encloses it
+  w.map.food[7] = 25;
+  w.contact.inside = new Int8Array(w.map.count).fill(-1);
+  w.contact.inside[16] = 2;
+  run(w);
+  assert.equal(aliveOf(w, 1, 16), 0);
+  assert.equal(aliveOf(w, 1, 7), 8, 'the next best');
+  // A hex enclosed by the losers' own Kingdom is a refuge as usual.
+  const own = scene(['aggressive', 'cooperative'], [[HEX, 0, 10, { str: 1 }], [HEX, 1, 10, { str: 0 }]]);
+  own.map.food.fill(10);
+  own.map.food[16] = 30;
+  own.contact.inside = new Int8Array(own.map.count).fill(-1);
+  own.contact.inside[16] = 1;
+  run(own);
+  assert.equal(aliveOf(own, 1, 16), 8);
+});

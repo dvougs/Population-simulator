@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { MIGRATION, buildReach, migrate } from '../../src/sim/migration.js';
+import { MIGRATION, buildReach, migrate, migrationRules } from '../../src/sim/migration.js';
 import { People } from '../../src/sim/people.js';
 import { Rng } from '../../src/sim/rng.js';
 import { generateMap } from '../../src/sim/mapgen.js';
@@ -377,4 +377,25 @@ test('seeded runs: with several civs, migrants never enter water and the Simulat
       for (let i = 0; i < sim.people.high; i++) if (sim.people.alive[i]) assert.notEqual(sim.map.terrain[sim.people.hex[i]], DEEP_WATER);
     }
   }
+});
+
+test('RULES.md "Kingdoms are closed": nobody of another civ migrates into a hex a Kingdom encloses; its own people may', () => {
+  const w = twoTargets({ movers: [...new Array(400).fill(0), ...new Array(400).fill(1), ...new Array(400).fill(2)] });
+  const rules = migrationRules(['expansionist', 'aggressive', 'cooperative'], w.map, w.reach);
+  rules.inside = new Int8Array(w.map.count).fill(-1);
+  rules.inside[w.A] = 1; // civ 1 is the Kingdom enclosing A
+  migrate(w.people, w.map, w.reach, new Rng('closed'), w.s.pop, w.s.spare, w.s.dest, civHeld(w.map, 3), rules);
+  const r0 = shareToA(w, 0);
+  const r1 = shareToA(w, 1);
+  const r2 = shareToA(w, 2);
+  assert.equal(r0.a, 0, 'civ 0 never enters A');
+  assert.equal(r2.a, 0, 'nor does civ 2');
+  assert.ok(r0.b > 100 && r2.b > 100, 'they still go to B');
+  assert.ok(r1.a > 50 && r1.b > 50, `the Kingdom's own people use both (${r1.a}, ${r1.b})`);
+  // Without an enclosure, everyone uses both.
+  const v = twoTargets({ movers: new Array(400).fill(0) });
+  const open = migrationRules(['expansionist'], v.map, v.reach);
+  open.inside = new Int8Array(v.map.count).fill(-1);
+  migrate(v.people, v.map, v.reach, new Rng('open'), v.s.pop, v.s.spare, v.s.dest, civHeld(v.map, 1), open);
+  assert.ok(shareToA(v, 0).a > 50);
 });

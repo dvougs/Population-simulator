@@ -5,39 +5,45 @@
 // civs whose food is secure send a share of their adults to gather the
 // deposits in their hexes, favouring what their next level needs; the yield
 // goes into a civ-wide stockpile that never decays and is spent only on
-// levelling. Then each civ levels up or falls back, Kingdoms absorb smaller
-// civs they live alongside, and food capacities follow the levels of the civs
-// living in each hex.
+// levelling. Then each civ levels up or falls back, Kingdoms absorb every
+// other civ's people in the hexes they enclose, and food capacities follow
+// the levels of the civs living in each hex.
 //
 // The per-hex people per civ and each civ's hungry people come from the
 // Simulation's end-of-year count; the people are scanned again (for the
 // gatherers' cooperation) only in a year some civ gathers, and to absorb.
 // Everything reads that one
 // snapshot, so the order people and hexes are visited in never changes the
-// outcome. Gathering uses no randomness; absorbing draws from its own stream.
+// outcome. Neither gathering nor absorbing uses randomness.
 
 import { MATERIAL_COUNT, MATERIAL_TIER, MATERIAL_IDS } from './materials.js';
-import { PLAINS } from './terrain.js';
+import { PLAINS, DEEP_WATER } from './terrain.js';
 import { COOPERATION } from './traits.js';
 
 export const LEVEL_NAMES = Object.freeze(['Foragers', 'Farmers', 'Builders', 'Organised', 'Kingdom']);
 export const MAX_LEVEL = 5;
 
 /**
- * What it takes to reach each level from the one below, for a 10 × 10 map:
- * REQUIREMENTS[L − 2] is the step from L − 1 to L. Population and hexes are
- * scaled by the map's size (see scaledMinimum); materials use MATERIAL_IDS order.
+ * What it takes to reach each level from the one below: REQUIREMENTS[L − 2]
+ * is the step from L − 1 to L. Hexes are a share (in whole percent) of the
+ * land per civ, so the ladder fits any map size and civ count; people are so
+ * many per required hex, below the ~22 a full map settles at, so the land is
+ * what binds (see levelMinimums). Materials use MATERIAL_IDS order.
  */
 export const REQUIREMENTS = Object.freeze([
-  Object.freeze({ years: 150, pop: 40, hexes: 4, materials: Object.freeze([80, 30, 30, 0, 0, 0, 0, 0, 0]) }),
-  Object.freeze({ years: 300, pop: 100, hexes: 8, materials: Object.freeze([200, 150, 100, 30, 0, 0, 0, 0, 0]) }),
-  Object.freeze({ years: 500, pop: 200, hexes: 14, materials: Object.freeze([0, 300, 0, 80, 60, 40, 0, 0, 0]) }),
-  Object.freeze({ years: 800, pop: 350, hexes: 22, materials: Object.freeze([0, 0, 0, 0, 150, 0, 30, 15, 20]) }),
+  Object.freeze({ years: 150, landPct: 15, perHex: 10, materials: Object.freeze([80, 30, 30, 0, 0, 0, 0, 0, 0]) }),
+  Object.freeze({ years: 300, landPct: 30, perHex: 12, materials: Object.freeze([200, 150, 100, 30, 0, 0, 0, 0, 0]) }),
+  Object.freeze({ years: 500, landPct: 50, perHex: 14, materials: Object.freeze([0, 300, 0, 80, 60, 40, 0, 0, 0]) }),
+  Object.freeze({ years: 800, landPct: 75, perHex: 16, materials: Object.freeze([0, 0, 0, 0, 150, 0, 30, 15, 20]) }),
 ]);
 
 export const GATHER = Object.freeze({
-  /** Food is secure when nobody in the civ went hungry this year and its hexes hold at least this much food per person. */
-  secureFoodPerPerson: 1.2,
+  /**
+   * Food is secure when at most this % of the civ's people went hungry last year. A full map always
+   * has some hunger (about 5% at level 2 rising to 17% at level 4, as births grow with level), so
+   * asking for none (or for no starvation, or spare food) stops gathering for good.
+   */
+  secureHungryPct: 20,
   /** Share of a secure civ's adults (in hexes with a deposit it wants) that gather. */
   gatherShare: 0.2,
   /** Adults are people of this age or older. */
@@ -71,8 +77,8 @@ export const LEVEL_EFFECTS = Object.freeze({
   /** At level 5: every hex + this share of food capacity, and old age starts this many years later. */
   kingdomBonus: 0.25,
   oldAgeDelay: 5,
-  /** A Kingdom absorbs ⌈this %⌉ of a smaller civ's people in each hex they share without a fight, each year. */
-  absorbPct: 10,
+  /** A Kingdom's strength in a fight against a civ that is not a Kingdom is multiplied by this. */
+  kingdomStrength: 5,
   /** A civ below its level's minimum population this many years in a row drops one level. */
   fallBackYears: 100,
 });
@@ -80,9 +86,16 @@ export const LEVEL_EFFECTS = Object.freeze({
 const MATERIAL_YIELD = MATERIAL_TIER.map((t) => GATHER.yield[t]);
 const MATERIAL_CAP = MATERIAL_TIER.map((t) => GATHER.cap[t]);
 
-/** Population or hex minimum for a map of cols × rows: the 10 × 10 value × (cols × rows ÷ 100), rounded. */
-export function scaledMinimum(base, cols, rows) {
-  return Math.round((base * cols * rows) / 100);
+/**
+ * Hexes and people needed to reach `level` (2 to 5) on a map with `land` land
+ * hexes started by `civs` civs: hexes = landPct % of land ÷ civs, rounded
+ * (half up), at least 1; people = perHex × those hexes.
+ */
+export function levelMinimums(level, land, civs) {
+  const r = REQUIREMENTS[level - 2];
+  if (!r) return { hexes: 0, pop: 0 };
+  const hexes = Math.max(1, Math.round((r.landPct * land) / (100 * Math.max(1, civs))));
+  return { hexes, pop: r.perHex * hexes };
 }
 
 /** Years civ type `type` must spend at `level` before the next (rounded up). */
@@ -116,8 +129,17 @@ export class Levels {
     const civs = types.length;
     this.civs = civs;
     this.types = types.slice();
-    this.cols = map.cols;
-    this.rows = map.rows;
+    let land = 0;
+    for (let h = 0; h < n; h++) if (map.terrain[h] !== DEEP_WATER) land++;
+    this.land = land;
+    /** Hexes and people needed to reach each level: minHex[level], minPeople[level] (0 at level 1). */
+    this.minHex = new Int32Array(6);
+    this.minPeople = new Int32Array(6);
+    for (let L = 2; L <= MAX_LEVEL; L++) {
+      const m = levelMinimums(L, land, civs);
+      this.minHex[L] = m.hexes;
+      this.minPeople[L] = m.pop;
+    }
     this.level = new Uint8Array(civs).fill(1);
     this.yearsAt = new Int32Array(civs);
     this.belowYears = new Int32Array(civs);
@@ -153,6 +175,8 @@ export class Levels {
     this.baseCap = Float32Array.from(map.foodCap);
     /** Σ (personBase + cooperation) over each gathering civ's adults per hex, [hex × civs + civ]. */
     this.effort = new Float64Array(n * civs);
+    /** True when the Simulation has filled effort (for every civ) in its end-of-year count, saving a pass over everyone. */
+    this.effortGiven = false;
     // Scratch.
     this.cnt = null;
     this.pop = new Int32Array(n);
@@ -160,18 +184,17 @@ export class Levels {
     this.gatherMask = new Uint16Array(n * civs);
     this.gatherers = new Float32Array(n * civs);
     this.gathered = new Float32Array(n * civs);
-    this.foodSum = new Float64Array(civs);
-    this.popSum = new Float64Array(civs);
     this.civPop = new Int32Array(civs);
     this.civHexes = new Int32Array(civs);
     this.nextMask = new Uint16Array(civs);
     this.laterMask = new Uint16Array(civs);
     this.raw = new Float64Array(MATERIAL_COUNT);
     this.heads = new Int32Array(MATERIAL_COUNT);
-    this.absorbTo = new Int8Array(n * civs);
-    this.absorbN = new Int32Array(n * civs);
-    this.absorbSeen = new Int32Array(n * civs);
-    this.absorbPicked = new Int32Array(n * civs);
+    /**
+     * The Kingdom enclosing each hex, or −1: one with people (at the end of last year) in every land
+     * neighbour. Other civs' people there join it, and no other civ may move in (see migration, fleeing).
+     */
+    this.inside = new Int8Array(n).fill(-1);
     this.hexLevel = new Uint8Array(n);
     this.setEffects();
   }
@@ -188,8 +211,8 @@ export class Levels {
   }
 
   /** Population and hex minimum to hold `level` (those needed to reach it); 0 at level 1. */
-  minPop(level) { return level <= 1 ? 0 : scaledMinimum(REQUIREMENTS[level - 2].pop, this.cols, this.rows); }
-  minHexes(level) { return level <= 1 ? 0 : scaledMinimum(REQUIREMENTS[level - 2].hexes, this.cols, this.rows); }
+  minPop(level) { return level <= 1 ? 0 : this.minPeople[level]; }
+  minHexes(level) { return level <= 1 ? 0 : this.minHex[level]; }
 
   /**
    * One year of gathering, levelling, absorbing and capacities, from last
@@ -198,14 +221,14 @@ export class Levels {
    * year, fightWinner last year's winner per hex (−1 for none).
    * onLevel(civ, from, to, year), onSwitch(from, to) report changes. Returns true if a civ became the first Kingdom.
    */
-  year(people, map, year, cnt, starved, fightWinner, rng, onLevel, onSwitch) {
+  year(people, map, year, cnt, fightWinner, onLevel, onSwitch) {
     const civs = this.civs;
     const n = map.count;
     const { pop, stock } = this;
     this.cnt = cnt;
 
-    // Per civ: people, hexes held, and food per person in its hexes.
-    this.civPop.fill(0); this.civHexes.fill(0); this.foodSum.fill(0); this.popSum.fill(0);
+    // Per civ: people and hexes held.
+    this.civPop.fill(0); this.civHexes.fill(0);
     for (let h = 0; h < n; h++) {
       const b0 = h * civs;
       let p = 0;
@@ -217,13 +240,10 @@ export class Levels {
         if (k === 0) continue;
         this.civPop[c] += k;
         this.civHexes[c]++;
-        this.foodSum[c] += map.food[h];
-        this.popSum[c] += pop[h];
       }
     }
     for (let c = 0; c < civs; c++) {
-      this.secure[c] = this.civPop[c] > 0 && this.hungry[c] === 0 && starved[c] === 0
-        && this.foodSum[c] >= GATHER.secureFoodPerPerson * this.popSum[c] ? 1 : 0;
+      this.secure[c] = this.civPop[c] > 0 && this.hungry[c] * 100 <= GATHER.secureHungryPct * this.civPop[c] ? 1 : 0;
       this.nextMask[c] = 0;
       this.laterMask[c] = 0;
       if (!this.secure[c] || this.level[c] >= MAX_LEVEL) continue;
@@ -268,7 +288,8 @@ export class Levels {
       this.kingdomYear = year;
     }
     this.setEffects();
-    this.absorb(people, map, fightWinner, rng, onSwitch);
+    this.enclose(map);
+    this.absorb(people, onSwitch);
     this.capacities(map);
     return kingdom;
   }
@@ -304,13 +325,15 @@ export class Levels {
     let anyone = false;
     for (let c = 0; c < civs; c++) if (this.nextMask[c] || this.laterMask[c]) anyone = true;
     if (!anyone) return;
-    effort.fill(0);
-    const { alive, hex, civ, age } = people;
-    const coop = people.traits[COOPERATION];
-    for (let i = 0; i < people.high; i++) {
-      if (!alive[i] || age[i] < GATHER.adultAge) continue;
-      const c = civ[i];
-      if (this.nextMask[c] || this.laterMask[c]) effort[hex[i] * civs + c] += GATHER.personBase + coop[i];
+    if (!this.effortGiven) {
+      effort.fill(0);
+      const { alive, hex, civ, age } = people;
+      const coop = people.traits[COOPERATION];
+      for (let i = 0; i < people.high; i++) {
+        if (!alive[i] || age[i] < GATHER.adultAge) continue;
+        const c = civ[i];
+        if (this.nextMask[c] || this.laterMask[c]) effort[hex[i] * civs + c] += GATHER.personBase + coop[i];
+      }
     }
     for (let h = 0; h < map.count; h++) {
       const dep = map.deposits[h];
@@ -352,49 +375,55 @@ export class Levels {
   }
 
   /**
-   * In each hex without a fight this year, every civ smaller (in people,
-   * civ-wide) than a Kingdom living there loses ⌈absorbPct⌉ of its people in
-   * the hex to the largest such Kingdom (then the lower civ number), picked at random.
+   * Marks the hexes each Kingdom encloses: land hexes with at least one land
+   * neighbour whose every land neighbour held the Kingdom's people at the end
+   * of last year. Enclosed by several Kingdoms: the one with the most people,
+   * then the lower civ number.
    */
-  absorb(people, map, fightWinner, rng, onSwitch) {
+  enclose(map) {
     const civs = this.civs;
+    const { inside, cnt, level, civPop } = this;
+    inside.fill(-1);
     let anyKingdom = false;
-    for (let c = 0; c < civs; c++) if (this.level[c] === MAX_LEVEL && this.civPop[c] > 0) anyKingdom = true;
+    for (let c = 0; c < civs; c++) if (level[c] === MAX_LEVEL && civPop[c] > 0) anyKingdom = true;
     if (!anyKingdom) return;
-    const { cnt, absorbTo, absorbN, absorbSeen, absorbPicked } = this;
-    absorbTo.fill(-1);
-    absorbSeen.fill(0);
-    let any = false;
+    const { terrain, neighbours } = map;
     for (let h = 0; h < map.count; h++) {
-      if (this.pop[h] === 0 || fightWinner[h] >= 0) continue;
-      const b0 = h * civs;
-      for (let s = 0; s < civs; s++) {
-        if (cnt[b0 + s] === 0) continue;
-        let to = -1;
-        for (let k = 0; k < civs; k++) {
-          if (k === s || cnt[b0 + k] === 0 || this.level[k] !== MAX_LEVEL || this.civPop[k] <= this.civPop[s]) continue;
-          if (to < 0 || this.civPop[k] > this.civPop[to]) to = k;
+      if (terrain[h] === DEEP_WATER) continue;
+      for (let k = 0; k < civs; k++) {
+        if (level[k] !== MAX_LEVEL || civPop[k] === 0) continue;
+        let land = 0;
+        let held = 0;
+        for (let d = 0; d < 6; d++) {
+          const t = neighbours[h * 6 + d];
+          if (t < 0 || terrain[t] === DEEP_WATER) continue;
+          land++;
+          if (cnt[t * civs + k] > 0) held++;
         }
-        if (to < 0) continue;
-        absorbTo[b0 + s] = to;
-        absorbN[b0 + s] = Math.floor((cnt[b0 + s] * LEVEL_EFFECTS.absorbPct + 99) / 100);
-        absorbSeen[b0 + s] = 0;
-        absorbPicked[b0 + s] = 0;
-        any = true;
+        if (land === 0 || held < land) continue;
+        const best = inside[h];
+        if (best < 0 || civPop[k] > civPop[best]) inside[h] = k;
       }
     }
+  }
+
+  /**
+   * Every person of a civ that is not a Kingdom, in a hex a Kingdom encloses,
+   * joins that Kingdom. Other Kingdoms' people are not absorbed: a Kingdom
+   * falls only to fights.
+   */
+  absorb(people, onSwitch) {
+    const { inside, level } = this;
+    let any = false;
+    for (let h = 0; h < inside.length; h++) if (inside[h] >= 0) { any = true; break; }
     if (!any) return;
     const { alive, hex, civ } = people;
     for (let i = 0; i < people.high; i++) {
       if (!alive[i]) continue;
-      const k = hex[i] * civs + civ[i];
-      const to = absorbTo[k];
-      if (to < 0) continue;
-      const pick = rng.next() * (cnt[k] - absorbSeen[k]) < absorbN[k] - absorbPicked[k];
-      absorbSeen[k]++;
-      if (!pick) continue;
-      absorbPicked[k]++;
-      onSwitch?.(civ[i], to);
+      const to = inside[hex[i]];
+      const c = civ[i];
+      if (to < 0 || c === to || level[c] === MAX_LEVEL) continue;
+      onSwitch?.(c, to);
       civ[i] = to;
     }
   }

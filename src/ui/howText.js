@@ -60,7 +60,7 @@ export function materialFacts() {
 
 const materialList = (nums) => andList(nums.map((v, m) => (v > 0 ? `${v} ${lower(MATERIAL_NAMES[m])}` : null)).filter(Boolean));
 
-/** The five levels: name, what it takes to reach (10 × 10 numbers) and what it does. */
+/** The five levels: name, what it takes to reach (hexes as a share of the land per civ) and what it does. */
 export function levelFacts() {
   const e = LEVEL_EFFECTS;
   const does = [
@@ -68,7 +68,8 @@ export function levelFacts() {
     `Farming: plains and river hexes feed ${pct(e.farmBonus)} more.`,
     `Shelter: hunger hurts ${e.shelterFactor === 0.5 ? 'half as much' : `× ${e.shelterFactor}`} in desert, tundra and mountain.`,
     `Boats: people can cross one sea or lake hex when they move.`,
-    `Every hex feeds ${pct(e.kingdomBonus)} more, old age comes ${e.oldAgeDelay} years later, and smaller civs living alongside slowly join the Kingdom.`,
+    `Every hex feeds ${pct(e.kingdomBonus)} more, old age comes ${e.oldAgeDelay} years later, and the Kingdom fights at × ${e.kingdomStrength} strength `
+      + 'against civs that are not Kingdoms. Land it surrounds joins it, people and all, and no other civ can move in.',
   ];
   return LEVEL_NAMES.map((name, k) => {
     const r = REQUIREMENTS[k - 1];
@@ -78,7 +79,7 @@ export function levelFacts() {
       level: k + 1,
       name,
       does: does[k] + birth,
-      needs: r ? `${r.years} years as ${LEVEL_NAMES[k - 1]}, ${r.pop} people, ${r.hexes} hexes; spends ${materialList(r.materials)}.` : null,
+      needs: r ? `${r.years} years as ${LEVEL_NAMES[k - 1]}, ${r.landPct}% of its share of the land (${r.perHex} people per hex); spends ${materialList(r.materials)}.` : null,
     };
   });
 }
@@ -186,7 +187,7 @@ export function howText() {
             + 'pause whenever you like, or step a single year to see exactly what happens. Each year runs the same steps, in order:',
         ],
         steps: [
-          ['Gather and level up', 'Civs with food to spare gather materials, and may reach a new level.'],
+          ['Gather and level up', 'Civs that are not starving gather materials, and may reach a new level.'],
           ['Birthdays', 'Everyone grows a year older.'],
           ['Eat', 'Each hex shares out its food. When it runs short, some go hungry.'],
           ['Deaths', 'The starved and the very old die.'],
@@ -266,7 +267,7 @@ export function howText() {
             + `${cooperative.neverStartsFights ? 'Cooperative civs never start a fight, though they can be attacked. ' : ''}`
             + 'Each hex sees at most one fight a year.',
           'Each side adds up its people\'s strength, and the civ that held the hex adds the terrain\'s defence bonus. '
-            + `The stronger side wins. The loser loses ${C.loserDeathPct}% of its people there and the rest flee to the best hex next door the winner is not in; `
+            + `A Kingdom counts × ${E.kingdomStrength} against a civ that is not one. The stronger side wins. The loser loses ${C.loserDeathPct}% of its people there and the rest flee to the best hex next door the winner is not in; `
             + `the winner loses ${C.winnerDeathPct}%, rounded down.`,
           `Where nobody fights, people may simply change sides: about ${pct(switchAverage)} a year at average cooperation `
             + `(${pct(C.switchPerCooperation)} × cooperation), and half as often away from a Cooperative civ.`,
@@ -281,10 +282,11 @@ export function howText() {
         ],
         materials: materialFacts(),
         after: [
-          `A civ whose food is secure (nobody went hungry last year, and at least ${G.secureFoodPerPerson} food per person in its hexes) `
+          `A civ whose food is secure (at most ${G.secureHungryPct}% of its people went hungry last year) `
             + `sends ${pct(G.gatherShare)} of its adults to gather. Each brings in ${G.yield.common} a year (${G.yield.exotic} of an exotic), `
             + `at most ${G.cap.common} a deposit a year (${G.cap.exotic} for exotics). The stockpile never spoils; it is spent only on climbing a level.`,
-          'Each level needs years at the level below, enough people and hexes (the numbers below are for a 10 × 10 map and grow with the map), '
+          'Each level needs years at the level below, enough hexes (a share of the land per civ: the map\'s land hexes ÷ the civs that started) '
+            + 'with enough people on them, '
             + `and materials. A civ that stays below its level's people for ${E.fallBackYears} years in a row falls back a level.`,
         ],
         levels: levelFacts(),

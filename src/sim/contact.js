@@ -10,6 +10,7 @@ import { DEEP_WATER, DEFENCE_BONUS } from './terrain.js';
 import { STRENGTH, AGGRESSION, COOPERATION } from './traits.js';
 import { TYPE_RULES } from './civTypes.js';
 import { DEATH_WAR } from './life.js';
+import { LEVEL_EFFECTS, MAX_LEVEL } from './levels.js';
 
 export const CONTACT = Object.freeze({
   /** (b) Hunger: the hex's food is below its people's total need and the attacker's average aggression is above this. */
@@ -60,6 +61,9 @@ export class Contact {
     this.lostTo = new Int32Array(civs * civs).fill(NEVER);
     this.always = new Uint8Array(civs);
     this.never = new Uint8Array(civs);
+    /** Set by the Simulation: each civ's level (Kingdoms fight harder) and the Kingdom enclosing each hex (−1: none). */
+    this.level = null;
+    this.inside = null;
     this.switchFactor = new Float64Array(civs);
     for (let c = 0; c < civs; c++) {
       const t = TYPE_RULES[types[c]] ?? {};
@@ -157,8 +161,11 @@ export class Contact {
       // When both sides would start it, the newcomer is the attacker.
       if (both) att = off;
       const bonus = 1 + DEFENCE_BONUS[map.terrain[h]];
-      const sDef = str[b0 + def] * bonus;
-      const sOff = str[b0 + off];
+      // A Kingdom fighting a civ that is not one is many times stronger.
+      const kDef = this.level !== null && this.level[def] === MAX_LEVEL;
+      const kOff = this.level !== null && this.level[off] === MAX_LEVEL;
+      const sDef = str[b0 + def] * bonus * (kDef && !kOff ? LEVEL_EFFECTS.kingdomStrength : 1);
+      const sOff = str[b0 + off] * (kOff && !kDef ? LEVEL_EFFECTS.kingdomStrength : 1);
       const win = sOff > sDef ? off : def;
       const lose = win === def ? off : def;
       fightWinner[h] = win;
@@ -168,7 +175,7 @@ export class Contact {
       this.holder[h] = def;
       this.killLoser[h] = Math.floor((cnt[b0 + lose] * CONTACT.loserDeathPct + 99) / 100);
       this.killWinner[h] = Math.floor(cnt[b0 + win] * CONTACT.winnerDeathPct / 100);
-      this.fleeTo[h] = fleeHex(map, h, pop, cnt, civs, win);
+      this.fleeTo[h] = fleeHex(map, h, pop, cnt, civs, win, lose, this.inside);
       this.seenL[h] = 0; this.pickL[h] = 0; this.seenW[h] = 0; this.pickW[h] = 0;
       fights++;
     }
@@ -233,15 +240,17 @@ function ahead(cnt, b0, a, b) {
  * people at the start of the step (so they are not attacked again next year),
  * the one with the most food left over for its current people (food − people),
  * lowest index on ties; if the winner is in every land neighbour, the best of
- * those by the same measure; −1 if there is no land neighbour.
+ * those by the same measure; −1 if there is no land neighbour. A hex enclosed
+ * by a Kingdom other than the loser (inside) is never a refuge.
  */
-function fleeHex(map, h, pop, cnt, civs, win) {
+function fleeHex(map, h, pop, cnt, civs, win, lose, inside) {
   let best = -1;
   let bestSpare = 0;
   let bestFree = false;
   for (let d = 0; d < 6; d++) {
     const t = map.neighbours[h * 6 + d];
     if (t < 0 || map.terrain[t] === DEEP_WATER) continue;
+    if (inside && inside[t] >= 0 && inside[t] !== lose) continue;
     const free = cnt[t * civs + win] === 0;
     if (bestFree && !free) continue;
     const s = map.food[t] - pop[t];

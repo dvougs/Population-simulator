@@ -163,7 +163,7 @@ Each civ has one of 5 types, picked per civ on the setup screen. A type biases t
 
 Each year (tick) runs these steps in order. Within a step everyone decides first and the results apply together, so the order people are listed in never changes the outcome.
 
-1. **Gathering and levels**, from the state at the end of last year: gathering, levelling up or falling back, Kingdoms absorbing smaller civs, and food capacities (see "Gathering and levels").
+1. **Gathering and levels**, from the state at the end of last year: gathering, levelling up or falling back, Kingdoms enclosing hexes and absorbing the people in them, and food capacities (see "Gathering and levels").
 2. **Birthdays.** Everyone's age goes up by 1.
 3. **Eating.** Each person needs 0.75 + 0.5 × their metabolism food a year (1 at metabolism 0.5). In a hex with n people whose needs add up to N:
    - If the hex's food is at least N, everyone there eats.
@@ -189,6 +189,7 @@ Each year (tick) runs these steps in order. Within a step everyone decides first
 - **Boats** (civs at level 4 or higher): a path may also cross one sea or lake hex, which costs 1 movement point. Only one water hex in the whole path, and the path must end on land (a person never stops on water). Any water hex counts, a lake or the sea, the ocean ring at the map's edge included; since the map does not wrap, crossing a ring hex only leads to land that also touches it. So a lake or strait one hex wide can be crossed, but not two water hexes in a row.
 - **Spare food** of a hex = the food it will hold after this year's regrowth (food + 50% of capacity, at most the capacity) − the people in it now (after this year's births).
 - A person who sets out picks one hex in reach whose spare food is above 0 and above their own hex's spare food, at random, with chances in proportion to each hex's weight. A hex's weight is its spare food, counted twice (×2) if it already holds at least one person of the mover's own civ. With no such hex, they stay.
+- **Kingdoms are closed.** A hex enclosed by a Kingdom (see "What levels do") is never in reach for people of any other civ, Kingdoms included: other civs can only take a Kingdom's land from its edge inwards, by fighting.
 - Everyone chooses against the same counts (food, people and which civs are in each hex), taken before anyone moves; then everyone who chose moves at once.
 
 ## Contact
@@ -206,12 +207,12 @@ Checked once a year, after food regrowth, in every land hex where people of 2 or
   If any of (b) to (e) holds (and A is not Aggressive), A attacks with a chance equal to its average aggression in the hex: one roll per pair, however many of those triggers hold.
 - **At most one fight per hex a year.** If several pairs would fight, the fight is between the pair holding the civ with the most people in the hex, and among those the pair whose other civ has the most people (ties go to the lower civ number). If both civs of that pair would attack each other, the attacker is the one that did not hold the hex.
 - **The hex holder** is the civ of the two that had more people in the hex at the end of last year; on a tie (for example both just arrived), the one with more people now, then the lower civ number. The holder may be the attacker or the attacked.
-- **Strength** of each side = the sum of its people's strength in the hex. The holder's strength is multiplied by 1 + the hex's defence bonus (forest +25%, hills +50%, mountain +100%, otherwise 0%; see "Terrain").
+- **Strength** of each side = the sum of its people's strength in the hex. The holder's strength is multiplied by 1 + the hex's defence bonus (forest +25%, hills +50%, mountain +100%, otherwise 0%; see "Terrain"). A Kingdom fighting a civ that is not a Kingdom has its strength × 5 (on top of any defence bonus); two Kingdoms fight at their normal strength.
 - **Result.** The side with more strength wins; on equal strength the holder wins.
-  - The loser loses ⌈20%⌉ of its people in the hex (rounded up, so at least 1), picked at random among them: these are **war deaths**. The rest of the loser's people there flee together to a neighbouring land hex where the winner has no people, the one with the most food left over for its people (food − people, counted when the step starts; on a tie the lower index); if the winner has people in every land neighbour, to the one of them with the most food left over. With no land neighbour they stay.
+  - The loser loses ⌈20%⌉ of its people in the hex (rounded up, so at least 1), picked at random among them: these are **war deaths**. The rest of the loser's people there flee together to a neighbouring land hex where the winner has no people, the one with the most food left over for its people (food − people, counted when the step starts; on a tie the lower index); if the winner has people in every land neighbour, to the one of them with the most food left over. A hex enclosed by a Kingdom other than the loser is never chosen. With no land neighbour left to choose they stay.
   - The winner loses 5% of its people in the hex, rounded down (a winning group of fewer than 20 loses nobody), picked at random: also war deaths.
   - Other civs in the hex are not involved.
-- The winner of each hex's fight this year is kept until the next year's gathering, where it takes the hex's whole yield and stops Kingdoms absorbing there (see "Gathering and levels"). Fleeing never uses boats.
+- The winner of each hex's fight this year is kept until the next year's gathering, where it takes the hex's whole yield (see "Gathering and levels"). Fleeing never uses boats.
 
 ### Switching civ
 
@@ -230,11 +231,11 @@ Every civ has a level from 1 to 5 and a stockpile of the 9 materials. Every civ 
 | 4 | Organised |
 | 5 | Kingdom |
 
-Step 1 of each year (see "A year") works from the state at the end of last year: who lives where (people per civ per hex), who went hungry, who starved and last year's fights. It runs in this order: gathering, levelling up or falling back, absorbing, food capacities.
+Step 1 of each year (see "A year") works from the state at the end of last year: who lives where (people per civ per hex), who went hungry and last year's fights. It runs in this order: gathering, levelling up or falling back, enclosing and absorbing, food capacities.
 
 ### Gathering
 
-- **Secure food.** A civ's food is secure when none of its living people went hungry last year, none of its people starved last year, and the hexes it holds have at least 1.2 food per person: the food in all the hexes it holds (as it stands at the start of the year) is at least 1.2 × the people of all civs living in them.
+- **Secure food.** A civ's food is secure when at most 20% of its living people went hungry last year (hungry × 100 ≤ 20 × its people). A full map always has some hunger, so a stricter rule would stop gathering for good once the land fills up.
 - Only a civ with secure food, below level 5, gathers. In each hex it holds it works the hex's deposits of the materials its **next level** still needs (its stockpile is below what that level costs). If the hex has none of those, it works the deposits of materials **any later level** still needs (its stockpile is below what all its remaining levels cost together). If the hex has none of those either, nobody of that civ gathers there.
 - **Gatherers.** In each hex it works, 20% of the civ's adults (aged 16 or more) gather, each weighted by 0.5 + their cooperation: gatherers = 20% × the sum of (0.5 + cooperation) over its adults there (exactly 20% of its adults when every cooperation is 0.5). Cooperative civs × 1.25. The gatherers split equally among the deposits the civ works in that hex.
 - **Yield.** Each gatherer yields 0.5 a year of a common or uncommon material and 0.125 of an exotic one. One deposit gives at most 10 a year (exotic: 2.5), all civs together: yield = min(cap, gatherers on it × yield per gatherer).
@@ -245,17 +246,19 @@ Step 1 of each year (see "A year") works from the state at the end of last year:
 
 Every year each civ that has people adds 1 to its years at its level; then it moves up one level if it meets every requirement below for its next level. The materials are taken from its stockpile and its years at the level start again from 0.
 
-| From → to | Years at the level | People | Hexes held | Materials spent |
+| From → to | Years at the level | Hexes held (% of land per civ) | People per hex needed | Materials spent |
 |---|---|---|---|---|
-| 1 → 2 Farmers | 150 | 40 | 4 | 80 wood, 30 stone, 30 clay |
-| 2 → 3 Builders | 300 | 100 | 8 | 200 wood, 150 stone, 100 clay, 30 copper |
-| 3 → 4 Organised | 500 | 200 | 14 | 300 stone, 80 copper, 60 iron, 40 salt |
-| 4 → 5 Kingdom | 800 | 350 | 22 | 150 iron, 30 gold, 15 gemstones, 20 spices |
+| 1 → 2 Farmers | 150 | 15% | 10 | 80 wood, 30 stone, 30 clay |
+| 2 → 3 Builders | 300 | 30% | 12 | 200 wood, 150 stone, 100 clay, 30 copper |
+| 3 → 4 Organised | 500 | 50% | 14 | 300 stone, 80 copper, 60 iron, 40 salt |
+| 4 → 5 Kingdom | 800 | 75% | 16 | 150 iron, 30 gold, 15 gemstones, 20 spices |
 
-- **People and hexes** are for a 10 × 10 map; on other sizes they are × (size × size ÷ 100), rounded to the nearest whole number (half up): × 4 on 20 × 20, × 9 on 30 × 30, × 25 on 50 × 50 (Kingdom on 50 × 50 needs 8750 people and 550 hexes). They are counted at the end of last year.
+- **Hexes and people** follow the land each civ started with. Land per civ = the map's land hexes (every hex that is not deep water) ÷ the number of civs the game started with. Hexes needed = the percentage above × land per civ, rounded to the nearest whole number (half up), at least 1. People needed = people per hex × the hexes needed. A full map settles at about 22 people per land hex, so the hexes are what a civ has to win; the people only check that its land is settled.
+- Examples (hexes / people for levels 2, 3, 4 and 5): the Small world (10 × 10, 64 land hexes, 3 civs) 3/30, 6/72, 11/154, 16/256; 30 × 30 with 630 land hexes and 4 civs 24/240, 47/564, 79/1106, 118/1888; the Large world (50 × 50, 1750 land hexes) with 6 civs 44/440, 88/1056, 146/2044, 219/3504, and with 8 civs 33/330, 66/792, 109/1526, 164/2624.
+- Hexes and people are counted at the end of last year.
 - **By type:** Nomadic civs need 25% more years and Isolationist civs 20% fewer, rounded up: Nomadic 188, 375, 625 and 1000 years; Isolationist 120, 240, 400 and 640. Isolationist civs spend 25% more materials, rounded up: 100 wood, 38 stone, 38 clay; 250 wood, 188 stone, 125 clay, 38 copper; 375 stone, 100 copper, 75 iron, 50 salt; 188 iron, 38 gold, 19 gemstones, 25 spices.
 - The fastest possible climb to Kingdom is 150 + 300 + 500 + 800 = 1750 years (Nomadic 2188, Isolationist 1400).
-- **Falling back.** In a year it does not level up, a civ at level 2 or higher whose people are below the people needed to reach its current level (the People column above, scaled) adds 1 to its years below the minimum; otherwise that count goes back to 0. At 100 years in a row it drops one level, keeps its stockpile, and its years at the level start again from 0. To climb back it must meet that level's requirements and spend the materials again.
+- **Falling back.** In a year it does not level up, a civ at level 2 or higher whose people are below the people needed to reach its current level (see above) adds 1 to its years below the minimum; otherwise that count goes back to 0. At 100 years in a row it drops one level, keeps its stockpile, and its years at the level start again from 0. To climb back it must meet that level's requirements and spend the materials again.
 - A civ that dies out keeps the level it had.
 
 ### What levels do
@@ -268,10 +271,12 @@ Each level keeps everything from the levels below it.
 | 2 Farmers | Plains and river hexes + 25% food capacity. |
 | 3 Builders | Shelter: hunger's health loss in desert, tundra and mountain is halved, round(35 × B × climate × 0.5). |
 | 4 Organised | Boats: migration may cross one sea or lake hex (see "Migration"). |
-| 5 Kingdom | Every hex + 25% food capacity (plains and river hexes + 50% in all); old age starts 5 years later; absorbs smaller civs it lives alongside (below). |
+| 5 Kingdom | Every hex + 25% food capacity (plains and river hexes + 50% in all); old age starts 5 years later; strength × 5 in fights against civs that are not Kingdoms (see "Fights"); encloses hexes, absorbs everyone else in them and closes them to other civs (below). |
 
 - **Food capacity** of a land hex follows the highest level among the civs with people in it at the end of last year: capacity = its level-1 capacity × (1 + 0.25 if that level is 2 or more and the hex is plains or has a river, + 0.25 if that level is 5). An empty hex has its level-1 capacity. When a hex's capacity falls, any food above the new capacity is lost. Capacities are set once a year, in step 1.
-- **Absorbing.** In each land hex that had no fight last year, every civ with fewer people (civ-wide, at the end of last year) than a Kingdom living in the same hex loses ⌈10%⌉ of its people in that hex (rounded up, so at least 1) to that Kingdom, picked at random. If several such Kingdoms live there, the one with the most people takes them (on a tie, the lower civ number). A Kingdom can absorb a smaller Kingdom. The people absorbed switch civ and keep everything else; they count as switching civ in the statistics.
+- **Enclosed hexes.** After levelling, a land hex with at least one land neighbour is enclosed by a Kingdom when every one of its land neighbours held people of that Kingdom at the end of last year (sea and lake neighbours do not count; the hex itself may hold anyone or nobody). Enclosed by several Kingdoms: the one with the most people (civ-wide), then the lower civ number.
+- **Absorbing.** Every person of a civ that is not a Kingdom living in a hex a Kingdom encloses joins that Kingdom, all of them at once, every year. The people absorbed switch civ and keep everything else; they count as switching civ in the statistics. Other Kingdoms' people are never absorbed: one Kingdom can only take another's land by fighting.
+- **Closed borders.** No person of another civ (Kingdoms included) can migrate into an enclosed hex or flee into one after a fight (see "Migration" and "Fights"). So a Kingdom can only be broken from its edge inwards.
 - Alliances and organised war (planned for level 4) are not in the game yet.
 
 ## Statistics
@@ -299,7 +304,7 @@ Recorded at the end of every year, for each civ: people alive, hexes held (hexes
   Famines and fights are logged while the log holds fewer than 2048 events minus one per civ; after that, later famines and fights are left out (and counted). First contacts, milestones, peaks, most hexes and extinctions are always kept.
 - While the game runs, the statistics sheet shows each civ's emblem, name, type and level, people and hexes held; the top bar shows the total population, how many civs are still alive, and each civ's emblem with its people alive. Tapping a hex shows its people per civ (see "How civs and people look").
 - **Levels in the sheet:** for each civ, its level and name, whether it is gathering (food secure) or not, and for its next level each requirement with a progress bar and "have / need": years at its level, people, hexes held and each material that level spends (stockpile rounded down to one decimal). Then the civ's whole stockpile (materials above 0). A civ below its level's minimum people shows how many of the 100 years it has been below. Kingdoms show "the top level"; civs that died out show "Died out".
-- **What levels and materials do:** a tap-to-open guide under the levels: when a civ gathers and how much, the requirements of every level (people and hexes scaled to the map in play), what each level does (birth chance, food capacity, shelter, boats, later old age, absorbing), each material's yield, yearly cap and the levels that spend it, and how civ types change levelling. Its numbers are the ones in "Gathering and levels".
+- **What levels and materials do:** a tap-to-open guide under the levels: when a civ gathers and how much, the requirements of every level (hexes and people worked out from the land per civ in play), what each level does (birth chance, food capacity, shelter, boats, later old age, Kingdom strength, enclosed hexes and closed borders), each material's yield, yearly cap and the levels that spend it, and how civ types change levelling. Its numbers are the ones in "Gathering and levels".
 
 ## How civs and people look
 

@@ -106,7 +106,7 @@ async function startGame(params) {
   host.start(params);
   startParams = host.params;
   map = host.map();
-  renderLevelGuide(ui.levelGuide, map.cols, map.rows);
+  renderLevelGuide(ui.levelGuide, map, startParams.civCount);
   renderer.setMap(map);
   renderer.setPopulation(host.population(), performance.now());
   camera.setBounds(worldBounds(map.cols, map.rows));

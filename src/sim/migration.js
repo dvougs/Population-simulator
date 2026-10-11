@@ -132,6 +132,8 @@ export function migrationRules(types, map, reach) {
     cum: new Array(n),
     stamp: new Int32Array(map.count * n),
     gen: 0,
+    /** Per hex, the Kingdom enclosing it or −1 (set by the Simulation): no other civ may move in. */
+    inside: null,
   };
   rules.byPoints = new Map([[`${MIGRATION.movePoints}`, reach]]);
   rules.movePoints = new Int32Array(n);
@@ -171,7 +173,8 @@ let sharedHeld = new Uint8Array(0);
  * per civ from `rules` when given, see migrationRules). A mover picks among reachable hexes
  * whose spare food is positive and above its own hex's, at random with weight
  * equal to that spare food, times ownCivWeight where its own civ already has
- * people (before anyone moves). With no such hex it stays.
+ * people (before anyone moves). A hex a Kingdom encloses (rules.inside) is
+ * closed to every other civ. With no such hex it stays.
  * dest: scratch Int32Array at least people.high long. held: scratch
  * Uint8Array of (civ count × map.count); without it a shared one sized for any civ id is used. Returns how many moved.
  */
@@ -186,6 +189,7 @@ export function migrate(people, map, reach, rng, pop, spare, dest, held = null, 
   const cap = map.foodCap;
   const civs = rules ? rules.hungryChance.length : 0;
   if (rules) rules.gen++;
+  const inside = rules?.inside ?? null;
   for (let i = 0; i < people.high; i++) {
     dest[i] = -1;
     if (!alive[i]) continue;
@@ -210,7 +214,7 @@ export function migrate(people, map, reach, rng, pop, spare, dest, held = null, 
         for (let k = offsets[h]; k < offsets[h + 1]; k++) {
           const t = targets[k];
           const s = spare[t];
-          if (s > 0 && s > own) total += held[base + t] ? s * MIGRATION.ownCivWeight : s;
+          if (s > 0 && s > own && !(inside && inside[t] >= 0 && inside[t] !== c)) total += held[base + t] ? s * MIGRATION.ownCivWeight : s;
           cum[k] = total;
         }
         rules.stamp[key] = rules.gen;
