@@ -100,6 +100,9 @@ input[type="range"] { width: 100%; height: var(--tap); accent-color: var(--accen
 .hud-info { flex: 1; text-align: center; text-shadow: 0 1px 3px #000; pointer-events: none; }
 .hud-year { font-weight: 700; font-variant-numeric: tabular-nums; }
 .hud-pop { font-size: 0.8rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.hud-civs { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 10px; font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+.hud-civ { display: inline-flex; align-items: center; gap: 4px; }
+.hud-civ.dead { opacity: 0.45; }
 
 .inspector { position: absolute; top: calc(64px + var(--safe-top)); left: calc(10px + var(--safe-left)); width: min(300px, calc(100% - 20px - var(--safe-left) - var(--safe-right)));
   background: rgba(27, 33, 43, 0.94); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; font-size: 0.9rem; box-shadow: 0 6px 24px rgba(0,0,0,0.4); }
@@ -113,6 +116,22 @@ input[type="range"] { width: 100%; height: var(--tap); accent-color: var(--accen
 .inspector dt { color: var(--text-dim); }
 .inspector dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
 .owner-chip { display: inline-flex; align-items: center; gap: 6px; }
+/* Tall cards (people list open) scroll instead of running off the screen. */
+.inspector { max-height: calc(100% - 74px - var(--safe-top) - var(--safe-bottom)); overflow-y: auto; overscroll-behavior: contain; }
+.emblem { display: inline-flex; vertical-align: -2px; flex: 0 0 auto; }
+.emblem svg { display: block; }
+.inspector dd .emblem { margin-right: 3px; }
+.inspector h3 .emblem { vertical-align: -1px; }
+.people-toggle { width: 100%; margin-top: 8px; }
+.inspector .btn.small { min-height: var(--tap); }
+.people-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 2px;
+  max-height: min(240px, 35vh); overflow-y: auto; overscroll-behavior: contain; }
+.person-row { width: 100%; min-height: var(--tap); display: flex; align-items: center; gap: 8px; padding: 0 8px;
+  border: 0; border-radius: 10px; background: var(--surface-2); text-align: left; cursor: pointer; touch-action: manipulation; font-variant-numeric: tabular-nums; }
+.person-row:active { filter: brightness(1.25); }
+.person-row .pid { font-weight: 650; }
+.person-row .pinfo { color: var(--text-dim); font-size: 0.85rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.people-list .more { color: var(--text-dim); padding: 6px 8px; font-size: 0.85rem; }
 
 .toast { position: absolute; left: 50%; top: calc(70px + var(--safe-top)); transform: translateX(-50%); max-width: calc(100% - 32px);
   background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 10px 16px; font-size: 0.9rem; text-align: center; }

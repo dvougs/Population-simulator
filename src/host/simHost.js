@@ -51,6 +51,12 @@ export class LocalSimHost {
   /** Per-civ yearly history recorded during the run: plain data and typed arrays (copies). */
   history() { return this.sim?.history() ?? null; }
   inspect(col, row) { return this.sim?.inspect(col, row) ?? null; }
+  /** People per civ per hex and every person's slot, id, hex and civ (typed array copies), for drawing. */
+  population() { return this.sim?.population() ?? null; }
+  /** Details of the person in pool slot `slot` with id `id`, or null if they are no longer alive. */
+  person(slot, id) { return this.sim?.person(slot, id) ?? null; }
+  /** Living people in hex (col, row): { index, total, people: [{ slot, id, age, health, hunger, civ }] }, lowest id first. */
+  hexPeople(col, row, limit) { return this.sim?.hexPeople(col, row, limit) ?? null; }
   hash() { return this.sim?.hash() ?? null; }
   mapHash() { return this.sim?.mapHash() ?? null; }
 }

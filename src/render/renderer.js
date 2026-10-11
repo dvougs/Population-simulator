@@ -14,6 +14,7 @@ import { Application, Container, Graphics } from '../../vendor/pixi.mjs';
 import { hexPolygon, riverSegments, HEX_SIZE } from './layout.js';
 import { hexColours, rgbToHex, RIVER_RGB } from './palette.js';
 import { DEEP_WATER } from '../sim/terrain.js';
+import { PeopleLayer } from './peopleLayer.js';
 
 const SHIMMER_PERIOD_MS = 8000; // one full swell: slow, like a tide
 const SHIMMER_ALPHA = 0.1; // peak white over the water: gentle
@@ -26,6 +27,7 @@ export class Renderer {
     this.app = null;
     this.world = null;
     this.map = null;
+    this.people = null;
     this.selected = -1;
     this.shimmer = null;
     this.shimmerLevel = -1;
@@ -48,6 +50,7 @@ export class Renderer {
   needsFrame(now) {
     if (!this.map) return false;
     if (this.motionChanged) return true;
+    if (this.people?.animating(now)) return true;
     if (!this.animating || now - this.lastShimmer < SHIMMER_FRAME_MS) return false;
     return shimmerLevel(now) !== this.shimmerLevel;
   }
@@ -76,7 +79,8 @@ export class Renderer {
 
   setMap(map) {
     this.map = map;
-    for (const child of this.world.removeChildren()) child.destroy();
+    this.people = null;
+    for (const child of this.world.removeChildren()) child.destroy({ children: true });
 
     const terrain = new Graphics();
     const colours = hexColours(map);
@@ -96,10 +100,31 @@ export class Renderer {
     grid.stroke({ width: 1.2, color: 0x000000, alpha: 0.22 });
 
     this.selection = new Graphics();
+    this.people = new PeopleLayer(map);
     this.world.addChild(terrain, rivers);
     if (this.shimmer) this.world.addChild(this.shimmer);
-    this.world.addChild(grid, this.selection);
+    this.world.addChild(grid, this.selection, this.people.container);
     this.selected = -1;
+  }
+
+  /** New population snapshot from SimHost.population(); `now` is render time in ms. */
+  setPopulation(data, now = performance.now()) {
+    if (this.people && data) this.people.setPopulation(data, now);
+  }
+
+  /** Ring the person (slot, id) on the map while people are drawn; slot -1 for none. */
+  selectPerson(slot, id = 0) {
+    this.people?.selectPerson(slot, id);
+  }
+
+  /** The person drawn under screen point (sx, sy) as { slot, id }, or null (also when zoomed out). */
+  personAt(sx, sy, camera) {
+    return this.people?.personAt(sx, sy, camera) ?? null;
+  }
+
+  /** World position where person (slot, id) is drawn, or null. */
+  personPosition(slot, id) {
+    return this.people?.personPosition(slot, id) ?? null;
   }
 
   resize(cssW, cssH, dpr) {
@@ -120,6 +145,7 @@ export class Renderer {
     }
     this.world.position.set(camera.x, camera.y);
     this.world.scale.set(camera.scale);
+    this.people?.update(camera, now);
     this.app.render();
   }
 

@@ -74,7 +74,7 @@ When several hexes tie on a value, the one with the lower index (row × size + c
 
 ## Civilisations and people
 
-- The game starts with *civ count* civilisations (civs), named Civ 1, Civ 2 and so on, each with *starting population* people.
+- The game starts with *civ count* civilisations (civs), named Civ 1, Civ 2 and so on, each with *starting population* people. Each civ has its own colour and shape emblem (see "How civs and people look").
 - **Start hexes.** A good start hex is land with food capacity 40 or more (coast, plains, forest, and any river hex). The first civ starts on a random good hex. Each next civ starts on a random good hex at least 3 steps from every earlier start; if there is none, on the good hex farthest from the earlier starts (lowest index on ties). With no good hexes at all, any land hex counts as good. On very small land several civs can start on the same hex.
 - All of a civ's founders start together on its start hex, each with a random age from 0 to 39, full health (100) and no hunger, and no parent.
 - Every person has an age (years), health (0 to 100), hunger (years in a row without food), a hex, a civ and a parent (the person who bore them; none for founders).
@@ -114,7 +114,28 @@ Recorded at the end of every year, for each civ: people alive, hexes held (hexes
 
 - Kept for the whole run: total births and deaths by cause, average lifespan (average age at death), oldest age reached, peak population, most hexes held, and the year the civ died out (its people fell to 0), if it did.
 - The yearly history keeps one row per year for the first 8192 rows. When it is full, pairs of rows are merged (people and hexes from the later year, the other numbers added together) and each new row covers twice as many years, so a long game never runs out of memory.
-- While the game runs, the statistics sheet shows each civ's people and hexes held; the top bar shows the total population and how many civs are still alive. Tapping a hex shows its people per civ.
+- While the game runs, the statistics sheet shows each civ's emblem, people and hexes held; the top bar shows the total population, how many civs are still alive, and each civ's emblem with its people alive. Tapping a hex shows its people per civ (see "How civs and people look").
+
+## How civs and people look
+
+Each civ has a colour and a shape emblem, chosen by civ number, so civs can be told apart by shape as well as colour. Emblems are drawn with a dark outline.
+
+| Civ | Colour (RGB) | Emblem |
+|---|---|---|
+| Civ 1 | red (230, 57, 70) | circle |
+| Civ 2 | blue (58, 134, 255) | square |
+| Civ 3 | yellow (255, 214, 10) | triangle |
+| Civ 4 | magenta (220, 60, 220) | diamond |
+| Civ 5 | cyan (0, 220, 230) | plus |
+| Civ 6 | orange (255, 140, 20) | star |
+| Civ 7 | white (245, 245, 245) | upside-down triangle |
+| Civ 8 | violet (150, 100, 255) | ring |
+
+- **Zoomed out**, each land hex with people shows the emblem of its largest civ (on a tie, the lower civ number) in that civ's colour, and below it the total people in the hex (all civs). Counts of 1000 or more are shortened: 1.2k (one decimal, rounded down) under 10000, then 46k, then 2M.
+- **Zoomed in**, once a hex is at least 200 pixels across on screen (corner to corner), the hex labels give way to the people themselves: each person is a tiny emblem in their civ's colour, at a fixed spot inside their hex (picked from their id, within 60% of the hex size from its centre).
+- A person who migrates glides from where they were drawn to their spot in the new hex over 0.6 seconds. This is drawing only: in the game they move at once, as "Migration" says.
+- **Tap a hex** to see its terrain, food and its people per civ with each civ's emblem. *List people* opens the list of the people in the hex, lowest id first (the first 100, then how many more); tap a row to open that person.
+- **Tap a person** (zoomed in; the nearest person within 22 pixels of the tap) to see their id, civ, age, health, hunger, parent (their id, or none for founders; "died" if the parent is no longer alive) and their living children. Tapping the same person again closes the card. If the person dies while the card is open, it shows "Died" with the last values seen.
 
 ## Map settings
 
@@ -170,4 +191,4 @@ Out-of-range values are clamped to the range; values that are not numbers fall b
 
 ## Not in the game yet
 
-People drawn on the map and tapping a person, land degrading, inherited traits and mutation, civ types, contact and war, materials and levels, boats, god powers, more end conditions and the end screen. See [project/ROADMAP.md](project/ROADMAP.md).
+Land degrading, inherited traits and mutation, civ types, contact and war, materials and levels, boats, god powers, more end conditions and the end screen. See [project/ROADMAP.md](project/ROADMAP.md).
