@@ -60,3 +60,7 @@ Years run, end reason and winner, oldest person ever and oldest alive, causes of
 3. Traits and mutation; civ types.
 4. Contact (coexistence, fights, switching civ), materials, levels 1 to 5, boats.
 5. End conditions, end screen with charts, optional god powers, balancing.
+
+## Version 1.0
+
+Decided by the owner on 2026-10-11 (Q-003, Q-004, R-003 to R-007): 1.0 contains Phases 2 to 4 plus the end conditions and end screen of Phase 5. That is people, the 5 civ types (set per civ on the setup screen), the 8 inherited traits with mutation, contact with basic fighting and civ switching, material deposits and gathering, levels 1 to 5 with the owner's thresholds, end conditions (last civ standing, first to Kingdom, dominance, year limit, sandbox; total extinction always ends the run), the end screen, and a home page with How to play. God powers, land degrading and disasters come after 1.0. Materials and levels follow request R-006, end conditions and the end screen follow R-007 (both in project/QUESTIONS.md, Answered); they replace the setup and end-screen lines above where they differ (no score with a year limit).
