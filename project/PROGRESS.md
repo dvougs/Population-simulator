@@ -2,14 +2,37 @@
 
 ## Status
 
-- Phase: Phase 2 (people) live with life cycle, migration and per-civ stats (PR #14). People on the map with civ colours and emblems, the person card, height shading and the own-civ migration pull are in a release candidate (T-015, T-018, T-019, T-020). Version 1.0 scope set by the owner (Q-003): civ types, 8 traits with mutation, contact and fighting, materials and levels 1 to 5, end conditions, end screen and home page (T-021 to T-030).
-- Last full cycle: 2026-10-11 08:07 UTC
-- Live on GitHub Pages: Phase 1 with its follow-ups and Phase 2 people, life cycle, migration and stats (PRs #10, #13, #14). https://dvougs.github.io/Population-simulator/
-- Open release candidate: #15 "Release candidate: people on the map, height shading, own-civ migration pull" https://github.com/dvougs/Population-simulator/pull/15
-- Ready next: T-024 (material deposits), T-026 (end conditions), T-027 (end screen), T-028 (home page), T-029 (their tests).
-- Blockers: T-021 waits on Q-006 (trait numbers); T-022 and T-023 on Q-007 (Cooperative, Nomadic, who fights, how a fight works); T-025 on Q-008 (gathering and level-effect numbers); T-030 on all three. Proposal P-007 (show every civ in a shared hex, visuals) is undecided.
+- Phase: Phase 2 (people) live with people on the map, civ colours and emblems, the person card, height shading and the own-civ migration pull (PR #15). End conditions, the end screen, civ tint, territory outlines, shared-hex rings and tap-to-zoom with idling people are in a release candidate (T-026, T-027, T-031, T-033, T-034). Version 1.0 scope (Q-003): civ types, 8 traits with mutation, contact and fighting, materials and levels 1 to 5, end conditions, end screen and home page.
+- Last full cycle: 2026-10-11 10:06 UTC
+- Live on GitHub Pages: Phase 1 with its follow-ups and Phase 2 people, life cycle, migration, stats, people on the map and height shading (PRs #10, #13, #14, #15). https://dvougs.github.io/Population-simulator/
+- Open release candidate: #16 "Release candidate: end conditions, end screen, civ territory on the map, tap to zoom" https://github.com/dvougs/Population-simulator/pull/16
+- Ready next: T-021 (traits, with the reviewed Q-006 numbers), T-024 (material deposits), then T-022, T-023, T-025 in order; T-028 (home page), T-032 (desktop report column, R-008), T-037 (nothing saved between sessions), with tests T-030 and T-036.
+- Blockers: none. Proposals P-008 (end-screen history log, UI) and P-009 (people drawn by age and hunger, animation) are undecided.
 
 ## Cycle log
+
+### 2026-10-11 10:06: end conditions and end screen, civ territory on the map, tap to zoom
+
+- Owner input: Q-006 answered (the director picks the trait numbers, then a one-time reviewer agent balances them before the dev task); Q-007 option 1; Q-008 option 1; P-007 yes with changes (ring split by share plus a bold outline round each civ's territory); requests R-008 (desktop report column), R-009 (tint held hexes in civ colour), R-010 (the setup screen still shows only the old two end choices: build T-026), R-011 (tap a hex to zoom in on its people; the map should feel alive).
+- Q-006: the director drafted option 1's numbers, and a one-time general-purpose reviewer prototyped them in a scratch copy of the sim (10 seeds, every type in every civ position, up to 3,000 years). Option 1 as drafted let fertility run away (0.94 by year 3000) and Expansionist take 81% of all people by year 1000. The reviewed set adds costs: fertility and metabolism make hunger hit harder, metabolism also raises the birth chance, and heat and cold tolerance trade off. Expansionist fertility goes to 0.58; Nomadic gets metabolism 0.45 with heat and cold tolerance 0.6. Result: types hold 29% to 43% of people (fair share 33%), no extinctions in 360 runs, about 1,430 people at year 400. T-021 now carries the reviewed numbers and is ready.
+- Tasks: T-022, T-023 and T-025 unblocked with the answers in their criteria. New tasks: T-031 (P-007), T-032 (R-008), T-033 (R-009), T-034 (R-011), T-035 (their tests), T-036 (tests for T-024, split from T-029) and T-037 (game-dev still saves the last settings in localStorage, against R-007's "nothing saved between sessions").
+- Merged since last cycle: #15 (T-015, T-018, T-019, T-020 done).
+- Built on claude/cycle-20261011-1006, in two game-dev runs:
+  - T-026: end conditions in any combination (last civ standing, dominance 60% for 300 years, year limit default 2500, sandbox), total extinction always ends, End now while paused. game-dev's own choice: non-default presets now set end conditions.
+  - T-027: end screen, with records and events recorded during the run in src/sim/records.js. A famine year is ≥ 2% of the civ's people and ≥ 5 starvation deaths.
+  - T-031: shared-hex rings and civ territory outlines.
+  - T-033: 30% civ tint on held hexes.
+  - T-034: tap a hex to fly in over 0.4 s. People show from 120 px instead of 200 px and idle-drift inside their hex.
+  - State hash unchanged.
+- Tested by unit-tester (T-029, T-035): 239 unit tests pass, no bugs. The existing e2e spec was updated for the checkboxes, the end screen and tap-to-zoom; 72 Playwright runs passed locally. One desktop flake in the preview-hash test passed on every rerun; it is not caused by this work.
+- Design review on claude/cycle-20261011-1006 at 71fa0e5, seeds review-20261011d-1 to -3, default setup, 400 years:
+  - Population at year 400: 1,507, 1,432 and 632.
+  - Starvation deaths per civ: 0 to 125. Average lifespans: 50 to 53.
+  - No extinctions. Longest family line: 19 to 20 generations.
+  - No famine and 0 history events on any seed.
+  - Levels: not reported, because levels do not exist yet; T-025 adds them to headless.
+  - Proposals: P-008 (fill the end-screen history log, UI) and P-009 (draw people by age and hunger, animation).
+- Opened PR #16.
 
 ### 2026-10-11 08:07: people on the map, height shading, own-civ pull; 1.0 planned
 
