@@ -8,6 +8,35 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
 
 Ideas the director draws from headless simulation runs and the code. At most 6 wait here at a time.
 
+## Requests
+
+## Answered
+
+### R-012: "Currently no people at all die because of war. I don't think fight ever starts in the game. Fix that, by implementing some more comprehensive fight mechanics and triggers and, at the end of the process, create an one time agent to certify and approve the mechanics. If something is disapproved, fix it in the same build and have the said agent reverify it." (owner, 2026-10-11 13:31 UTC; reading: fighting (T-023, Q-007 option 1) is not built yet, so no war deaths exist. Build it with more comprehensive triggers than Q-007 alone, then a one-time reviewer agent certifies the mechanics, for example with headless runs that show fights and war deaths happen. Anything it rejects is fixed in the same build and re-verified by that agent before the release candidate opens.)
+- Date: 2026-10-11
+- Priority: P1
+- Moved: 2026-10-11, task T-023 (P1; wider triggers, war deaths in headless and the certifier step in its criteria), T-030
+
+### R-013: Show each civ's level, its materials and how they are used, and what modifiers each level and material changes (owner, 2026-10-11 13:31 UTC; reading: in the game UI, for example the inspector, live report and end screen, once T-024 and T-025 exist.)
+- Date: 2026-10-11
+- Priority: P2
+- Moved: 2026-10-11, task T-041 (P2, after T-024 and T-025)
+
+### R-014: "At the start of the game, there is no homepage, as i have explicitly requested. I need it in the next build, WITH THE DETAILS I EXPLICITLY REQUESTED." (owner, 2026-10-11 13:31 UTC; reading: T-028 (R-005) is top priority for the next release candidate, built in full: New game and the rules guide in human-readable, compelling language following RULES.md, looking fabulous, with in-game screens explaining how the game works.)
+- Date: 2026-10-11
+- Priority: P1
+- Moved: 2026-10-11, task T-028 (P1, required in the next build, in full)
+
+### R-015: On the setup screen, pick each civ's type, with clear explanations of the differences between the types (owner, 2026-10-11 13:31 UTC; reading: extends T-022 with a plain-language explanation of each type on the setup screen.)
+- Date: 2026-10-11
+- Priority: P2
+- Moved: 2026-10-11, task T-022 (P1 via R-016; a plain explanation of each type on the setup screen)
+
+### R-016: Priority changes (owner, 2026-10-11 13:51 UTC: "Traits and mutation is p1 / Fighting with triggers p1 / Materials and gathering p1"). Reading: T-021 (traits and mutation), T-023 with R-012 (fighting with more comprehensive triggers and the certifier agent), T-024 (material deposits) and T-025 (gathering, stockpiles and levels) become P1, alongside T-028 (home page). T-022 (civ types) becomes P1 too, because fighting cannot ship without it, and so do the unit tests these need (T-030, T-036).
+- Date: 2026-10-11
+- Priority: P1
+- Moved: 2026-10-11, tasks T-021, T-022, T-023, T-024, T-025, T-028, T-030, T-036 set to P1
+
 ### P-008: Fill the end screen's history log with events that actually happen
 - Date: 2026-10-11
 - Category: UI
@@ -17,6 +46,7 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Phone performance risk: low: a few counters per civ checked once a year, written to the existing capped event log.
 - Priority: P2 (suggested; stands unless the owner changes it)
 - Decision: Yes (reading: yes as proposed, including lowering the famine threshold in RULES.md from 2% to 1% of the civ's people in one year)
+- Moved: 2026-10-11, tasks T-038, T-039 (P2)
 
 ### P-009: Draw people by age and hunger, and let births and deaths show
 - Date: 2026-10-11
@@ -27,17 +57,7 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Phone performance risk: low: a scale and alpha per sprite set in the existing loop over visible people; no new textures or allocation.
 - Priority: P3 (suggested; stands unless the owner changes it)
 - Decision: Yeah, with low prio. (reading: yes, built after the home page, fighting, civ types and levels)
-
-## Requests
-
-- [P1] R-016: Priority changes (owner, 2026-10-11 13:51 UTC: "Traits and mutation is p1 / Fighting with triggers p1 / Materials and gathering p1"). Reading: T-021 (traits and mutation), T-023 with R-012 (fighting with more comprehensive triggers and the certifier agent), T-024 (material deposits) and T-025 (gathering, stockpiles and levels) become P1, alongside T-028 (home page). T-022 (civ types) becomes P1 too, because fighting cannot ship without it, and so do the unit tests these need (T-030, T-036).
-
-- [P1] R-012: "Currently no people at all die because of war. I don't think fight ever starts in the game. Fix that, by implementing some more comprehensive fight mechanics and triggers and, at the end of the process, create an one time agent to certify and approve the mechanics. If something is disapproved, fix it in the same build and have the said agent reverify it." (owner, 2026-10-11 13:31 UTC; reading: fighting (T-023, Q-007 option 1) is not built yet, so no war deaths exist. Build it with more comprehensive triggers than Q-007 alone, then a one-time reviewer agent certifies the mechanics, for example with headless runs that show fights and war deaths happen. Anything it rejects is fixed in the same build and re-verified by that agent before the release candidate opens.)
-- [P2] R-013: Show each civ's level, its materials and how they are used, and what modifiers each level and material changes (owner, 2026-10-11 13:31 UTC; reading: in the game UI, for example the inspector, live report and end screen, once T-024 and T-025 exist.)
-- [P1] R-014: "At the start of the game, there is no homepage, as i have explicitly requested. I need it in the next build, WITH THE DETAILS I EXPLICITLY REQUESTED." (owner, 2026-10-11 13:31 UTC; reading: T-028 (R-005) is top priority for the next release candidate, built in full: New game and the rules guide in human-readable, compelling language following RULES.md, looking fabulous, with in-game screens explaining how the game works.)
-- [P2] R-015: On the setup screen, pick each civ's type, with clear explanations of the differences between the types (owner, 2026-10-11 13:31 UTC; reading: extends T-022 with a plain-language explanation of each type on the setup screen.)
-
-## Answered
+- Moved: 2026-10-11, task T-040 (P3, after the home page, fighting, civ types and levels)
 
 ### Q-006: What numbers should the 8 traits use?
 - Date: 2026-10-11
