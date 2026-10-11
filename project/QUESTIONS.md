@@ -28,6 +28,11 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 
 ## Requests
 
+- R-012: "Currently no people at all die because of war. I don't think fight ever starts in the game. Fix that, by implementing some more comprehensive fight mechanics and triggers and, at the end of the process, create an one time agent to certify and approve the mechanics. If something is disapproved, fix it in the same build and have the said agent reverify it." (owner, 2026-10-11 13:31 UTC; reading: fighting (T-023, Q-007 option 1) is not built yet, so no war deaths exist. Build it with more comprehensive triggers than Q-007 alone, then a one-time reviewer agent certifies the mechanics, for example with headless runs that show fights and war deaths happen. Anything it rejects is fixed in the same build and re-verified by that agent before the release candidate opens.)
+- R-013: Show each civ's level, its materials and how they are used, and what modifiers each level and material changes (owner, 2026-10-11 13:31 UTC; reading: in the game UI, for example the inspector, live report and end screen, once T-024 and T-025 exist.)
+- R-014: "At the start of the game, there is no homepage, as i have explicitly requested. I need it in the next build, WITH THE DETAILS I EXPLICITLY REQUESTED." (owner, 2026-10-11 13:31 UTC; reading: T-028 (R-005) is top priority for the next release candidate, built in full: New game and the rules guide in human-readable, compelling language following RULES.md, looking fabulous, with in-game screens explaining how the game works.)
+- R-015: On the setup screen, pick each civ's type, with clear explanations of the differences between the types (owner, 2026-10-11 13:31 UTC; reading: extends T-022 with a plain-language explanation of each type on the setup screen.)
+
 ## Answered
 
 ### Q-006: What numbers should the 8 traits use?
