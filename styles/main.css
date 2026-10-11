@@ -256,6 +256,23 @@ input[type="range"] { width: 100%; height: var(--tap); accent-color: var(--accen
   font-size: 0.7rem; color: var(--text-dim); white-space: nowrap; }
 .level-reached { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; font-size: 0.85rem; }
 .level-reached li { overflow-wrap: anywhere; }
+.end-civ-facts { margin: 0; font-size: 0.85rem; color: var(--text-dim); overflow-wrap: anywhere; }
+.end-war { border-collapse: collapse; width: 100%; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.end-war th, .end-war td { padding: 4px 6px; text-align: right; white-space: nowrap; vertical-align: top; }
+.end-war thead th { color: var(--text-dim); font-weight: 500; }
+.end-war th[scope="row"], .end-war thead th:first-child { text-align: left; font-weight: 500; }
+.end-war tbody tr:nth-child(odd) { background: var(--surface-2); }
+/* Each side's numbers sit on the same line as its name. */
+.end-war th[scope="row"] .civ-chip { display: flex; min-height: 1.5em; }
+.end-war td span { display: flex; min-height: 1.5em; align-items: center; justify-content: flex-end; }
+.end-fold { padding-top: 0; padding-bottom: 0; }
+.end-fold[open] { padding-bottom: 14px; }
+.end-fold > summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 48px; cursor: pointer; list-style: none; }
+.end-fold > summary::-webkit-details-marker { display: none; }
+.end-fold > summary h2 { margin: 0; }
+.end-fold > summary::after { content: '+'; color: var(--text-dim); font-size: 1.2rem; line-height: 1; }
+.end-fold[open] > summary::after { content: '−'; }
+.end-fold[open] > summary { margin-bottom: 4px; }
 @media (min-width: 560px) { .end-actions { grid-template-columns: repeat(4, 1fr); } }
 
 /* ---------- Game screen ---------- */

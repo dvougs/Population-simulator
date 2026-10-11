@@ -95,12 +95,13 @@ export class Simulation {
     const rec = this.records;
     this.onDeath = (i, cause) => { st.death(people.civ[i], cause, people.age[i]); rec.death(i, people, cause, this.tickCount); };
     this.onBirth = (i) => { st.birth(people.civ[i]); rec.birth(i, people, this.tickCount); };
-    this.onFight = (h, attacker, defender, holder, winner, deaths) => {
+    this.onFight = (h, attacker, defender, holder, winner, deaths, byWinner, byLoser) => {
       st.fight(attacker, defender, winner);
-      rec.fight(this.tickCount, h, attacker, defender, holder, winner, deaths);
+      rec.fight(this.tickCount, attacker, defender, winner, byWinner, byLoser);
     };
     this.onSwitch = (from, to) => st.switched(from, to);
-    this.onLevel = (c, from, to) => {
+    this.onLevel = (c, from, to, year) => {
+      rec.level(c, to, year);
       // Boats come and go with level 4.
       const boats = to >= LEVEL_EFFECTS.boatLevel;
       if (boats !== (this.migrationRules.boats[c] === 1)) setReach(this.migrationRules, c, map, boats, LEVEL_EFFECTS.boatCost);

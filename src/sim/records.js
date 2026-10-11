@@ -1,7 +1,8 @@
-// Records and key events for the end screen, kept up as the run goes (every
-// number is in RULES.md "End screen"). Nothing here allocates per tick: the
-// counters are typed arrays sized at the start, and the event log is a fixed
-// set of typed columns.
+// Records, wars and the history chronicle for the end screen, kept up as the
+// run goes (every number is in RULES.md "Statistics" and "End screen"). Nothing
+// here allocates per tick: the counters are typed arrays sized at the start,
+// and the event log is a fixed set of typed columns with room for every event
+// it can ever hold.
 //
 // Most descendants only needs a counter per founder: a parent has every
 // descendant of their child plus the child, so the person with the most
@@ -13,27 +14,39 @@ import { DEATH_STARVATION } from './life.js';
 export const FAMINE = Object.freeze({ minShare: 0.01, minDeaths: 5 });
 /** Populations whose first passing is logged, once each per civ. */
 export const MILESTONES = Object.freeze([100, 500, 1000]);
-/** A civ's peak is logged once it has stayed below it this many years in a row. */
-export const PEAK_DECLINE_YEARS = 50;
 /**
- * Famines and fights are logged while the log holds fewer than EVENT_CAP − (civ
- * count) events. Events that can happen only a few times (first contacts,
- * milestones, peaks, extinctions) are always logged; the columns have room for
- * all of them beyond that (see room()).
+ * The History chronicle: at most `lines` lines; a famine makes it only if it
+ * killed at least `famineShare` of the civ's people at its start, and only the
+ * `famines` deadliest such famines are kept.
  */
-export const EVENT_CAP = 2048;
-export const EVENT_TYPES = ['famine', 'extinction', 'fight', 'contact', 'milestone', 'peak', 'mostHexes'];
+export const CHRONICLE = Object.freeze({ lines: 12, famineShare: 0.1, famines: 3 });
+export const EVENT_TYPES = ['famine', 'extinction', 'contact', 'milestone', 'level'];
 const EV_FAMINE = 0;
 const EV_EXTINCTION = 1;
-const EV_FIGHT = 2;
-const EV_CONTACT = 3;
-const EV_MILESTONE = 4;
-const EV_PEAK = 5;
-/** Order of events in the same year: famines, first contacts, fights, milestones, peaks, most hexes, extinctions. */
-const EVENT_ORDER = { famine: 0, contact: 1, fight: 2, milestone: 3, peak: 4, mostHexes: 5, extinction: 6 };
+const EV_CONTACT = 2;
+const EV_MILESTONE = 3;
+const EV_LEVEL = 4;
+/** Order of events in the same year: famines, level-ups (start of the year), first contacts, milestones, extinctions (end of it). */
+const EVENT_ORDER = { famine: 0, level: 1, contact: 2, milestone: 3, extinction: 4 };
+/** Which events the chronicle keeps first when there are too many. */
+const IMPORTANCE = { extinction: 0, level: 1, contact: 2, milestone: 3, famine: 4 };
+const byYear = (a, b) => a.year - b.year || EVENT_ORDER[a.type] - EVENT_ORDER[b.type] || a.civ - b.civ
+  || (a.other ?? 0) - (b.other ?? 0) || (a.level ?? 0) - (b.level ?? 0) || (a.people ?? 0) - (b.people ?? 0);
+/** Within a kind: higher levels and milestones, then deadlier famines, then the earlier event. */
+const byImportance = (a, b) => IMPORTANCE[a.type] - IMPORTANCE[b.type] || (b.level ?? 0) - (a.level ?? 0)
+  || (b.people ?? 0) - (a.people ?? 0) || b.deaths - a.deaths || byYear(a, b);
+
+/**
+ * The History chronicle from the logged events (any order): the CHRONICLE.lines
+ * most important (extinctions, then level-ups, first contacts, milestones,
+ * famines), shown oldest first.
+ */
+export function chronicle(events, lines = CHRONICLE.lines) {
+  return events.slice().sort(byImportance).slice(0, lines).sort(byYear);
+}
 
 export class Records {
-  /** cols: the map's width, to give fights a column and row. */
+  /** cols: the map's width, to give first contacts a column and row. */
   constructor(civs, founders, cols = 1) {
     this.civs = civs;
     this.cols = cols;
@@ -56,53 +69,71 @@ export class Records {
     this.famineStart = new Int32Array(civs).fill(-1);
     this.famineEnd = new Int32Array(civs);
     this.famineDeaths = new Int32Array(civs);
+    this.famineStartPop = new Int32Array(civs);
     this.worstCiv = -1;
     this.worstStart = 0;
     this.worstEnd = 0;
     this.worstDeaths = 0;
-    // Event log columns.
-    const size = EVENT_CAP + this.room();
+    // The deadliest big famines that have ended, deadliest first (fixed slots, so famines never fill the log).
+    const F = CHRONICLE.famines;
+    this.bigCount = 0;
+    this.bigCiv = new Uint8Array(F);
+    this.bigStart = new Int32Array(F);
+    this.bigEnd = new Int32Array(F);
+    this.bigDeaths = new Int32Array(F);
+    this.bigStartPop = new Int32Array(F);
+    // Wars, per pair of civs: fights and first and last year at [a × civs + b] with a < b;
+    // wins and kills (the other civ's people killed) by civ a against civ b at [a × civs + b].
+    this.warFights = new Int32Array(civs * civs);
+    this.warFirst = new Int32Array(civs * civs);
+    this.warLast = new Int32Array(civs * civs);
+    this.warWins = new Int32Array(civs * civs);
+    this.warKills = new Int32Array(civs * civs);
+    // Event log columns, sized for every event that can happen (see room()).
+    const size = this.room();
     this.evCount = 0;
-    this.evDropped = 0;
     this.evType = new Uint8Array(size);
     this.evCiv = new Uint8Array(size);
     this.evYear = new Int32Array(size);
-    this.evEnd = new Int32Array(size);
-    this.evDeaths = new Int32Array(size);
-    // Fights only: the hex, the civ attacked, the civ that held the hex and the winner (evCiv is the attacker).
+    // First contacts: evCiv the lower civ number, evOther the other, evHex where. Milestones: evValue people; level-ups: evValue the level.
+    this.evOther = new Uint8Array(size);
     this.evHex = new Int32Array(size);
-    this.evDefender = new Uint8Array(size);
-    this.evHolder = new Uint8Array(size);
-    this.evWinner = new Uint8Array(size);
-    // First contacts (evCiv the lower civ number, evDefender the other, evHex where), milestones and peaks (evValue people).
     this.evValue = new Int32Array(size);
     this.met = new Uint8Array(civs * civs);
     this.unmet = (civs * (civs - 1)) / 2;
     this.present = new Int32Array(civs);
     this.milestones = new Uint8Array(civs);
-    this.peak = new Int32Array(civs).fill(-1);
-    this.peakYear = new Int32Array(civs);
-    this.declineYear = new Int32Array(civs).fill(-1);
-    this.below = new Int32Array(civs);
-    /** Index in the log of each civ's peak event (updated in place when a later peak is logged), or −1. */
-    this.peakEvent = new Int32Array(civs).fill(-1);
-    this.mostHexes = new Int32Array(civs);
-    this.mostHexesYear = new Int32Array(civs);
+    this.levelsLogged = new Uint8Array(civs);
   }
 
-  /** Most events that are always logged: a first contact per pair; per civ 3 milestones, a peak and an extinction. */
+  /** Every event the log can hold: a first contact per pair; per civ 3 milestones, 4 level-ups (levels 2 to 5) and an extinction. */
   room() {
-    return (this.civs * (this.civs - 1)) / 2 + (MILESTONES.length + 2) * this.civs;
+    return (this.civs * (this.civs - 1)) / 2 + (MILESTONES.length + 4 + 1) * this.civs;
   }
 
-  /** A fight this year in hex h; deaths on both sides together. Dropped (and counted) once the log is full. */
-  fight(year, h, attacker, defender, holder, winner, deaths) {
-    const k = this.evCount;
-    if (!this.push(EV_FIGHT, attacker, year, year, deaths, false)) return;
-    this.evHex[k] = h;
-    this.evDefender[k] = defender;
-    this.evHolder[k] = holder;
-    this.evWinner[k] = winner;
+  /**
+   * A fight this year between attacker and defender, won by winner.
+   * byWinner: the loser's people the winner killed; byLoser: the winner's people the loser killed.
+   */
+  fight(year, attacker, defender, winner, byWinner, byLoser) {
+    const civs = this.civs;
+    const a = attacker < defender ? attacker : defender;
+    const b = a === attacker ? defender : attacker;
+    const loser = winner === a ? b : a;
+    const k = a * civs + b;
+    if (this.warFights[k]++ === 0) this.warFirst[k] = year;
+    this.warLast[k] = year;
+    this.warWins[winner * civs + loser]++;
+    this.warKills[winner * civs + loser] += byWinner;
+    this.warKills[loser * civs + winner] += byLoser;
+  }
+
+  /** A civ reached a level; the first time it reaches each level from 2 up is logged. */
+  level(c, level, year) {
+    if (level < 2 || (this.levelsLogged[c] & (1 << level))) return;
+    this.levelsLogged[c] |= 1 << level;
+    const e = this.push(EV_LEVEL, c, year);
+    if (e >= 0) this.evValue[e] = level;
   }
 
   /** Register the founders (every person alive before the first year). */
@@ -139,41 +170,22 @@ export class Records {
   }
 
   /**
-   * Close the year: famine spells, extinctions, first contacts, milestones,
-   * peaks and most hexes. pop and hexes are each civ's people and hexes held at
-   * the end of the year; hexCivPop[hex × civs + civ] its people per hex.
+   * Close the year: famine spells, extinctions, first contacts and milestones.
+   * pop is each civ's people at the end of the year; hexCivPop[hex × civs + civ]
+   * its people per hex. _hexes (each civ's hexes held) is not needed any more.
    */
-  endYear(year, pop, hexes = null, hexCivPop = null) {
+  endYear(year, pop, _hexes = null, hexCivPop = null) {
     if (hexCivPop && this.unmet > 0) this.contacts(year, hexCivPop);
     for (let c = 0; c < this.civs; c++) {
       const p = pop[c];
-      if (hexes && hexes[c] > this.mostHexes[c]) { this.mostHexes[c] = hexes[c]; this.mostHexesYear[c] = year; }
       for (let k = 0; k < MILESTONES.length; k++) {
         if (p < MILESTONES[k] || (this.milestones[c] & (1 << k))) continue;
         this.milestones[c] |= 1 << k;
-        const e = this.evCount;
-        if (this.push(EV_MILESTONE, c, year, year, 0, true)) this.evValue[e] = MILESTONES[k];
+        const e = this.push(EV_MILESTONE, c, year);
+        if (e >= 0) this.evValue[e] = MILESTONES[k];
       }
-      if (p > this.peak[c]) { this.peak[c] = p; this.peakYear[c] = year; this.below[c] = 0; this.declineYear[c] = -1; }
-      else if (p < this.peak[c]) {
-        if (this.declineYear[c] < 0) this.declineYear[c] = year;
-        if (++this.below[c] === PEAK_DECLINE_YEARS) this.logPeak(c);
-      } else this.below[c] = 0;
     }
     this.famines(year, pop);
-  }
-
-  /** The peak just held for PEAK_DECLINE_YEARS: one event per civ, moved to the latest such peak. */
-  logPeak(c) {
-    let k = this.peakEvent[c];
-    if (k < 0) {
-      k = this.evCount;
-      if (!this.push(EV_PEAK, c, 0, 0, 0, true)) return;
-      this.peakEvent[c] = k;
-    }
-    this.evYear[k] = this.peakYear[c];
-    this.evEnd[k] = this.declineYear[c];
-    this.evValue[k] = this.peak[c];
   }
 
   /** First year each pair of civs shares a hex (the lowest such hex). */
@@ -191,9 +203,9 @@ export class Records {
           if (this.met[a * civs + b]) continue;
           this.met[a * civs + b] = 1;
           this.unmet--;
-          const e = this.evCount;
-          if (!this.push(EV_CONTACT, a, year, year, 0, true)) continue;
-          this.evDefender[e] = b;
+          const e = this.push(EV_CONTACT, a, year);
+          if (e < 0) continue;
+          this.evOther[e] = b;
           this.evHex[e] = h;
         }
       }
@@ -206,38 +218,77 @@ export class Records {
       const s = this.starve[c];
       const famine = s >= FAMINE.minDeaths && s * 100 >= pct * this.lastPop[c];
       if (famine) {
-        if (this.famineStart[c] < 0) { this.famineStart[c] = year; this.famineDeaths[c] = 0; }
+        if (this.famineStart[c] < 0) { this.famineStart[c] = year; this.famineDeaths[c] = 0; this.famineStartPop[c] = this.lastPop[c]; }
         this.famineEnd[c] = year;
         this.famineDeaths[c] += s;
       }
       const extinct = this.lastPop[c] > 0 && pop[c] === 0;
       if (this.famineStart[c] >= 0 && (!famine || extinct)) this.closeFamine(c);
-      if (extinct) this.push(EV_EXTINCTION, c, year, year, 0, true);
+      if (extinct) this.push(EV_EXTINCTION, c, year);
       this.starve[c] = 0;
       this.lastPop[c] = pop[c];
     }
   }
 
   closeFamine(c) {
-    this.push(EV_FAMINE, c, this.famineStart[c], this.famineEnd[c], this.famineDeaths[c], false);
-    if (this.famineDeaths[c] > this.worstDeaths) {
+    const deaths = this.famineDeaths[c];
+    if (deaths > this.worstDeaths) {
       this.worstCiv = c;
       this.worstStart = this.famineStart[c];
       this.worstEnd = this.famineEnd[c];
-      this.worstDeaths = this.famineDeaths[c];
+      this.worstDeaths = deaths;
     }
+    if (bigFamine(deaths, this.famineStartPop[c])) this.keepBig(c, this.famineStart[c], this.famineEnd[c], deaths, this.famineStartPop[c]);
     this.famineStart[c] = -1;
   }
 
-  push(type, civ, year, end, deaths, always) {
-    if (!always && this.evCount >= EVENT_CAP - this.civs) { this.evDropped++; return false; }
+  /** Slot a big famine among the deadliest kept; on a tie the one that ended first stays ahead. */
+  keepBig(c, start, end, deaths, startPop) {
+    const F = CHRONICLE.famines;
+    let k = this.bigCount;
+    while (k > 0 && deaths > this.bigDeaths[k - 1]) k--;
+    if (k >= F) return;
+    for (let j = Math.min(this.bigCount, F - 1); j > k; j--) {
+      this.bigCiv[j] = this.bigCiv[j - 1];
+      this.bigStart[j] = this.bigStart[j - 1];
+      this.bigEnd[j] = this.bigEnd[j - 1];
+      this.bigDeaths[j] = this.bigDeaths[j - 1];
+      this.bigStartPop[j] = this.bigStartPop[j - 1];
+    }
+    this.bigCiv[k] = c;
+    this.bigStart[k] = start;
+    this.bigEnd[k] = end;
+    this.bigDeaths[k] = deaths;
+    this.bigStartPop[k] = startPop;
+    if (this.bigCount < F) this.bigCount++;
+  }
+
+  /** Log an event; returns its index, or −1 if the log is somehow full. */
+  push(type, civ, year) {
+    if (this.evCount >= this.evType.length) return -1;
     const k = this.evCount++;
     this.evType[k] = type;
     this.evCiv[k] = civ;
     this.evYear[k] = year;
-    this.evEnd[k] = end;
-    this.evDeaths[k] = deaths;
-    return true;
+    return k;
+  }
+
+  /** Every pair of civs that ever fought, deadliest first (total kills; ties by civ numbers). */
+  wars() {
+    const civs = this.civs;
+    const out = [];
+    for (let a = 0; a < civs; a++) {
+      for (let b = a + 1; b < civs; b++) {
+        const k = a * civs + b;
+        if (this.warFights[k] === 0) continue;
+        const r = b * civs + a;
+        out.push({
+          civs: [a, b], firstYear: this.warFirst[k], lastYear: this.warLast[k], fights: this.warFights[k],
+          won: [this.warWins[k], this.warWins[r]], killed: [this.warKills[k], this.warKills[r]],
+        });
+      }
+    }
+    return out.sort((x, y) => (y.killed[0] + y.killed[1]) - (x.killed[0] + x.killed[1]) || x.civs[0] - y.civs[0] || x.civs[1] - y.civs[1]);
   }
 
   /**
@@ -257,32 +308,32 @@ export class Records {
 
     const events = [];
     for (let k = 0; k < this.evCount; k++) {
-      const e = { type: EVENT_TYPES[this.evType[k]], civ: this.evCiv[k], year: this.evYear[k], endYear: this.evEnd[k], deaths: this.evDeaths[k], ongoing: false };
+      const e = { type: EVENT_TYPES[this.evType[k]], civ: this.evCiv[k], year: this.evYear[k] };
       const t = this.evType[k];
-      if (t === EV_FIGHT) {
+      if (t === EV_CONTACT) {
         const h = this.evHex[k];
-        Object.assign(e, { hex: h, col: h % this.cols, row: Math.floor(h / this.cols), attacker: e.civ, defender: this.evDefender[k], holder: this.evHolder[k], winner: this.evWinner[k] });
-      } else if (t === EV_CONTACT) {
-        const h = this.evHex[k];
-        Object.assign(e, { other: this.evDefender[k], hex: h, col: h % this.cols, row: Math.floor(h / this.cols) });
+        Object.assign(e, { other: this.evOther[k], hex: h, col: h % this.cols, row: Math.floor(h / this.cols) });
       } else if (t === EV_MILESTONE) e.people = this.evValue[k];
-      else if (t === EV_PEAK) { e.people = this.evValue[k]; e.declineYear = this.evEnd[k]; }
+      else if (t === EV_LEVEL) e.level = this.evValue[k];
       events.push(e);
     }
-    // Most hexes ever held: one per civ that held any, at the first year it was reached.
-    for (let c = 0; c < this.civs; c++) {
-      if (this.mostHexes[c] > 0) events.push({ type: 'mostHexes', civ: c, year: this.mostHexesYear[c], endYear: this.mostHexesYear[c], deaths: 0, ongoing: false, hexes: this.mostHexes[c] });
-    }
+    const famine = (civ, startYear, endYear, deaths, startPop, ongoing) => ({ type: 'famine', civ, year: startYear, endYear, deaths, startPop, ongoing });
+    const big = [];
+    for (let k = 0; k < this.bigCount; k++) big.push(famine(this.bigCiv[k], this.bigStart[k], this.bigEnd[k], this.bigDeaths[k], this.bigStartPop[k], false));
     let worst = this.worstCiv < 0 ? null
       : { civ: this.worstCiv, startYear: this.worstStart, endYear: this.worstEnd, deaths: this.worstDeaths, ongoing: false };
     for (let c = 0; c < this.civs; c++) {
       if (this.famineStart[c] < 0) continue;
       const f = { civ: c, startYear: this.famineStart[c], endYear: this.famineEnd[c], deaths: this.famineDeaths[c], ongoing: true };
-      events.push({ type: 'famine', civ: c, year: f.startYear, endYear: f.endYear, deaths: f.deaths, ongoing: true });
       // Ties go to the famine that ended first, so an ongoing one needs strictly more deaths.
       if (!worst || f.deaths > worst.deaths) worst = f;
+      if (!bigFamine(f.deaths, this.famineStartPop[c])) continue;
+      let k = big.length;
+      while (k > 0 && f.deaths > big[k - 1].deaths) k--;
+      big.splice(k, 0, famine(c, f.startYear, f.endYear, f.deaths, this.famineStartPop[c], true));
     }
-    events.sort((a, b) => a.year - b.year || EVENT_ORDER[a.type] - EVENT_ORDER[b.type] || a.civ - b.civ);
+    events.push(...big.slice(0, CHRONICLE.famines));
+    events.sort(byYear);
 
     let most = -1;
     for (let f = 0; f < this.founderDesc.length; f++) if (this.founderDesc[f] > 0 && (most < 0 || this.founderDesc[f] > this.founderDesc[most])) most = f;
@@ -300,8 +351,14 @@ export class Records {
       },
       mostDescendants: most < 0 ? null : { id: this.founderId[most], civ: this.founderCiv[most], descendants: this.founderDesc[most] },
       worstFamine: worst,
+      wars: this.wars(),
       events,
-      eventsDropped: this.evDropped,
+      chronicle: chronicle(events),
     };
   }
+}
+
+/** A famine big enough for the chronicle: deaths at least CHRONICLE.famineShare of the civ's people at its start. */
+function bigFamine(deaths, startPop) {
+  return deaths * 100 >= Math.round(CHRONICLE.famineShare * 100) * startPop;
 }

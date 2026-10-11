@@ -12,7 +12,7 @@
 // hash), per-civ totals (type, births, deaths by cause including war, fights fought
 // and won, civ switches in and out, lifespans, extinction year and cause),
 // each civ's average traits, each civ's level (with the year it reached each level), food security
-// and stockpile, the end-screen records and the history log's events by kind, the end conditions and how the run ended,
+// and stockpile, the end-screen records, wars per pair of civs and the history chronicle's events by kind, the end conditions and how the run ended,
 // the map hash, the final state hash and ticks per second. --json prints the
 // same plus the recorded year-by-year history per civ.
 // --min-tps makes it exit non-zero if throughput is below the floor (used in CI).
@@ -188,7 +188,12 @@ if (args.json) {
     + `${result.fights} fights; ${rec.events.length} events`);
   const kinds = {};
   for (const e of rec.events) kinds[e.type] = (kinds[e.type] ?? 0) + 1;
-  console.log(`  events: ${Object.entries(kinds).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}${rec.eventsDropped ? `; ${rec.eventsDropped} dropped` : ''}`);
+  console.log(`  events: ${Object.entries(kinds).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}; ${rec.chronicle.length} in the chronicle`);
+  for (const w of rec.wars) {
+    const [a, b] = w.civs;
+    console.log(`  war Civ ${a + 1} v Civ ${b + 1}: years ${w.firstYear}-${w.lastYear}, ${w.fights} fights; `
+      + `won ${w.won[0]}/${w.won[1]}, killed ${w.killed[0]}/${w.killed[1]}`);
+  }
   console.log(`  end conditions: ${p.endConditions.length ? p.endConditions.join(', ') : 'sandbox'}`);
   if (stats.finished) console.log(`  ended: ${stats.endReason}; winner: ${result.winner ?? 'none'}`);
   console.log(`map ${result.mapHash}  hash ${result.hash}  generated in ${result.generateMs} ms  ${result.ticksPerSecond} ticks/s`);
