@@ -13,8 +13,9 @@ import { buildReach, migrate } from './migration.js';
 import { CivStats } from './civStats.js';
 import { Records, FAMINE } from './records.js';
 import {
-  DEEP_WATER, TERRAIN_IDS, TERRAIN_NAMES, MOVE_COST, DEFENCE_BONUS, MATERIALS,
+  DEEP_WATER, TERRAIN_IDS, TERRAIN_NAMES, MOVE_COST, DEFENCE_BONUS,
 } from './terrain.js';
+import { MATERIAL_COUNT, MATERIAL_IDS } from './materials.js';
 
 export class Simulation {
   constructor(params) {
@@ -339,8 +340,15 @@ export function describeHex(map, col, row) {
     river: map.river[i] === 1,
     food: map.food[i],
     foodCap: map.foodCap[i],
-    materials: MATERIALS[t],
+    /** Material ids of the hex's deposits, in material order (wood first, spices last). */
+    deposits: depositList(map.deposits[i]),
     moveCost: water ? null : MOVE_COST[t],
     defence: DEFENCE_BONUS[t],
   };
+}
+
+function depositList(bits) {
+  const out = [];
+  for (let m = 0; m < MATERIAL_COUNT; m++) if (bits & (1 << m)) out.push(MATERIAL_IDS[m]);
+  return out;
 }

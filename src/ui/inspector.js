@@ -2,8 +2,9 @@
 
 import { h, formatNumber } from './dom.js';
 import { emblemSvg } from '../render/civStyle.js';
+import { MATERIAL_IDS, MATERIAL_NAMES } from '../sim/materials.js';
 
-const MATERIAL_KIND = { forest: 'wood', hills: 'stone' };
+const materialName = (id) => MATERIAL_NAMES[MATERIAL_IDS.indexOf(id)] ?? id;
 
 /** A civ's emblem as a decorative inline element (no text, so it never changes a row's text). */
 export function emblem(civ, size = 14) {
@@ -55,7 +56,7 @@ export function renderInspector(el, hex, onClose, opts = {}) {
     ['People', peopleText(hex), () => peopleNodes(hex)],
     ['Food', `${formatNumber(hex.food)} / ${formatNumber(hex.foodCap)}`],
     ['Food capacity', formatNumber(hex.foodCap)],
-    ['Materials', hex.materials > 0 ? `${formatNumber(hex.materials)} (${MATERIAL_KIND[hex.terrain]})` : 'None'],
+    ['Deposits', hex.deposits?.length ? hex.deposits.map(materialName).join(', ') : 'None'],
     ['Movement cost', hex.moveCost === null ? 'Impassable' : String(hex.moveCost)],
     ['Defence bonus', hex.defence > 0 ? `+${Math.round(hex.defence * 100)}%` : '0%'],
   ];

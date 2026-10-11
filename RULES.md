@@ -42,22 +42,45 @@ When several hexes tie on a value, the one with the lower index (row × size + c
 
 ### Terrain
 
-| Terrain | Food capacity | Movement cost | Defence bonus | Materials |
-|---|---|---|---|---|
-| Deep water (sea or lake) | 0 | impassable | 0% | 0 |
-| Coast | 50 | 1 | 0% | 0 |
-| Plains | 60 | 1 | 0% | 0 |
-| Forest | 40 | 2 | +25% | 30 (wood) |
-| Hills | 30 | 2 | +50% | 20 (stone) |
-| Mountain | 10 | 3 | +100% | 0 |
-| Desert | 10 | 1.5 | 0% | 0 |
-| Tundra | 15 | 1.5 | 0% | 0 |
+| Terrain | Food capacity | Movement cost | Defence bonus |
+|---|---|---|---|
+| Deep water (sea or lake) | 0 | impassable | 0% |
+| Coast | 50 | 1 | 0% |
+| Plains | 60 | 1 | 0% |
+| Forest | 40 | 2 | +25% |
+| Hills | 30 | 2 | +50% |
+| Mountain | 10 | 3 | +100% |
+| Desert | 10 | 1.5 | 0% |
+| Tundra | 15 | 1.5 | 0% |
 
-- **Rivers** run through land hexes. A river hex keeps its terrain's movement cost, defence bonus and materials (rivers are walkable) and gets +30 food capacity (rivers are fertile).
+- **Rivers** run through land hexes. A river hex keeps its terrain's movement cost and defence bonus (rivers are walkable) and gets +30 food capacity (rivers are fertile).
 - Seas and lakes are impassable.
 - Every hex starts with food equal to its food capacity.
 - Food capacity is in food units; a person eats 1 food a year (see "People").
-- Movement cost limits how far people migrate in a year (see "Migration"). The defence bonus and materials have no effect yet: they are used once fights and levels arrive.
+- Movement cost limits how far people migrate in a year (see "Migration"). The defence bonus has no effect yet: it is used once fights arrive.
+
+### Material deposits
+
+There are 9 materials: wood, stone and clay (common); copper, iron and salt (uncommon); gold, gemstones and spices (exotic). When the map is made, every land hex rolls once for each material: it holds a deposit of that material with the chance below for its terrain. A river hex rolls its terrain's chance and, separately, the river chance; it holds the deposit if either roll succeeds. A hex can hold any number of different materials. Deep water never holds deposits.
+
+Chance a hex holds a deposit (%); a terrain not listed is 0:
+
+| Material | Tier | Coast | Plains | Forest | Hills | Mountain | Desert | Tundra | River |
+|---|---|---|---|---|---|---|---|---|---|
+| Wood | common | 10 | 20 | 95 | 40 | 0 | 0 | 15 | 40 |
+| Stone | common | 15 | 0 | 0 | 70 | 90 | 25 | 30 | 0 |
+| Clay | common | 40 | 30 | 10 | 0 | 0 | 0 | 0 | 70 |
+| Copper | uncommon | 0 | 0 | 0 | 20 | 25 | 8 | 0 | 0 |
+| Iron | uncommon | 0 | 0 | 0 | 15 | 20 | 0 | 10 | 0 |
+| Salt | uncommon | 25 | 0 | 0 | 0 | 0 | 30 | 0 | 0 |
+| Gold | exotic | 0 | 0 | 0 | 2 | 4 | 0 | 0 | 5 |
+| Gemstones | exotic | 0 | 0 | 0 | 0 | 3 | 2 | 0 | 0 |
+| Spices | exotic | 2 | 0 | 0 | 0 | 0 | 3 | 0 | 0 |
+
+- **Every exotic material appears.** If after the rolls the map has no deposit of gold, of gemstones or of spices, that material is rolled again over every land hex (same chances, river hexes rolling both), round after round, until at least one hex holds it. After 1000 rounds without one (practically never), it is placed on the land hex with the best chance for it (lowest index on ties).
+- If no land hex can hold an exotic material at all (for example gemstones on a map with no mountain and no desert, possible with mountains at 0% and desert at 0%), the map has none of it.
+- Deposits are part of the map: the same map settings always give the same deposits. Deposits never run out. They have no effect yet: gathering comes with levels.
+- Tapping a hex lists its deposits (or None).
 
 ### Terrain colours
 
@@ -152,7 +175,7 @@ Each civ has a colour and a shape emblem, chosen by civ number, so civs can be t
 - **Zoomed in**, once a hex is at least 120 pixels across on screen (corner to corner), the hex labels and rings give way to the people themselves: each person is a tiny emblem in their civ's colour, at a fixed spot inside their hex (picked from their id, within 60% of the hex size from its centre).
 - **Idling.** While time runs, each person drawn circles slowly around their spot, at a radius of 10% of the hex size, one lap every 4 to 8 seconds (picked from their id, either way round). Paused, they stop where they are. With the device's reduced-motion setting on, they stay still. This is drawing only and changes nothing in the game.
 - A person who migrates glides from where they were drawn to their spot in the new hex over 0.6 seconds. This is drawing only: in the game they move at once, as "Migration" says.
-- **Tap a hex** to see its terrain, food and its people per civ with each civ's emblem. Zoomed out (people not drawn), the tap also flies the camera to that hex over 0.4 seconds: the hex ends centred in the open map area, zoomed in until a hex is 180 pixels across (less if the view cannot zoom that far, but always at least far enough to show people). Panning, zooming or Fit during the flight stops it. *List people* opens the list of the people in the hex, lowest id first (the first 100, then how many more); tap a row to open that person.
+- **Tap a hex** to see its terrain, food, deposits and its people per civ with each civ's emblem. Zoomed out (people not drawn), the tap also flies the camera to that hex over 0.4 seconds: the hex ends centred in the open map area, zoomed in until a hex is 180 pixels across (less if the view cannot zoom that far, but always at least far enough to show people). Panning, zooming or Fit during the flight stops it. *List people* opens the list of the people in the hex, lowest id first (the first 100, then how many more); tap a row to open that person.
 - **Tap a person** (zoomed in; the nearest person within 22 pixels of the tap) to see their id, civ, age, health, hunger, parent (their id, or none for founders; "died" if the parent is no longer alive) and their living children. Tapping the same person again closes the card. If the person dies while the card is open, it shows "Died" with the last values seen.
 
 ## Map settings
@@ -248,4 +271,4 @@ A scrollable screen that opens when the game ends. Everything on it comes from t
 
 ## Not in the game yet
 
-Land degrading, inherited traits and mutation, civ types, contact and war, materials and levels, boats, god powers, first to Kingdom (comes with levels). See [project/ROADMAP.md](project/ROADMAP.md).
+Land degrading, inherited traits and mutation, civ types, contact and war, gathering materials and levels, boats, god powers, first to Kingdom (comes with levels). See [project/ROADMAP.md](project/ROADMAP.md).

@@ -20,10 +20,7 @@ export const FOOD_CAPACITY = [0, 50, 60, 40, 30, 10, 10, 15];
 export const MOVE_COST = [Infinity, 1, 1, 2, 2, 3, 1.5, 1.5];
 /** Share added to defenders' strength in the hex (0.5 = +50%). */
 export const DEFENCE_BONUS = [0, 0, 0, 0.25, 0.5, 1, 0, 0];
-/** Building materials the hex yields; only forest (wood) and hills (stone). */
-export const MATERIALS = [0, 0, 0, 30, 20, 0, 0, 0];
-
-/** A river adds this much food capacity to the land hex it runs through. Movement cost is unchanged. */
+/** A river adds this much food capacity to the land hex it runs through. Movement cost is unchanged. River deposit chances are in materials.js. */
 export const RIVER_FOOD_BONUS = 30;
 
 export const isWater = (t) => t === DEEP_WATER;
