@@ -14,7 +14,7 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
   3. Keep the rule as it is: levels 4 and 5 stay very rare.
 - Recommendation: 1. It is the smallest change, keeps "food first" in spirit, and makes your 1.0 level ladder reachable.
 - Priority: P1 (suggested; stands unless the owner changes it)
-- Answer:
+- Answer: 2026-10-11 21:10 Greek, in the "Level-2 ceiling" project thread: neither option as written. Headless 10,000-year runs showed the 5% rule is not enough, because the starvation and 1.2-food checks also fail almost every year once the map is full. Agreed fix: food is secure when at most 10% of the civ's people went hungry last year, with no starvation or food-per-person check. Built in that thread's own pull request (with Kingdom borders and hex minimums from land per civ), not by the director. Director: do not build Q-009.
 
 ### Q-010: The hunger and crowding fight triggers almost never fire. Change them?
 - Date: 2026-10-11
