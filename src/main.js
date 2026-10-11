@@ -114,7 +114,7 @@ async function startGame(params) {
   startParams = host.params;
   map = host.map();
   renderLevelGuide(ui.levelGuide, map, startParams.civCount);
-  renderer.setMap(map);
+  renderer.setMap(map, host.stats().civs.map((c) => c.type));
   renderer.setPopulation(host.population(), performance.now());
   camera.setBounds(worldBounds(map.cols, map.rows));
   selected = -1;
@@ -239,6 +239,7 @@ function updatePanels() {
   renderLevels(ui.civLevels, stats);
   renderHudCivs(ui.hudCivs, stats);
   renderStats(ui.stats, stats);
+  if (renderer.setBuildings(host.buildings())) dirty = true;
   // Keep the open card's values current.
   if (selected >= 0) showHexCard();
   else if (person) showPersonCard();
@@ -424,6 +425,14 @@ attachGestures(ui.canvas, {
   onZoom: (f, x, y) => { flight = null; camera.zoomAt(f, x, y); userMovedCamera = true; dirty = true; placeInspector(); },
   onTap: (x, y) => {
     if (!map) return;
+    // A building or wonder is drawn over the people, so a tap on it opens its hex's card.
+    const built = renderer.buildingAt(x, y, camera);
+    if (built >= 0) {
+      if (built === selected) select(-1);
+      else if (!peopleShown(camera.scale)) { select(built, false); flyTo(built); }
+      else select(built);
+      return;
+    }
     // Zoomed in, a tap on a person opens their card (tapping them again closes it).
     const who = renderer.personAt(x, y, camera);
     if (who) {
@@ -498,6 +507,8 @@ window.popsim = {
   report: () => host.report(),
   /** Whether people are drawn one by one at the current zoom. */
   peopleShown: () => renderer.people?.shown ?? false,
+  /** Every building and wonder on the map (SimHost.buildings()). */
+  buildings: () => host.buildings(),
   /** Whether the camera is flying to a tapped hex. */
   flying: () => flight !== null,
 };

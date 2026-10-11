@@ -20,16 +20,20 @@ export const MILESTONES = Object.freeze([100, 500, 1000]);
  * `famines` deadliest such famines are kept.
  */
 export const CHRONICLE = Object.freeze({ lines: 12, famineShare: 0.1, famines: 3 });
-export const EVENT_TYPES = ['famine', 'extinction', 'contact', 'milestone', 'level'];
+export const EVENT_TYPES = ['famine', 'extinction', 'contact', 'milestone', 'level', 'wonder', 'captured'];
+/** Wonder captures logged at most (the rest are only counted). */
+export const CAPTURES_LOGGED = 16;
 const EV_FAMINE = 0;
 const EV_EXTINCTION = 1;
 const EV_CONTACT = 2;
 const EV_MILESTONE = 3;
 const EV_LEVEL = 4;
+const EV_WONDER = 5;
+const EV_CAPTURED = 6;
 /** Order of events in the same year: famines, level-ups (start of the year), first contacts, milestones, extinctions (end of it). */
-const EVENT_ORDER = { famine: 0, level: 1, contact: 2, milestone: 3, extinction: 4 };
+const EVENT_ORDER = { famine: 0, level: 1, wonder: 1, captured: 1, contact: 2, milestone: 3, extinction: 4 };
 /** Which events the chronicle keeps first when there are too many. */
-const IMPORTANCE = { extinction: 0, level: 1, contact: 2, milestone: 3, famine: 4 };
+const IMPORTANCE = { extinction: 0, wonder: 1, level: 1, captured: 2, contact: 2, milestone: 3, famine: 4 };
 const byYear = (a, b) => a.year - b.year || EVENT_ORDER[a.type] - EVENT_ORDER[b.type] || a.civ - b.civ
   || (a.other ?? 0) - (b.other ?? 0) || (a.level ?? 0) - (b.level ?? 0) || (a.people ?? 0) - (b.people ?? 0);
 /** Within a kind: higher levels and milestones, then deadlier famines, then the earlier event. */
@@ -104,11 +108,27 @@ export class Records {
     this.present = new Int32Array(civs);
     this.milestones = new Uint8Array(civs);
     this.levelsLogged = new Uint8Array(civs);
+    this.captures = 0;
   }
 
   /** Every event the log can hold: a first contact per pair; per civ 3 milestones, 4 level-ups (levels 2 to 5) and an extinction. */
   room() {
-    return (this.civs * (this.civs - 1)) / 2 + (MILESTONES.length + 4 + 1) * this.civs;
+    return (this.civs * (this.civs - 1)) / 2 + (MILESTONES.length + 4 + 1) * this.civs + 4 + CAPTURES_LOGGED;
+  }
+
+  /**
+   * A buildings event (buildings.js): a finished wonder ('wonder') and the first
+   * CAPTURES_LOGGED captures ('captured', other = the civ it was taken from, −1 if
+   * abandoned) are logged; value is the era.
+   */
+  building(kind, c, era, year, other) {
+    if (kind === 'wonder') {
+      const e = this.push(EV_WONDER, c, year);
+      if (e >= 0) this.evValue[e] = era;
+    } else if (kind === 'captured' && this.captures++ < CAPTURES_LOGGED) {
+      const e = this.push(EV_CAPTURED, c, year);
+      if (e >= 0) { this.evValue[e] = era; this.evOther[e] = other < 0 ? 255 : other; }
+    }
   }
 
   /**
@@ -315,6 +335,8 @@ export class Records {
         Object.assign(e, { other: this.evOther[k], hex: h, col: h % this.cols, row: Math.floor(h / this.cols) });
       } else if (t === EV_MILESTONE) e.people = this.evValue[k];
       else if (t === EV_LEVEL) e.level = this.evValue[k];
+      else if (t === EV_WONDER) e.era = this.evValue[k];
+      else if (t === EV_CAPTURED) Object.assign(e, { era: this.evValue[k], other: this.evOther[k] === 255 ? null : this.evOther[k] });
       events.push(e);
     }
     const famine = (civ, startYear, endYear, deaths, startPop, ongoing) => ({ type: 'famine', civ, year: startYear, endYear, deaths, startPop, ongoing });

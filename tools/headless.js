@@ -12,7 +12,7 @@
 // hash), per-civ totals (type, births, deaths by cause including war, fights fought
 // and won, civ switches in and out, lifespans, extinction year and cause),
 // each civ's average traits, each civ's level (with the year it reached each level), food security
-// and stockpile, the end-screen records, wars per pair of civs and the history chronicle's events by kind, the end conditions and how the run ended,
+// and stockpile, each civ's era buildings and wonder chase, who holds each wonder, the end-screen records, wars per pair of civs and the history chronicle's events by kind, the end conditions and how the run ended,
 // the map hash, the final state hash and ticks per second. --json prints the
 // same plus the recorded year-by-year history per civ.
 // --min-tps makes it exit non-zero if throughput is below the floor (used in CI).
@@ -22,6 +22,7 @@ import { DEFAULT_PARAMS, presetParams } from '../src/sim/params.js';
 import { TERRAIN_NAMES } from '../src/sim/terrain.js';
 import { MATERIAL_IDS } from '../src/sim/materials.js';
 import { LEVEL_NAMES } from '../src/sim/levels.js';
+import { WONDERS } from '../src/sim/buildings.js';
 
 function parseArgs(argv) {
   const args = {};
@@ -122,11 +123,31 @@ const result = {
   extinctions: stats.civs.filter((c) => c.extinctYear !== null).map((c) => ({ civ: c.name, year: c.extinctYear, cause: c.extinctCause })),
   fights: stats.civs.reduce((s, c) => s + c.fights, 0) / 2,
   samples,
+  wonders: wondersJson(sim.buildings()),
   records: sim.report().records,
   history: historyJson(sim.history(), civNames),
 };
 
 function civNamesOf(k) { return `Civ ${k + 1}`; }
+
+/** Each era's wonder: who finished it and when, who holds it now, and how often it changed hands. */
+function wondersJson(list) {
+  return WONDERS.map((w, e) => {
+    const done = list.find((b) => b.kind === 'wonder' && b.era === e + 1 && b.year !== undefined);
+    const building = list.filter((b) => b.kind === 'wonder' && b.era === e + 1 && b.year === undefined)
+      .map((b) => ({ civ: civNamesOf(b.civ), work: b.work, years: b.years, col: b.col, row: b.row }));
+    return {
+      era: e + 1, id: w.id, name: w.name,
+      builder: done ? civNamesOf(done.builder) : null,
+      year: done ? done.year : null,
+      owner: done && done.civ >= 0 ? civNamesOf(done.civ) : null,
+      status: done ? done.status : building.length ? 'building' : 'free',
+      captures: done ? done.captures : 0,
+      at: done ? { col: done.col, row: done.row } : null,
+      building,
+    };
+  });
+}
 
 /** Recorded history as plain arrays: one entry per row (one row per year unless the run outgrew the history). */
 function historyJson(hist, names) {
@@ -174,6 +195,24 @@ if (args.json) {
     const next = c.next ? `; next ${LEVEL_NAMES[c.next.level - 1]}: ${c.yearsAtLevel}/${c.next.years} years, ${c.pop}/${c.next.pop} people, `
       + `${c.hexes}/${c.next.hexes} hexes` : '';
     console.log(`  ${c.name} level ${c.level} ${c.levelName} (reached ${reached}); food ${c.foodSecure ? 'secure' : 'not secure'}${next}; stockpile ${stock}`);
+  }
+  const bStatus = (bd) => (bd.status === 'building' ? `building ${bd.work}/${bd.years}` : bd.status === 'none' ? 'not built' : bd.status)
+    + (bd.destroyed ? ` (lost ${bd.destroyed}×)` : '');
+  for (const c of result.civs) {
+    if (!c.buildings) continue;
+    const eras = c.buildings.eras.map((e) => `${e.era} ${e.building.name} ${bStatus(e.building)}`).join('; ');
+    const chase = c.buildings.eras.filter((e) => e.wonder.status !== 'free' && e.wonder.status !== 'taken')
+      .map((e) => `${e.wonder.name} ${e.wonder.status === 'building' ? `building ${e.wonder.work}/${e.wonder.years}` : e.wonder.status}`);
+    const wait = c.next?.waitingForWonder ? ' (level waits for its wonder)' : '';
+    console.log(`  ${c.name} buildings: ${eras}${chase.length ? `; wonders: ${chase.join(', ')}` : ''}${wait}`);
+    if (c.buildings.bonusText.length) console.log(`    bonuses: ${c.buildings.bonusText.join('; ')}`);
+  }
+  console.log('  wonders:');
+  for (const w of result.wonders) {
+    const by = w.building.length ? `; building: ${w.building.map((b) => `${b.civ} ${b.work}/${b.years}`).join(', ')}` : '';
+    const done = w.builder === null ? 'not built'
+      : `built by ${w.builder} in year ${w.year} at (${w.at.col}, ${w.at.row}); ${w.owner ? `held by ${w.owner}` : 'abandoned'}; captured ${w.captures}×`;
+    console.log(`    ${w.era} ${w.name}: ${done}${by}`);
   }
   if (result.firstKingdom) console.log(`  first Kingdom: Civ ${result.firstKingdom.civ + 1} in year ${result.firstKingdom.year}`);
   console.log(result.extinctions.length

@@ -147,6 +147,7 @@ export class HowScreen {
           h('span', { class: 'rung' }, String(l.level)),
           h('div', {}, h('strong', {}, l.name), h('p', {}, l.does), l.needs ? h('p', { class: 'muted' }, `Needs ${l.needs}`) : null)))),
         levelsFigure(stats, year),
+        s.buildings ? buildingsBlock(s.buildings) : null,
       ],
       end: () => [endFigure(report, year)],
     };
@@ -291,6 +292,26 @@ function historyFigure(report) {
       war ? h('li', {}, h('span', { class: 'log-year' }, warYears), emblem(war.civs[0], 12), h('span', {}, warText(war))) : null),
     h('figcaption', {}, 'This world\'s first meeting and its deadliest war, as the end screen shows them.'));
 }
+
+/** Buildings and wonders (howText.js buildingsSection): the rules, each era's costs and wonder, and every type's four buildings. */
+function buildingsBlock(b) {
+  return h('div', { class: 'how-sub', 'data-part': b.id },
+    h('p', { class: 'how-kicker' }, b.kicker),
+    h('h3', {}, b.title),
+    ...b.paras.map((p) => h('p', {}, p)),
+    h('ol', { class: 'how-ladder how-eras' }, b.eras.map((e) => h('li', { 'data-era': e.era },
+      h('span', { class: 'rung' }, String(e.era)),
+      h('div', {},
+        h('strong', {}, `${e.level} building`),
+        h('p', {}, `${e.cost}; ${e.years} years of work with ${e.perHex} people in its hex.`),
+        h('p', { class: 'how-wonder' }, h('strong', {}, e.wonder.name), ` (wonder): ${e.wonder.cost}; ${e.wonder.years} years. ${cap(e.wonder.bonuses.join(', '))}.`))))),
+    h('ul', { class: 'how-types how-buildings' }, b.types.map((t) => h('li', { 'data-type': t.type },
+      h('h4', {}, t.name),
+      h('ol', {}, t.buildings.map((x) => h('li', { 'data-building': x.id }, h('strong', {}, x.name), `: ${x.bonuses.join(', ')}`)))))),
+    ...b.after.map((p) => h('p', {}, p)));
+}
+
+const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
 
 /** The in-game Levels panel for the first two civs. */
 function levelsFigure(stats, year) {

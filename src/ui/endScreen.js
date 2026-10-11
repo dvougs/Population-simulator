@@ -12,12 +12,14 @@ import { TRAITS, TRAIT_NAMES } from '../sim/traits.js';
 import { MATERIAL_IDS, MATERIAL_NAMES } from '../sim/materials.js';
 import { LEVEL_NAMES, MAX_LEVEL } from '../sim/levels.js';
 import { amount } from './levelsPanel.js';
+import { WONDERS } from '../sim/buildings.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 /** Chart points per civ at most; longer histories are sampled evenly (the last row always kept). */
 const CHART_POINTS = 400;
 
 const civName = (c) => `Civ ${c + 1}`;
+const wonderName = (era) => WONDERS[era - 1]?.name ?? `era ${era} wonder`;
 const civLabel = (c) => h('span', { class: 'civ-chip' }, emblem(c), civName(c));
 const card = (id, title, ...body) => h('section', { class: 'card', id }, h('h2', {}, title), ...body);
 /** A card that opens on tap: the summary row is the card's title. */
@@ -306,6 +308,12 @@ export function eventText(e) {
   if (e.type === 'contact') return `${civName(e.civ)} met ${civName(e.other)} at (${e.col}, ${e.row})`;
   if (e.type === 'milestone') return `${civName(e.civ)} passed ${formatNumber(e.people)} people`;
   if (e.type === 'level') return `${civName(e.civ)} reached level ${e.level}, ${LEVEL_NAMES[e.level - 1]}`;
+  if (e.type === 'wonder') return `${civName(e.civ)} finished the ${wonderName(e.era)}`;
+  if (e.type === 'captured') {
+    return e.other === null || e.other === undefined
+      ? `${civName(e.civ)} took over the abandoned ${wonderName(e.era)}`
+      : `${civName(e.civ)} captured the ${wonderName(e.era)} from ${civName(e.other)}`;
+  }
   const share = e.startPop > 0 ? ` (${pct(e.deaths, e.startPop)} of its people)` : '';
   return `Famine in ${civName(e.civ)}${e.ongoing ? ' (still going)' : ''}: ${formatNumber(e.deaths)} starved${share}${e.endYear > e.year ? ` by year ${e.endYear}` : ''}`;
 }

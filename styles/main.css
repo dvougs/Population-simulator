@@ -352,6 +352,17 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 6px 
 .how-ladder strong { font-size: 1.05rem; }
 .how-ladder p { margin: 2px 0; }
 .how-ladder .muted { font-size: 0.88rem; }
+/* Buildings and wonders, inside the levels section (howScreen.js buildingsBlock). */
+.how-sub { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line); }
+.how-sub h3 { margin: 8px 0 8px; font-size: clamp(1.2rem, 4vw, 1.45rem); line-height: 1.2; font-weight: 800; letter-spacing: -0.01em; }
+.how-eras .rung { background: linear-gradient(135deg, #ffd27a, #f2a93b); box-shadow: 0 0 16px rgba(242, 193, 78, 0.35); }
+.how-eras li:not(:last-child)::after { background: linear-gradient(#f2c14e, rgba(242, 193, 78, 0.2)); }
+.how-wonder { color: var(--text-dim); font-size: 0.92rem; }
+.how-wonder strong { color: #f2c14e; font-size: 1rem; }
+.how-buildings > li > ol { margin: 4px 0 0; padding-left: 1.3em; display: grid; gap: 4px; font-size: 0.9rem; color: var(--text-dim); }
+.how-buildings > li > ol > li { padding: 0; border: 0; border-radius: 0; background: none; transition: none; }
+.how-buildings > li > ol strong { color: var(--text); }
+@media (hover: hover) { .how-buildings > li > ol > li:hover { transform: none; background: none; } }
 .how-panel .levels { padding: 10px; border-radius: 16px; background: rgba(8, 11, 16, 0.7); border: 1px solid var(--line); }
 .how-panel .card { background: var(--surface-2); }
 .how-outro { text-align: center; padding: 30px 18px; background: radial-gradient(120% 120% at 50% 0%, rgba(95, 179, 255, 0.22), transparent 60%),
@@ -508,6 +519,16 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 6px 
 .inspector dd .emblem { margin-right: 3px; }
 .inspector h3 .emblem { vertical-align: -1px; }
 .people-toggle { width: 100%; margin-top: 8px; }
+/* Building and wonder cards at the top of the hex card (inspector.js). */
+.building-cards { display: grid; gap: 6px; margin-bottom: 8px; }
+.building-card { background: var(--surface-2); border-radius: 10px; border-left: 4px solid var(--text-dim); padding: 6px 8px; }
+.building-card.wonder { box-shadow: inset 0 0 0 1px rgba(242, 193, 78, 0.55); }
+.building-card[data-status="building"] { background: repeating-linear-gradient(135deg, var(--surface-2) 0 10px, #2a3240 10px 14px); }
+.building-card h4 { margin: 0; font-size: 0.95rem; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.building-what { margin: 1px 0 4px; color: var(--text-dim); font-size: 0.82rem; }
+.wonder-tag { color: #f2c14e; border-color: #8a6d2a; }
+.building-bonus-head { margin: 4px 0 0; color: var(--text-dim); font-size: 0.82rem; }
+.building-bonuses { margin: 2px 0 0; padding-left: 1.1em; font-size: 0.85rem; }
 .inspector .btn.small { min-height: var(--tap); }
 .people-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 2px;
   max-height: min(240px, 35vh); overflow-y: auto; overscroll-behavior: contain; }
@@ -566,6 +587,20 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 6px 
 .p-bar > span { display: block; height: 100%; background: var(--accent); }
 .progress li.done .p-bar > span { background: #6fcf76; }
 .p-num { text-align: right; white-space: nowrap; }
+/* Each civ's era buildings, wonder chase and bonuses (levelsPanel.js). */
+.level-buildings { margin-top: 6px; }
+.b-head { margin: 4px 0 2px; color: var(--text-dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.b-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.b-list li { display: grid; grid-template-columns: 1fr auto; column-gap: 8px; }
+.b-list li.later { opacity: 0.55; }
+.b-list .b-name { font-weight: 600; min-width: 0; }
+.b-list .b-status { text-align: right; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.b-list li[data-status="standing"] .b-status, .b-list li[data-status="owned"] .b-status { color: #9fe0a4; }
+.b-list li[data-status="building"] .b-status, .b-list li[data-status="gathering"] .b-status { color: var(--warm); }
+.b-list small { grid-column: 1 / -1; color: var(--text-dim); font-size: 0.78rem; }
+.b-list.wonders .b-name { color: #f2c14e; }
+.b-bonus { margin: 4px 0 0; overflow-wrap: anywhere; }
+.levels .wonder-wait { color: var(--warm); }
 .stock { margin: 4px 0 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .level-guide { margin: 0 0 8px; border-radius: 10px; background: var(--surface-2); font-size: 0.85rem; }
 .level-guide summary { min-height: var(--tap); display: flex; align-items: center; padding: 0 10px; cursor: pointer; font-weight: 650; touch-action: manipulation; }

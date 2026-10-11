@@ -19,6 +19,7 @@
 import { MATERIAL_COUNT, MATERIAL_TIER, MATERIAL_IDS } from './materials.js';
 import { PLAINS, DEEP_WATER } from './terrain.js';
 import { COOPERATION } from './traits.js';
+import { Buildings, ERAS, WONDERS, reduce } from './buildings.js';
 
 export const LEVEL_NAMES = Object.freeze(['Foragers', 'Farmers', 'Builders', 'Organised', 'Kingdom']);
 export const MAX_LEVEL = 5;
@@ -87,6 +88,7 @@ export const LEVEL_EFFECTS = Object.freeze({
 
 const MATERIAL_YIELD = MATERIAL_TIER.map((t) => GATHER.yield[t]);
 const MATERIAL_CAP = MATERIAL_TIER.map((t) => GATHER.cap[t]);
+const MATERIAL_RARE = MATERIAL_TIER.map((t) => (t === 'common' ? 0 : 1));
 
 /**
  * Hexes and people needed to reach `level` (2 to 5) on a map with `land` land
@@ -198,16 +200,82 @@ export class Levels {
      */
     this.inside = new Int8Array(n).fill(-1);
     this.hexLevel = new Uint8Array(n);
+    /** Each civ's era buildings and the wonders (buildings.js); levelling needs the era's building. */
+    this.buildings = new Buildings(map, types);
+    /** What each civ gathers for, in spending order (buildings.js "Gathering order"): target[civ × MATERIAL_COUNT + material]. */
+    this.target = new Float64Array(civs * MATERIAL_COUNT);
+    this.later = new Float64Array(civs * MATERIAL_COUNT);
+    this.costScratch = new Float64Array(MATERIAL_COUNT);
+    /** Per-civ effects of buildings and wonders, read by eating, contact and capacities. */
+    this.hungerMul = new Float64Array(civs).fill(1);
     this.setEffects();
+    for (let c = 0; c < civs; c++) this.targets(c);
+  }
+
+  /** People per hex the step up from level `level` asks for (work on that era's building and wonder needs as many). */
+  perHexFor(level) { return REQUIREMENTS[level - 1]?.perHex ?? 0; }
+
+  /** Whole-percent factor (100 = none) of civ c's hex and people minimums (Road Network). */
+  landPct(c) { return 100 - Math.round(this.buildings.eff.land[c] * 100); }
+
+  /** Hexes civ c needs to reach `level`, after its bonuses (rounded up, at least 1). */
+  minHexesFor(c, level) {
+    if (level <= 1) return 0;
+    return Math.max(1, reduce(this.minHex[level], this.landPct(c)));
+  }
+
+  /** People civ c needs to reach (and keep) `level`, after its bonuses. */
+  minPopFor(c, level) {
+    if (level <= 1) return 0;
+    return reduce(this.minPeople[level], this.landPct(c));
+  }
+
+  /** Years civ c needs at its level `level`, after its bonuses (rounded up). */
+  yearsFor(c, level) {
+    return reduce(this.needYears[c * 6 + level], 100 - Math.round(this.buildings.eff.years[c] * 100));
+  }
+
+  /** Material m civ c spends to leave `level`, after its bonuses. */
+  levelCost(c, level, m) {
+    return reduce(this.needMat[(c * 6 + level) * MATERIAL_COUNT + m], this.buildings.costPct(c));
+  }
+
+  /**
+   * What civ c gathers for, in spending order: first its era building (unless it is
+   * standing or being built), then the era's wonder if it is committed and has not
+   * started it, then the next level. target: the first of those still to be paid
+   * for; later: all of them plus every later level and its building.
+   */
+  targets(c) {
+    const L = this.level[c];
+    const bd = this.buildings;
+    const base = c * MATERIAL_COUNT;
+    const { target, later } = this;
+    const cost = this.costScratch;
+    for (let m = 0; m < MATERIAL_COUNT; m++) { target[base + m] = 0; later[base + m] = 0; }
+    if (L >= MAX_LEVEL) return;
+    let first = true;
+    const take = (list) => {
+      for (let m = 0; m < MATERIAL_COUNT; m++) { later[base + m] += list[m]; if (first) target[base + m] = list[m]; }
+      first = false;
+    };
+    for (let l = L; l < MAX_LEVEL; l++) {
+      if (l <= ERAS && bd.state[c * ERAS + l - 1] === 0) take(bd.buildingCost(c, l, cost));
+      if (l === L && bd.waitingForWonder(c, L)) take(WONDERS[L - 1].materials);
+      for (let m = 0; m < MATERIAL_COUNT; m++) cost[m] = this.levelCost(c, l, m);
+      take(cost);
+    }
   }
 
   setEffects() {
     const e = LEVEL_EFFECTS;
+    const eff = this.buildings.eff;
     for (let c = 0; c < this.civs; c++) {
       const L = this.level[c];
-      this.birthBonus[c] = e.birthPerLevel * (L - 1);
+      this.birthBonus[c] = e.birthPerLevel * (L - 1) + eff.birth[c];
       this.shelter[c] = L >= e.shelterLevel ? e.shelterFactor : 1;
-      this.oldAgeDelay[c] = L >= MAX_LEVEL ? e.oldAgeDelay : 0;
+      this.hungerMul[c] = 1 - eff.hunger[c];
+      this.oldAgeDelay[c] = (L >= MAX_LEVEL ? e.oldAgeDelay : 0) + eff.oldAge[c];
       this.boats[c] = L >= e.boatLevel ? 1 : 0;
     }
   }
@@ -218,8 +286,8 @@ export class Levels {
       const L = this.level[c];
       let mask = 0;
       if (L < MAX_LEVEL) {
-        const b = (c * 6 + L) * MATERIAL_COUNT;
-        for (let m = 0; m < MATERIAL_COUNT; m++) if (this.stock[c * MATERIAL_COUNT + m] < this.needMat[b + m]) mask |= 1 << m;
+        const b = c * MATERIAL_COUNT;
+        for (let m = 0; m < MATERIAL_COUNT; m++) if (this.stock[b + m] < this.target[b + m]) mask |= 1 << m;
       }
       out[c] = mask;
     }
@@ -236,7 +304,7 @@ export class Levels {
    * year, fightWinner last year's winner per hex (−1 for none).
    * onLevel(civ, from, to, year), onSwitch(from, to) report changes. Returns true if a civ became the first Kingdom.
    */
-  year(people, map, year, cnt, fightWinner, onLevel, onSwitch) {
+  year(people, map, year, cnt, fightWinner, onLevel, onSwitch, hostile = null, beats = null, onBuild = null) {
     const civs = this.civs;
     const n = map.count;
     const { pop, stock } = this;
@@ -261,34 +329,29 @@ export class Levels {
       this.secure[c] = this.civPop[c] > 0 && this.hungry[c] * 100 <= GATHER.secureHungryPct * this.civPop[c] ? 1 : 0;
       this.nextMask[c] = 0;
       this.laterMask[c] = 0;
+      this.targets(c);
       if (!this.secure[c] || this.level[c] >= MAX_LEVEL) continue;
-      const L = this.level[c];
       for (let m = 0; m < MATERIAL_COUNT; m++) {
         const have = stock[c * MATERIAL_COUNT + m];
-        let later = 0;
-        for (let l = L; l < MAX_LEVEL; l++) {
-          const need = this.needMat[(c * 6 + l) * MATERIAL_COUNT + m];
-          later += need;
-          if (l === L && have < need) this.nextMask[c] |= 1 << m;
-        }
-        if (have < later) this.laterMask[c] |= 1 << m;
+        if (have < this.target[c * MATERIAL_COUNT + m]) this.nextMask[c] |= 1 << m;
+        if (have < this.later[c * MATERIAL_COUNT + m]) this.laterMask[c] |= 1 << m;
       }
     }
 
     this.gather(people, map, fightWinner);
+    this.buildings.year(this, cnt, year, hostile ?? this.noMask(), beats ?? this.noMask(), onBuild);
     let kingdom = false;
     for (let c = 0; c < civs; c++) {
       if (this.civPop[c] === 0) continue;
       this.yearsAt[c]++;
       const L = this.level[c];
       if (L < MAX_LEVEL && this.canLevel(c)) {
-        const b = (c * 6 + L) * MATERIAL_COUNT;
-        for (let m = 0; m < MATERIAL_COUNT; m++) stock[c * MATERIAL_COUNT + m] -= this.needMat[b + m];
+        for (let m = 0; m < MATERIAL_COUNT; m++) stock[c * MATERIAL_COUNT + m] -= this.levelCost(c, L, m);
         this.setLevel(c, L + 1, year, onLevel);
         if (L + 1 === MAX_LEVEL && this.kingdomCiv < 0) kingdom = true;
         continue;
       }
-      if (L > 1 && this.civPop[c] < this.minPop(L)) {
+      if (L > 1 && this.civPop[c] < this.minPopFor(c, L)) {
         if (++this.belowYears[c] >= LEVEL_EFFECTS.fallBackYears) this.setLevel(c, L - 1, year, onLevel);
       } else this.belowYears[c] = 0;
     }
@@ -303,6 +366,8 @@ export class Levels {
       this.kingdomYear = year;
     }
     this.setEffects();
+    // Spending this year may have moved what each civ gathers for (read by migration).
+    for (let c = 0; c < civs; c++) this.targets(c);
     this.enclose(map);
     this.absorb(people, onSwitch);
     this.capacities(map);
@@ -311,11 +376,17 @@ export class Levels {
 
   canLevel(c) {
     const L = this.level[c];
-    if (this.yearsAt[c] < this.needYears[c * 6 + L]) return false;
-    if (this.civPop[c] < this.minPop(L + 1) || this.civHexes[c] < this.minHexes(L + 1)) return false;
-    const b = (c * 6 + L) * MATERIAL_COUNT;
-    for (let m = 0; m < MATERIAL_COUNT; m++) if (this.stock[c * MATERIAL_COUNT + m] < this.needMat[b + m]) return false;
+    if (this.yearsAt[c] < this.yearsFor(c, L)) return false;
+    if (this.civPop[c] < this.minPopFor(c, L + 1) || this.civHexes[c] < this.minHexesFor(c, L + 1)) return false;
+    // The era's building must stand, and a civ going for the era's wonder starts it first.
+    if (L <= ERAS && (!this.buildings.standing(c, L) || this.buildings.waitingForWonder(c, L))) return false;
+    for (let m = 0; m < MATERIAL_COUNT; m++) if (this.stock[c * MATERIAL_COUNT + m] < this.levelCost(c, L, m)) return false;
     return true;
+  }
+
+  noMask() {
+    if (!this.zeroMask) this.zeroMask = new Int32Array(this.civs);
+    return this.zeroMask;
   }
 
   setLevel(c, to, year, onLevel) {
@@ -361,12 +432,13 @@ export class Levels {
         let mask = dep & this.nextMask[c];
         if (!mask) mask = dep & this.laterMask[c];
         if (!mask || effort[b0 + c] === 0) continue;
-        const g = (GATHER.gatherShare * effort[b0 + c] * this.gatherPct[c]) / 100;
+        const g = (GATHER.gatherShare * effort[b0 + c] * this.gatherPct[c] * (1 + this.buildings.eff.gather[c])) / 100;
+        const rare = 1 + this.buildings.eff.gatherRare[c];
         let k = 0;
         for (let m = 0; m < MATERIAL_COUNT; m++) if (mask & (1 << m)) k++;
         for (let m = 0; m < MATERIAL_COUNT; m++) {
           if (!(mask & (1 << m))) continue;
-          raw[m] += (MATERIAL_YIELD[m] * g) / k;
+          raw[m] += (MATERIAL_YIELD[m] * g * (MATERIAL_RARE[m] ? rare : 1)) / k;
           heads[m] += cnt[b0 + c];
         }
         gatherMask[b0 + c] = mask;
@@ -450,19 +522,30 @@ export class Levels {
   capacities(map) {
     const civs = this.civs;
     let top = 1;
-    for (let c = 0; c < civs; c++) if (this.level[c] > top) top = this.level[c];
-    // Nothing to do while every civ is at level 1 and no hex was ever raised.
-    if (top === 1 && !this.raised) return;
+    let fed = false;
+    const bd = this.buildings;
+    for (let c = 0; c < civs; c++) {
+      if (this.level[c] > top) top = this.level[c];
+      if (bd.eff.food[c] > 0 || bd.eff.foodHarsh[c] > 0) fed = true;
+    }
+    // Nothing to do while every civ is at level 1 with no food bonus and no hex was ever raised.
+    if (top === 1 && !fed && !this.raised) return;
     this.raised = true;
     const { foodCap, food, terrain, river } = map;
     for (let h = 0; h < map.count; h++) {
       let L = 1;
+      let extra = 0;
       if (this.pop[h] > 0) {
         const b0 = h * civs;
-        for (let c = 0; c < civs; c++) if (this.cnt[b0 + c] > 0 && this.level[c] > L) L = this.level[c];
+        for (let c = 0; c < civs; c++) {
+          if (this.cnt[b0 + c] === 0) continue;
+          if (this.level[c] > L) L = this.level[c];
+          // Building and wonder food bonuses: the best of the civs living here.
+          if (fed) { const x = bd.foodShare(c, terrain[h]); if (x > extra) extra = x; }
+        }
       }
       this.hexLevel[h] = L;
-      const cap = this.baseCap[h] * capacityFactor(L, terrain[h], river[h]);
+      const cap = this.baseCap[h] * (capacityFactor(L, terrain[h], river[h]) + extra);
       foodCap[h] = cap;
       if (food[h] > foodCap[h]) food[h] = foodCap[h];
     }
@@ -471,7 +554,6 @@ export class Levels {
   /** Plain data for civ c: level, stockpile and progress towards the next level. */
   summary(c) {
     const L = this.level[c];
-    const t = this.types[c];
     const stockpile = {};
     const out = {
       level: L,
@@ -479,23 +561,28 @@ export class Levels {
       foodSecure: this.secure[c] === 1,
       yearsAtLevel: this.yearsAt[c],
       yearsBelowMinimum: this.belowYears[c],
-      minPop: this.minPop(L),
+      minPop: this.minPopFor(c, L),
       stockpile,
       reached: Array.from({ length: MAX_LEVEL }, (_, k) => (this.reached[c * 6 + k + 1] >= 0 ? this.reached[c * 6 + k + 1] : null)),
       next: null,
     };
     for (let m = 0; m < MATERIAL_COUNT; m++) stockpile[MATERIAL_IDS[m]] = this.stock[c * MATERIAL_COUNT + m];
     if (L < MAX_LEVEL) {
-      const need = Object.fromEntries(MATERIAL_IDS.map((id, m) => [id, materialsNeeded(L, t)[m]]));
+      const need = Object.fromEntries(MATERIAL_IDS.map((id, m) => [id, this.levelCost(c, L, m)]));
       out.next = {
         level: L + 1,
         levelName: LEVEL_NAMES[L],
-        years: yearsNeeded(L, t),
-        pop: this.minPop(L + 1),
-        hexes: this.minHexes(L + 1),
+        years: this.yearsFor(c, L),
+        pop: this.minPopFor(c, L + 1),
+        hexes: this.minHexesFor(c, L + 1),
         materials: need,
+        /** The era building that must stand first (null for none), and whether the civ waits to start the era's wonder. */
+        building: L <= ERAS ? this.buildings.summary(c).eras[L - 1].building.name : null,
+        buildingStanding: L <= ERAS ? this.buildings.standing(c, L) : true,
+        waitingForWonder: this.buildings.waitingForWonder(c, L),
       };
     }
+    out.buildings = this.buildings.summary(c);
     return out;
   }
 }

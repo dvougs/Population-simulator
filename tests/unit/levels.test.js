@@ -14,7 +14,7 @@ import { People } from '../../src/sim/people.js';
 import { Simulation } from '../../src/sim/simulation.js';
 import { PLAINS, FOREST, DESERT, HILLS, DEEP_WATER, MOUNTAIN } from '../../src/sim/terrain.js';
 import { COOPERATION } from '../../src/sim/traits.js';
-import { makeMap } from './helpers.js';
+import { makeMap, standBuilding } from './helpers.js';
 
 const RULES = readFileSync(new URL('../../RULES.md', import.meta.url), 'utf8');
 const near = (got, want, eps = 1e-9) => assert.ok(Math.abs(got - want) <= eps, `${got} vs ${want}`);
@@ -162,6 +162,11 @@ function step(w, { year = 1, fightWinner = null, hungry = null } = {}) {
   ev.cnt = cnt;
   return ev;
 }
+/** Civ c's era building (default: its current level's) is standing in the hex of its first person. */
+function stand(w, c, era = w.levels.level[c]) {
+  for (let i = 0; i < w.people.high; i++) if (w.people.alive[i] && w.people.civ[i] === c) { standBuilding(w.levels, c, era, w.people.hex[i]); return; }
+  throw new Error('civ has nobody');
+}
 const stockOf = (w, c, m) => w.levels.stock[c * MATERIAL_COUNT + m];
 const setStock = (w, c, mats) => { for (const [m, v] of Object.entries(mats)) w.levels.stock[c * MATERIAL_COUNT + Number(m)] = v; };
 /** `hexes` hexes from hex 11 on with `total` people spread over them (the first ones get the extra). */
@@ -181,6 +186,7 @@ test('RULES.md "Levelling up" 1 to 2: level up exactly when years, people, hexes
     const w = world(['expansionist'], l2Land());
     setStock(w, 0, { [WOOD]: 85, [STONE]: 30, [CLAY]: 31.5 });
     w.levels.yearsAt[0] = 149; // this year makes 150
+    stand(w, 0);
     return w;
   };
   let w = ready();
@@ -213,6 +219,7 @@ test('RULES.md "Levelling up": 14 hexes is one short of 15; the civ must hold th
   const w = world(['expansionist'], spread(14, 150));
   setStock(w, 0, { [WOOD]: 80, [STONE]: 30, [CLAY]: 30 });
   w.levels.yearsAt[0] = 500;
+  stand(w, 0);
   const ev = step(w);
   assert.equal(ev.levels.length, 0, '150 people but 14 hexes');
   w.people.hex[0] = 25;
@@ -223,6 +230,7 @@ test('RULES.md "Levelling up": only one level a year, however much the civ has',
   const w = world(['expansionist'], spread(80, 1600)); // enough land and people for Kingdom (75 hexes, 1200 people)
   setStock(w, 0, { [WOOD]: 1000, [STONE]: 1000, [CLAY]: 1000, [COPPER]: 100, [IRON]: 1000, [SALT]: 100, [GOLD]: 100, [GEMSTONES]: 100, [SPICES]: 100 });
   w.levels.yearsAt[0] = 5000;
+  stand(w, 0);
   step(w, { year: 1 });
   assert.equal(w.levels.level[0], 2);
 });
@@ -233,6 +241,7 @@ test('RULES.md "Levelling up": 20 x 20 all-land map, one civ: level 2 needs 60 h
     const w = world(['aggressive'], groups(hexes, each), { size: 20 });
     setStock(w, 0, { [WOOD]: 80, [STONE]: 30, [CLAY]: 30 });
     w.levels.yearsAt[0] = 149;
+    stand(w, 0);
     return w;
   };
   assert.equal(step(ready(60, 10)).levels.length, 1, '600 people on 60 hexes');
@@ -247,6 +256,7 @@ test('RULES.md "Levelling up" by type: Nomadic needs 188 years at level 1; Isola
     const w = world(['nomadic'], l2Land());
     setStock(w, 0, { [WOOD]: 80, [STONE]: 30, [CLAY]: 30 });
     w.levels.yearsAt[0] = years - 1;
+    stand(w, 0);
     return step(w).levels.length;
   };
   assert.deepEqual([nomad(187), nomad(188)], [0, 1]);
@@ -254,6 +264,7 @@ test('RULES.md "Levelling up" by type: Nomadic needs 188 years at level 1; Isola
     const w = world(['isolationist'], l2Land());
     setStock(w, 0, { [WOOD]: wood, [STONE]: stone, [CLAY]: clay });
     w.levels.yearsAt[0] = years - 1;
+    stand(w, 0);
     return step(w).levels.length;
   };
   assert.deepEqual([iso(119, 100, 38, 38), iso(120, 100, 38, 38)], [0, 1]);
@@ -266,16 +277,19 @@ test('RULES.md "Levelling up" by type: Nomadic needs 188 years at level 1; Isola
   w.levels.level[0] = 2;
   setStock(w, 0, { [WOOD]: 200, [STONE]: 150, [CLAY]: 100, [COPPER]: 30 });
   w.levels.yearsAt[0] = 373;
+  stand(w, 0);
   assert.equal(step(w).levels.length, 0);
   assert.equal(step(w, { year: 2 }).levels.length, 1, '375 years at level 2 (360 people, 30 hexes)');
 });
 
 test('RULES.md "Levelling up" 2 to 3 and 3 to 4 and 4 to 5 numbers (people, hexes, materials)', () => {
   const tryStep = (level, groups, stock, years) => {
-    const w = world(['expansionist'], groups, { size: 10 });
+    // Aggressive: its buildings change no hex or people minimum (Road Network would).
+    const w = world(['aggressive'], groups, { size: 10 });
     w.levels.level[0] = level;
     setStock(w, 0, stock);
     w.levels.yearsAt[0] = years - 1;
+    stand(w, 0);
     return step(w).levels.length;
   };
   // One civ on 100 land hexes: 30 hexes and 360 people, 50 and 700, 75 and 1200.
@@ -370,6 +384,7 @@ test('RULES.md "Falling back": to climb back it must meet the requirements and s
   setStock(w, 0, { [WOOD]: 80, [STONE]: 30, [CLAY]: 30 });
   w.levels.level[0] = 1;
   w.levels.yearsAt[0] = 149;
+  stand(w, 0);
   step(w);
   assert.equal(w.levels.level[0], 2);
   assert.equal(stockOf(w, 0, WOOD), 0, 'spent again');
@@ -517,6 +532,7 @@ test('RULES.md "Gathering": a civ works what its next level still needs first; o
 test('RULES.md "Gathering": a material whose stockpile covers the next level is no longer next; once nothing is needed, nobody gathers', () => {
   const w = world(['expansionist'], [adults(55, 0, 50)], { deposits: { 55: [WOOD, STONE] } });
   setStock(w, 0, { [WOOD]: 80 });
+  stand(w, 0); // the era building is paid for, so the next spend is the level
   step(w);
   assert.equal(w.levels.gatherMask[55], 1 << STONE, 'wood is covered for level 2');
   // Level 3: wood is not needed by levels 3 to 5 at all.
@@ -529,6 +545,7 @@ test('RULES.md "Gathering": a material whose stockpile covers the next level is 
   const u = world(['expansionist'], [adults(55, 0, 50)], { deposits: { 55: [WOOD] } });
   u.levels.level[0] = 2;
   setStock(u, 0, { [WOOD]: 200 });
+  stand(u, 0);
   step(u);
   assert.equal(stockOf(u, 0, WOOD), 200, 'nothing in this hex is still needed');
   setStock(u, 0, { [WOOD]: 199.9 });
@@ -789,6 +806,10 @@ const readyForKingdom = (sim, civ) => {
   sim.levels.yearsAt[civ] = 10000;
   const need = materialsNeeded(4, sim.civTypes[civ]);
   need.forEach((v, m) => { sim.levels.stock[civ * MATERIAL_COUNT + m] = v; });
+  // The era 4 building must stand (in a hex where the civ lives) and the wonder is not on its mind.
+  let hex = -1;
+  for (let i = 0; i < sim.people.high && hex < 0; i++) if (sim.people.alive[i] && sim.people.civ[i] === civ) hex = sim.people.hex[i];
+  standBuilding(sim.levels, civ, 4, hex);
 };
 
 test('RULES.md "End of the game": First to Kingdom ends the game in the year the first civ reaches level 5; that civ wins', () => {
@@ -858,15 +879,21 @@ test('levels, stockpiles and hashes are deterministic: same params and seed give
   assert.deepEqual(run(), run());
 });
 
-test('a seeded run gathers materials: stockpiles only ever grow until they are spent on a level', () => {
+test('a seeded run gathers materials: stockpiles only ever grow until they are spent on a level, a building or a wonder', () => {
   const sim = new Simulation({ seed: 'gatherrun', size: 12, civCount: 2, startPop: 40, water: 0.2 });
   let prev = sim.levels.stock.slice();
+  // What a civ can have spent materials on this year: a level, starting a building, starting a wonder.
+  const bd = sim.levels.buildings;
+  const spendSign = (c) => `${sim.levels.level[c]}|${[0, 1, 2, 3].map((e) => `${bd.state[c * 4 + e] !== 0}${bd.aHex[c * 4 + e] >= 0}`).join()}`;
+  let signs = [0, 1].map(spendSign);
   let grew = false;
   for (let y = 0; y < 300; y++) {
     sim.tick();
     const now = sim.levels.stock;
     for (let c = 0; c < 2; c++) {
-      const levelled = sim.levels.yearsAt[c] === 0 && y > 0;
+      const sign = spendSign(c);
+      const levelled = (sim.levels.yearsAt[c] === 0 && y > 0) || sign !== signs[c];
+      signs[c] = sign;
       for (let m = 0; m < MATERIAL_COUNT; m++) {
         const i = c * MATERIAL_COUNT + m;
         if (!levelled) assert.ok(now[i] >= prev[i] - 1e-9, `year ${y} civ ${c} ${MATERIAL_IDS[m]}`);
