@@ -45,7 +45,7 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Evidence: Headless runs of seeds review-20261011c-1 to -3 on claude/cycle-20261011-0807 at c6150dc, default setup, 400 years: the 3 civs hold 106, 128 and 147 hex-slots on 64 land hexes (1.7 to 2.3 civs per hex on average), even with the new own-civ pull. src/render/peopleLayer.js:228-246 picks one civ per hex (the largest) and draws only its emblem.
 - Effort: S
 - Phone performance risk: low: two more sprites per populated hex from the same atlas, updated only when the yearly counts change.
-- Decision:
+- Decision: ring version. also include a bold ring circling ALL hexes each civ occupies, showing it as one larger area consisting of many hexes. (reading: yes, with changes. Each hex shows a thin ring around its count, split by each civ's share. On top of that, every civ gets a bold outline in its colour around the outer edge of all the hexes it occupies, so its territory reads as one area. Because civs share hexes, these outlines can overlap.)
 
 ## Requests
 
