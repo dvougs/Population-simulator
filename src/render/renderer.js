@@ -23,6 +23,9 @@
 // rebuilt only when the people per hex changed, at most once per
 // PEOPLE_FRAME_MS, even while panning redraws every frame.
 //
+// Buildings and wonders (buildingLayer.js) change only when SimHost.buildings()
+// does. They are drawn over the people: in a crowded hex anything under them is lost.
+//
 // Idle drift: people circle their spot on a drift clock that only advances
 // while the game runs (setMoving), so pausing freezes them in place.
 
@@ -33,6 +36,7 @@ import { hexColours, rgbToHex, RIVER_RGB } from './palette.js';
 import { DEEP_WATER } from '../sim/terrain.js';
 import { PeopleLayer, peopleShown } from './peopleLayer.js';
 import { TerritoryLayer } from './territoryLayer.js';
+import { BuildingLayer } from './buildingLayer.js';
 
 const SOFTWARE_MAX_DPR = 1; // backing resolution cap on a software WebGL renderer (gpu.js)
 const SHIMMER_PERIOD_MS = 8000; // one full swell: slow, like a tide
@@ -56,6 +60,7 @@ export class Renderer {
     this.peopleDirty = false;
     this.motionChanged = false;
     this.territory = null;
+    this.buildings = null;
     this.lastTerritory = -Infinity;
     this.moving = false;
     this.driftT = 0;
@@ -118,7 +123,8 @@ export class Renderer {
     app.stage.addChild(this.world);
   }
 
-  setMap(map) {
+  /** types[c]: civ c's type id, so each civ's buildings get their type's mark. */
+  setMap(map, types = []) {
     this.map = map;
     this.people = null;
     for (const child of this.world.removeChildren()) child.destroy({ children: true });
@@ -143,11 +149,17 @@ export class Renderer {
     this.selection = new Graphics();
     this.people = new PeopleLayer(map);
     this.territory = new TerritoryLayer(map);
+    this.buildings = new BuildingLayer(map, types);
     this.lastTerritory = -Infinity;
     this.world.addChild(terrain, this.territory.tint, rivers);
     if (this.shimmer) this.world.addChild(this.shimmer);
-    this.world.addChild(grid, this.territory.rings, this.territory.outlines, this.selection, this.people.container);
+    this.world.addChild(grid, this.territory.rings, this.territory.outlines, this.selection, this.people.container, this.buildings.container);
     this.selected = -1;
+  }
+
+  /** New SimHost.buildings() list; returns true if the map needs a redraw. */
+  setBuildings(list) {
+    return this.buildings ? this.buildings.setBuildings(list) : false;
   }
 
   /** New population snapshot from SimHost.population(); `now` is render time in ms. */
@@ -167,6 +179,11 @@ export class Renderer {
   /** The person drawn under screen point (sx, sy) as { slot, id }, or null (also when zoomed out). */
   personAt(sx, sy, camera) {
     return this.people?.personAt(sx, sy, camera) ?? null;
+  }
+
+  /** Hex of the building or wonder drawn under screen point (sx, sy), or -1. */
+  buildingAt(sx, sy, camera) {
+    return this.buildings ? this.buildings.hexAt(sx, sy, camera) : -1;
   }
 
   /** World position where person (slot, id) is drawn, or null. */
@@ -211,6 +228,7 @@ export class Renderer {
     this.world.position.set(camera.x, camera.y);
     this.world.scale.set(camera.scale);
     this.people?.update(camera, now, this.driftT);
+    this.buildings?.update(this.people?.shown ?? false, camera.scale);
     this.app.render();
   }
 

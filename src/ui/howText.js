@@ -12,6 +12,7 @@ import {
   LEVEL_NAMES, REQUIREMENTS, GATHER, LEVEL_EFFECTS, TYPE_LEVEL_RULES,
 } from '../sim/levels.js';
 import { MATERIAL_NAMES, MATERIAL_TIER, DEPOSIT_CHANCE, RIVER_DEPOSIT_CHANCE } from '../sim/materials.js';
+import { BUILDINGS, BUILDING_COST, WONDERS, WONDER_RULES, ERAS, effectText, materialText } from '../sim/buildings.js';
 import { DEFAULT_PARAMS, LIMITS, YEAR_LIMIT_CHOICES } from '../sim/params.js';
 import { BASE_TPS, SPEEDS } from '../loop.js';
 import { CIV_STYLES } from '../render/civStyle.js';
@@ -79,9 +80,69 @@ export function levelFacts() {
       level: k + 1,
       name,
       does: does[k] + birth,
-      needs: r ? `${r.years} years as ${LEVEL_NAMES[k - 1]}, ${r.landPct}% of its share of the land (${r.perHex} people per hex); spends ${materialList(r.materials)}.` : null,
+      needs: r ? `${r.years} years as ${LEVEL_NAMES[k - 1]}, ${r.landPct}% of its share of the land (${r.perHex} people per hex), `
+        + `its own ${LEVEL_NAMES[k - 1]} building standing; spends ${materialList(r.materials)}.` : null,
     };
   });
+}
+
+/** Each civ type's four buildings, one per era, with their bonuses in plain words. */
+export function buildingFacts() {
+  return CIV_TYPES.map((type) => ({
+    type,
+    name: CIV_TYPE_NAMES[type],
+    buildings: BUILDINGS[type].map((b, e) => ({ era: e + 1, id: b.id, name: b.name, bonuses: effectText(b.effects) })),
+  }));
+}
+
+/** Each era: what its building costs and takes, and its wonder's cost, years and bonuses. */
+export function eraFacts() {
+  return Array.from({ length: ERAS }, (_, e) => ({
+    era: e + 1,
+    level: LEVEL_NAMES[e],
+    perHex: REQUIREMENTS[e].perHex,
+    cost: materialText(BUILDING_COST[e].materials),
+    years: BUILDING_COST[e].years,
+    wonder: { id: WONDERS[e].id, name: WONDERS[e].name, cost: materialText(WONDERS[e].materials), years: WONDERS[e].years, bonuses: effectText(WONDERS[e].effects) },
+  }));
+}
+
+/**
+ * Buildings and wonders, in the same shape as a page section. How to play shows
+ * it inside "From Foragers to Kingdom" (the section list is fixed by RULES.md
+ * "Home page"); it can stand on its own as is.
+ */
+export function buildingsSection() {
+  const W = WONDER_RULES;
+  const eras = eraFacts();
+  const lean = Object.entries(W.lean).sort((a, b) => b[1] - a[1]).map(([t, v]) => `${CIV_TYPE_NAMES[t]} ${num(v)}`);
+  return {
+    id: 'buildings',
+    kicker: 'Buildings and wonders',
+    title: 'Monuments of a people',
+    paras: [
+      `Every people builds its own way. Each civ type has one building of its own for every level from 1 to ${ERAS}, `
+        + `${CIV_TYPES.length * ERAS} in all, and a civ cannot climb past a level until that level's building stands. So it gathers for the building first, then for the next level. `
+        + 'Its bonus helps the whole civ for as long as it stands.',
+      'A building rises in one hex: where the civ has the most people, sheltered by its own land and away from threats. '
+        + 'The materials go when work starts. Then the years of work count only while that hex holds the people per hex the next level asks for '
+        + `(${andList(eras.map((e) => String(e.perHex)))} at levels ${andList(eras.map((e) => String(e.era)))}). `
+        + 'If the civ ever leaves the hex, the building is lost with its bonus, and it must build again, at full price, before it can climb.',
+    ],
+    eras,
+    types: buildingFacts(),
+    after: [
+      'Each level also has one wonder for the whole world. Any civ at that level may try, but only the first to finish gets it; '
+        + `the others stop and get ${W.refund === 0.5 ? 'half' : pct(W.refund)} of their materials back. A wonder is not needed to level up, but its bonus is huge.`,
+      'Wonders can be taken. When the owner has nobody left in the wonder\'s hex, the civ with the most people there takes it, bonus and all. '
+        + 'An empty wonder stands abandoned, its bonus silent, until someone settles it. A wonder near a border is a prize worth a war.',
+      `Who tries? A civ thinks about it once its own building for the level stands, and again every ${W.checkYears} years. `
+        + `It weighs its type's lean (${andList(lean)}), how safe it is (the share of its hexes away from threats it cannot beat) `
+        + `and whether it already holds the land its next level needs (counting up to × ${num(W.landCap)}). If the three multiplied come to ${num(W.commitScore)} or more, it commits.`,
+      'A committed civ will not level up until it starts the wonder: it gathers the materials, and building begins. '
+        + `It gives up after ${W.giveUpYears} years without starting, or as soon as its safety falls below ${num(W.giveUpSafety)}.`,
+    ],
+  };
 }
 
 const TRAIT_TEXT = {
@@ -187,7 +248,7 @@ export function howText() {
             + 'pause whenever you like, or step a single year to see exactly what happens. Each year runs the same steps, in order:',
         ],
         steps: [
-          ['Gather and level up', 'Civs that are not starving gather materials, and may reach a new level.'],
+          ['Gather and level up', 'Civs that are not starving gather materials, work on their buildings and wonders, and may reach a new level.'],
           ['Birthdays', 'Everyone grows a year older.'],
           ['Eat', 'Each hex shares out its food. When it runs short, some go hungry.'],
           ['Deaths', 'The starved and the very old die.'],
@@ -288,12 +349,13 @@ export function howText() {
         after: [
           `A civ whose food is secure (at most ${G.secureHungryPct}% of its people went hungry last year) `
             + `sends ${pct(G.gatherShare)} of its adults to gather. Each brings in ${G.yield.common} a year (${G.yield.exotic} of an exotic), `
-            + `at most ${G.cap.common} a deposit a year (${G.cap.exotic} for exotics). The stockpile never spoils; it is spent only on climbing a level.`,
+            + `at most ${G.cap.common} a deposit a year (${G.cap.exotic} for exotics). The stockpile never spoils; it is spent only on levels, buildings and wonders.`,
           'Each level needs years at the level below, enough hexes (a share of the land per civ: the map\'s land hexes ÷ the civs that started) '
-            + 'with enough people on them, '
+            + 'with enough people on them, its own building for the level standing, '
             + `and materials. A civ that stays below its level's people for ${E.fallBackYears} years in a row falls back a level.`,
         ],
         levels: levelFacts(),
+        buildings: buildingsSection(),
       },
       {
         id: 'end',
@@ -319,8 +381,8 @@ export function howText() {
         title: 'At your fingertips',
         points: [
           'Drag to pan, pinch or scroll to zoom, and ⤢ fits the whole map again.',
-          'Tap a hex to fly in and see its terrain, food, deposits and people. Tap a person for their age, health, family and traits.',
-          'Swipe up the bottom sheet for each civ\'s people, hexes, level and stockpile, and a guide to every level.',
+          'Tap a hex to fly in and see its terrain, food, deposits, people and any building or wonder there. Tap a person for their age, health, family and traits.',
+          'Swipe up the bottom sheet for each civ\'s people, hexes, level, buildings, wonders and stockpile, and a guide to every level.',
           'The ☰ button pauses and goes back to setup. Add the page to your Home Screen for a full-screen app.',
         ],
       },

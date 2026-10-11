@@ -124,9 +124,10 @@ export const isHarsh = (t) => t === DESERT || t === TUNDRA || t === MOUNTAIN;
  * Scratch arrays (per hex): pop (people in the hex, filled here), seen, picked,
  * and optionally needSum and eaten (Float64Array; allocated if absent).
  * shelter: optional per-civ multiplier of hunger's health loss in desert,
- * tundra and mountain (see levels.js); 1 for every civ when absent.
+ * tundra and mountain (see levels.js); 1 for every civ when absent. hungerMul:
+ * optional per-civ multiplier of hunger's health loss anywhere (buildings.js).
  */
-export function eat(people, map, rng, pop, seen, picked, needSum, eaten, shelter = null) {
+export function eat(people, map, rng, pop, seen, picked, needSum, eaten, shelter = null, hungerMul = null) {
   const { alive, hex, health, hunger, need, traits, civ } = people;
   const fert = traits[FERTILITY];
   const meta = traits[METABOLISM];
@@ -161,7 +162,8 @@ export function eat(people, map, rng, pop, seen, picked, needSum, eaten, shelter
       health[i] = Math.min(LIFE.healthMax, health[i] + LIFE.healthFedGain);
     } else {
       if (hunger[i] < 255) hunger[i]++;
-      const s = shelter && isHarsh(terrain[h]) ? shelter[civ[i]] : 1;
+      // Shelter (level 3) in harsh terrain, and buildings' hunger bonuses everywhere.
+      const s = (shelter && isHarsh(terrain[h]) ? shelter[civ[i]] : 1) * (hungerMul ? hungerMul[civ[i]] : 1);
       health[i] = Math.max(0, health[i] - hungryLoss(fert[i], meta[i], heat[i], cold[i], terrain[h], s));
     }
   }

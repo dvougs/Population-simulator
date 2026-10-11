@@ -4,6 +4,11 @@ import { h, formatNumber } from './dom.js';
 import { emblemSvg } from '../render/civStyle.js';
 import { MATERIAL_IDS, MATERIAL_NAMES } from '../sim/materials.js';
 import { TRAITS, TRAIT_NAMES } from '../sim/traits.js';
+import { BUILDINGS } from '../sim/buildings.js';
+import { CIV_TYPE_NAMES } from '../sim/civTypes.js';
+import { LEVEL_NAMES } from '../sim/levels.js';
+import { rgbCss } from '../render/palette.js';
+import { civStyle } from '../render/civStyle.js';
 
 const materialName = (id) => MATERIAL_NAMES[MATERIAL_IDS.indexOf(id)] ?? id;
 
@@ -27,7 +32,7 @@ function hide(el) {
  * row needs more than text (emblems); their text must equal `text`.
  */
 function fillRows(el, rows) {
-  const dds = el.querySelectorAll('dl > dd');
+  const dds = el.querySelectorAll(':scope > dl > dd'); // not the building cards' rows
   if (dds.length !== rows.length) return false;
   rows.forEach(([, v, build], k) => {
     if (dds[k].textContent === v) return;
@@ -72,6 +77,7 @@ export function renderInspector(el, hex, onClose, opts = {}) {
       h('header', {},
         h('h3', { id: 'inspector-title' }, hex.name, h('small', {}, ` (${hex.col}, ${hex.row})`)),
         h('button', { type: 'button', class: 'btn ghost', 'aria-label': 'Close hex details', onclick: onClose }, '✕')),
+      h('div', { class: 'building-cards' }),
       dl(rows),
       h('button', {
         type: 'button',
@@ -85,6 +91,7 @@ export function renderInspector(el, hex, onClose, opts = {}) {
       h('ul', { class: 'people-list', 'aria-label': 'People in this hex' }),
     );
   }
+  fillBuildingCards(el.querySelector('.building-cards'), hex.buildings ?? []);
   const open = el.dataset.list === 'open';
   const toggle = el.querySelector('.people-toggle');
   toggle.hidden = !hex.people;
@@ -94,6 +101,56 @@ export function renderInspector(el, hex, onClose, opts = {}) {
   const list = el.querySelector('.people-list');
   list.hidden = !open || !hex.people;
   if (open && opts.people) fillPeopleList(el, list, opts.people);
+}
+
+/** The civ type whose era building has this id (BUILDINGS), or null. */
+function typeOfBuilding(id) {
+  for (const [type, list] of Object.entries(BUILDINGS)) if (list.some((b) => b.id === id)) return type;
+  return null;
+}
+
+/** Status in plain words: "Building 34% (10 of 30 work years)", "Standing", "Abandoned". */
+export function buildingStatus(b) {
+  if (b.status === 'building') {
+    const share = b.years > 0 ? Math.floor((b.work / b.years) * 100) : 0;
+    return `Building ${share}% (${b.work} of ${b.years} work years)`;
+  }
+  return b.status === 'abandoned' ? 'Abandoned' : 'Standing';
+}
+
+/** One card per building or wonder in the hex (RULES.md "Buildings and wonders"), rebuilt only when one changes. */
+function fillBuildingCards(box, list) {
+  if (!box) return;
+  const key = list.map((b) => `${b.kind}${b.id}${b.civ}${b.status}${b.work}${b.captures ?? ''}`).join(';');
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  box.hidden = list.length === 0;
+  box.replaceChildren(...list.map(buildingCard));
+}
+
+function buildingCard(b) {
+  const wonder = b.kind === 'wonder';
+  const owned = b.civ >= 0;
+  const type = wonder ? null : typeOfBuilding(b.id);
+  const what = wonder ? `Wonder of era ${b.era} (${LEVEL_NAMES[b.era - 1]})`
+    : `Era ${b.era} building of Civ ${b.civ + 1}${type ? ` (${CIV_TYPE_NAMES[type] ?? type})` : ''}`;
+  const ownerName = owned ? `Civ ${b.civ + 1}` : 'Nobody';
+  const rows = [
+    ['Owner', ownerName, () => (owned ? [emblem(b.civ, 12), ownerName] : [ownerName])],
+    ['Status', buildingStatus(b)],
+  ];
+  if (wonder && b.year !== undefined) {
+    rows.push(['Built', `by Civ ${b.builder + 1} in year ${b.year}`, () => ['by ', emblem(b.builder, 12), `Civ ${b.builder + 1} in year ${b.year}`]]);
+    rows.push(['Captured', b.captures === 1 ? 'once' : b.captures ? `${b.captures} times` : 'never']);
+  }
+  const off = b.status === 'abandoned' ? ' (off until someone settles here)' : b.status === 'building' ? ' (once it stands)' : '';
+  const style = { borderLeftColor: owned ? rgbCss(civStyle(b.civ).rgb) : 'var(--text-dim)' };
+  return h('section', { class: `building-card${wonder ? ' wonder' : ''}`, 'data-building': b.id, 'data-status': b.status, style },
+    h('h4', {}, wonder ? h('span', { class: 'tag wonder-tag' }, 'Wonder') : null, b.name),
+    h('p', { class: 'building-what' }, what),
+    h('dl', { class: 'building-facts' }, rows.flatMap(([k, v, build]) => [h('dt', {}, k), h('dd', {}, build ? build() : v)])),
+    h('p', { class: 'building-bonus-head' }, `Bonuses for its civ${off}`),
+    h('ul', { class: 'building-bonuses' }, b.bonuses.map((t) => h('li', {}, t))));
 }
 
 /** The open list keeps its buttons and rewrites them in place, so a tap mid-update still lands on a button. */

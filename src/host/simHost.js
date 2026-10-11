@@ -79,6 +79,12 @@ export class LocalSimHost {
   /** End-screen data: header, per-civ summary, history, records and events (plain data and typed arrays). */
   report() { return this.sim?.report() ?? null; }
   inspect(col, row) { return this.sim?.inspect(col, row) ?? null; }
+  /**
+   * Every building and wonder on the map (standing, being built or abandoned) as plain
+   * data: [{ kind, id, name, era, civ, hex, col, row, status, work, years, bonuses, builder?, year?, captures? }].
+   * Empty without a game.
+   */
+  buildings() { return this.sim?.buildings() ?? []; }
   /** People per civ per hex and every person's slot, id, hex and civ (typed array copies), for drawing. */
   population() { return this.sim?.population() ?? null; }
   /** Details of the person in pool slot `slot` with id `id`, or null if they are no longer alive. */

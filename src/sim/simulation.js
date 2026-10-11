@@ -68,6 +68,10 @@ export class Simulation {
     this.migrationRules.inside = this.levels.inside;
     this.contact.inside = this.levels.inside;
     this.contact.level = this.levels.level;
+    this.contact.eff = this.levels.buildings.eff;
+    // Walkers' movement points before any building bonus, and the bonus their reach was built with.
+    this.baseMove = Int32Array.from(this.migrationRules.movePoints);
+    this.moveApplied = new Int32Array(civs);
 
     // Scratch arrays, allocated once (per-person ones again only if the pool grows).
     const n = map.count;
@@ -103,6 +107,7 @@ export class Simulation {
       rec.fight(this.tickCount, attacker, defender, winner, byWinner, byLoser);
     };
     this.onSwitch = (from, to) => st.switched(from, to);
+    this.onBuild = (kind, c, era, year, other) => rec.building(kind, c, era, year, other);
     this.onLevel = (c, from, to, year) => {
       rec.level(c, to, year);
       // Boats come and go with level 4.
@@ -123,9 +128,12 @@ export class Simulation {
     const { alive, age } = people;
     const lv = this.levels;
     // From the counts at the end of last year, so before anyone ages, eats or moves.
-    lv.year(people, this.map, this.tickCount, this.hexCivPop, this.contact.fightWinner, this.onLevel, this.onSwitch);
+    const r = this.migrationRules;
+    lv.year(people, this.map, this.tickCount, this.hexCivPop, this.contact.fightWinner, this.onLevel, this.onSwitch,
+      r.hostile, r.beats, this.onBuild);
+    this.applyMove();
     for (let i = 0; i < people.high; i++) if (alive[i] && age[i] < 65535) age[i]++;
-    eat(people, this.map, this.rng.eat, this.hexPop, this.seen, this.picked, this.needSum, this.eaten, lv.shelter);
+    eat(people, this.map, this.rng.eat, this.hexPop, this.seen, this.picked, this.needSum, this.eaten, lv.shelter, lv.hungerMul);
     deaths(people, this.rng.death, this.onDeath, lv.oldAgeDelay);
     births(people, this.map, this.rng.birth, this.hexPop, this.parents, this.onBirth, this.rng.traits, this.params.mutation, lv.birthBonus);
     if (this.dest.length < people.capacity) this.allocPersonScratch();
@@ -135,6 +143,19 @@ export class Simulation {
     // hexCivPop still holds last year's counts here: it decides each fight's defender.
     this.contact.year(people, this.map, this.hexCivPop, this.tickCount, this.rng.war, this.rng.switch,
       this.onDeath, this.onFight, this.onSwitch);
+  }
+
+  /** Walkers (Nomadic) get their buildings' extra movement points; reach tables follow. */
+  applyMove() {
+    const move = this.levels.buildings.eff.move;
+    const r = this.migrationRules;
+    for (let c = 0; c < this.civCount; c++) {
+      const extra = this.baseMove[c] > 0 ? Math.round(move[c]) : 0;
+      if (extra === this.moveApplied[c]) continue;
+      this.moveApplied[c] = extra;
+      r.movePoints[c] = this.baseMove[c] + extra;
+      setReach(r, c, this.map, r.boats[c] === 1, LEVEL_EFFECTS.boatCost);
+    }
   }
 
   /**
@@ -349,7 +370,14 @@ export class Simulation {
         d.gathering.push({ civ: c, materials: depositList(lv.gatherMask[k]), gatherers: lv.gatherers[k], amount: lv.gathered[k] });
       }
     }
+    // Buildings and wonders standing, being built or abandoned here.
+    d.buildings = this.buildings().filter((b) => b.hex === d.index);
     return d;
+  }
+
+  /** Every building and wonder on the map, standing, being built or abandoned (plain data; see buildings.js list). */
+  buildings() {
+    return this.levels.buildings.list(this.map.cols);
   }
 
   /**

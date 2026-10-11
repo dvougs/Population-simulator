@@ -64,6 +64,8 @@ export class Contact {
     /** Set by the Simulation: each civ's level (Kingdoms fight harder) and the Kingdom enclosing each hex (−1: none). */
     this.level = null;
     this.inside = null;
+    /** Set by the Simulation: each civ's building and wonder bonuses (buildings.js eff), or null. */
+    this.eff = null;
     this.switchFactor = new Float64Array(civs);
     for (let c = 0; c < civs; c++) {
       const t = TYPE_RULES[types[c]] ?? {};
@@ -161,12 +163,13 @@ export class Contact {
       const off = def === x ? y : x;
       // When both sides would start it, the newcomer is the attacker.
       if (both) att = off;
-      const bonus = 1 + DEFENCE_BONUS[map.terrain[h]];
+      const eff = this.eff;
+      const bonus = 1 + DEFENCE_BONUS[map.terrain[h]] + (eff ? eff.defence[def] : 0);
       // A Kingdom fighting a civ that is not one is many times stronger.
       const kDef = this.level !== null && this.level[def] === MAX_LEVEL;
       const kOff = this.level !== null && this.level[off] === MAX_LEVEL;
-      const sDef = str[b0 + def] * bonus * (kDef && !kOff ? LEVEL_EFFECTS.kingdomStrength : 1);
-      const sOff = str[b0 + off] * (kOff && !kDef ? LEVEL_EFFECTS.kingdomStrength : 1);
+      const sDef = str[b0 + def] * bonus * (kDef && !kOff ? LEVEL_EFFECTS.kingdomStrength : 1) * (eff ? 1 + eff.strength[def] : 1);
+      const sOff = str[b0 + off] * (kOff && !kDef ? LEVEL_EFFECTS.kingdomStrength : 1) * (eff ? 1 + eff.strength[off] : 1);
       const win = sOff > sDef ? off : def;
       const lose = win === def ? off : def;
       fightWinner[h] = win;
@@ -174,13 +177,17 @@ export class Contact {
       this.attacker[h] = att;
       this.defender[h] = att === x ? y : x;
       this.holder[h] = def;
-      this.killLoser[h] = Math.floor((cnt[b0 + lose] * CONTACT.loserDeathPct + 99) / 100);
+      // Fewer losers die with a war-loss bonus (Barracks), in whole percent; still at least 1.
+      const keep = eff ? 100 - Math.round(eff.warLoss[lose] * 100) : 100;
+      this.killLoser[h] = Math.max(1, Math.floor((cnt[b0 + lose] * CONTACT.loserDeathPct * keep + 9999) / 10000));
       this.killWinner[h] = Math.floor(cnt[b0 + win] * CONTACT.winnerDeathPct / 100);
       this.fleeTo[h] = fleeHex(map, h, pop, cnt, civs, win, lose, this.inside);
       this.seenL[h] = 0; this.pickL[h] = 0; this.seenW[h] = 0; this.pickW[h] = 0;
       fights++;
     }
 
+    let attracting = false;
+    if (this.eff) for (let c = 0; c < civs; c++) if (this.eff.attract[c] > 0) attracting = true;
     // Apply, in one pass: in a fight hex, war deaths (picked at random on each
     // side, exactly the decided number) and the losers' flight; in any other
     // shared hex, switching civ. Everything reads the snapshot, so a person
@@ -205,15 +212,24 @@ export class Contact {
         }
         continue;
       }
-      const chance = CONTACT.switchPerCooperation * cooperation[i] * this.switchFactor[c];
+      let chance = CONTACT.switchPerCooperation * cooperation[i] * this.switchFactor[c] * (this.eff ? 1 - this.eff.loyalty[c] : 1);
+      // Civs with an attract bonus (Market, Senate) pull harder: each other civ here weighs its
+      // people × (1 + its attract), and the chance grows by the weight per person of the others.
+      let total = pop[h] - cnt[b0 + c];
+      if (attracting) {
+        let w = 0;
+        for (let o = 0; o < civs; o++) if (o !== c) w += cnt[b0 + o] * (1 + this.eff.attract[o]);
+        chance *= w / total;
+        total = w;
+      }
       if (switchRng.next() >= chance) continue;
-      // Join one of the other civs here, in proportion to their people.
-      let r = switchRng.next() * (pop[h] - cnt[b0 + c]);
+      // Join one of the other civs here, in proportion to their (weighted) people.
+      let r = switchRng.next() * total;
       let to = -1;
       for (let o = 0; o < civs; o++) {
         if (o === c || cnt[b0 + o] === 0) continue;
         to = o;
-        r -= cnt[b0 + o];
+        r -= attracting ? cnt[b0 + o] * (1 + this.eff.attract[o]) : cnt[b0 + o];
         if (r < 0) break;
       }
       onSwitch(c, to);

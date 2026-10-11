@@ -1,4 +1,5 @@
 // Shared builders for the Phase 2 tests (not a test file: the glob only runs *.test.js).
+import { ERAS, STANDING } from '../../src/sim/buildings.js';
 import { createMap } from '../../src/sim/mapgen.js';
 import { FOOD_CAPACITY, DEEP_WATER } from '../../src/sim/terrain.js';
 
@@ -33,4 +34,19 @@ export function hexCounts(people, n) {
   const c = new Int32Array(n);
   for (let i = 0; i < people.high; i++) if (people.alive[i]) c[people.hex[i]]++;
   return c;
+}
+
+/**
+ * Sets civ c's era building standing in `hex` (which must hold some of its people, or the
+ * next year destroys it) and stops it thinking about the era's wonder, so levelling tests
+ * about the level requirements are not about buildings. `levels` is a Levels.
+ */
+export function standBuilding(levels, c, era, hex) {
+  const bd = levels.buildings;
+  const k = c * ERAS + era - 1;
+  bd.state[k] = STANDING;
+  bd.hex[k] = hex;
+  bd.aCheck[k] = 1e9;
+  bd.totals();
+  levels.setEffects();
 }
