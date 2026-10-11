@@ -2,7 +2,7 @@
 
 How the game works, as currently implemented. Every number here is the value the code uses. If the game and this file disagree, the game has a bug (see CLAUDE.md).
 
-This describes the current build (Phase 2, in progress): a generated hex map where civilisations of individual people eat, have children, grow old, starve and migrate, year by year. All people share the same base values for now; inherited traits and civ types come later. The full design is in [project/ROADMAP.md](project/ROADMAP.md); this file changes as each part of it ships.
+This describes the current build (Phase 2, in progress): a generated hex map where civilisations of individual people eat, have children, grow old, starve and migrate, year by year, until an end condition you chose is met. All people share the same base values for now; inherited traits and civ types come later. The full design is in [project/ROADMAP.md](project/ROADMAP.md); this file changes as each part of it ships.
 
 ## Time
 
