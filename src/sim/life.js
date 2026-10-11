@@ -160,7 +160,8 @@ export function births(people, map, rng, pop, parents, onBirth) {
   }
   for (let k = 0; k < n; k++) {
     const p = parents[k];
-    const child = people.add(people.hex[p], people.civ[p], 0, LIFE.healthMax, people.id[p]);
+    const gen = Math.min(65535, people.gen[p] + 1);
+    const child = people.add(people.hex[p], people.civ[p], 0, LIFE.healthMax, people.id[p], gen, people.founder[p]);
     onBirth(child);
   }
   return n;
@@ -174,9 +175,9 @@ export function regrow(map) {
   }
 }
 
-/** Places each civ's founders on its start hex. */
+/** Places each civ's founders on its start hex. Founder c × startPop + k is generation 1 of its own line. */
 export function found(people, starts, startPop, rng) {
   for (let c = 0; c < starts.length; c++) {
-    for (let k = 0; k < startPop; k++) people.add(starts[c], c, rng.int(LIFE.founderAgeMax), LIFE.healthMax, NO_PARENT);
+    for (let k = 0; k < startPop; k++) people.add(starts[c], c, rng.int(LIFE.founderAgeMax), LIFE.healthMax, NO_PARENT, 1, c * startPop + k);
   }
 }

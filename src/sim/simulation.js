@@ -11,6 +11,7 @@ import { People, NO_PARENT } from './people.js';
 import { pickStarts, found, eat, deaths, births, regrow } from './life.js';
 import { buildReach, migrate } from './migration.js';
 import { CivStats } from './civStats.js';
+import { Records, FAMINE } from './records.js';
 import {
   DEEP_WATER, TERRAIN_IDS, TERRAIN_NAMES, MOVE_COST, DEFENCE_BONUS, MATERIALS,
 } from './terrain.js';
@@ -70,8 +71,11 @@ export class Simulation {
     this.civStats = new CivStats(civs);
     const people = this.people;
     const st = this.civStats;
-    this.onDeath = (i, cause) => st.death(people.civ[i], cause, people.age[i]);
-    this.onBirth = (i) => st.birth(people.civ[i]);
+    this.records = new Records(civs, this.starts.length * this.params.startPop);
+    this.records.founders(people);
+    const rec = this.records;
+    this.onDeath = (i, cause) => { st.death(people.civ[i], cause, people.age[i]); rec.death(i, people, cause, this.tickCount); };
+    this.onBirth = (i) => { st.birth(people.civ[i]); rec.birth(i, people, this.tickCount); };
     this.recordYear();
   }
 
@@ -114,6 +118,7 @@ export class Simulation {
       if (!this.civHex[k]) { this.civHex[k] = 1; this.civHexes[c]++; }
     }
     this.civStats.endYear(this.tickCount, this.civPop, this.civHexes, this.civOldest);
+    this.records.endYear(this.tickCount, this.civPop);
   }
 
   /** Advance n ticks (stops early when the end condition is met). Returns ticks run. */
@@ -195,6 +200,27 @@ export class Simulation {
   /** Recorded per-civ history: plain data and typed arrays (see CivStats.historyData). */
   history() {
     return this.civStats.historyData();
+  }
+
+  /**
+   * Everything the end screen shows, from stats and records kept during the
+   * run (plain data plus the history's typed arrays), so it costs one pass
+   * over the living at most.
+   */
+  report() {
+    const civs = this.civStats.summary();
+    const deaths = { oldAge: 0, starvation: 0 };
+    for (const c of civs) { deaths.oldAge += c.deaths.oldAge; deaths.starvation += c.deaths.starvation; }
+    return {
+      ...this.stats(),
+      winnerName: this.winner === null ? null : `Civ ${this.winner + 1}`,
+      endConditions: this.params.endConditions.slice(),
+      landHexes: this.landHexes,
+      deaths,
+      famine: { ...FAMINE },
+      history: this.history(),
+      records: this.records.data(this.people, this.tickCount),
+    };
   }
 
   /** Plain description of hex (col, row) with its people per civ, or null if it is off the map. */

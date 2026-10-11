@@ -34,12 +34,16 @@ export class People {
     this.hunger = grow(Uint8Array, old?.hunger);
     this.hex = grow(Int32Array, old?.hex);
     this.civ = grow(Uint8Array, old?.civ);
+    /** Generation: 1 for founders, the parent's + 1 for a child (family line length). */
+    this.gen = grow(Uint16Array, old?.gen);
+    /** Index of the founder this person descends from (0 … founders − 1), for descendant counts. */
+    this.founder = grow(Uint16Array, old?.founder);
     this.free = grow(Int32Array, old?.free);
     this.capacity = capacity;
   }
 
   /** Adds a person and returns its slot. Grows the arrays (doubling) only when every slot is taken. */
-  add(hex, civ, age, health, parentId) {
+  add(hex, civ, age, health, parentId, gen = 1, founder = 0) {
     let i;
     if (this.freeTop > 0) i = this.free[--this.freeTop];
     else {
@@ -54,6 +58,8 @@ export class People {
     this.hunger[i] = 0;
     this.hex[i] = hex;
     this.civ[i] = civ;
+    this.gen[i] = gen;
+    this.founder[i] = founder;
     this.count++;
     return i;
   }

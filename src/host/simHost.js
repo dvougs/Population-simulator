@@ -56,6 +56,8 @@ export class LocalSimHost {
   stats() { return this.sim?.stats() ?? null; }
   /** Per-civ yearly history recorded during the run: plain data and typed arrays (copies). */
   history() { return this.sim?.history() ?? null; }
+  /** End-screen data: header, per-civ summary, history, records and events (plain data and typed arrays). */
+  report() { return this.sim?.report() ?? null; }
   inspect(col, row) { return this.sim?.inspect(col, row) ?? null; }
   /** People per civ per hex and every person's slot, id, hex and civ (typed array copies), for drawing. */
   population() { return this.sim?.population() ?? null; }

@@ -112,8 +112,16 @@ Each year (tick) runs these steps in order. Within a step everyone decides first
 
 Recorded at the end of every year, for each civ: people alive, hexes held (hexes with at least one of its people), births, deaths by old age, deaths by starvation, and the total age at death of those who died.
 
-- Kept for the whole run: total births and deaths by cause, average lifespan (average age at death), oldest age reached, peak population, most hexes held, and the year the civ died out (its people fell to 0), if it did.
+- Kept for the whole run: total births and deaths by cause, average lifespan (average age at death), oldest age reached, peak population and the first year it was reached, most hexes held, and the year the civ died out (its people fell to 0), if it did.
 - The yearly history keeps one row per year for the first 8192 rows. When it is full, pairs of rows are merged (people and hexes from the later year, the other numbers added together) and each new row covers twice as many years, so a long game never runs out of memory.
+- **Family lines.** Every person has a generation: founders are generation 1, and a child is its parent's generation + 1. Every person also belongs to the line of the one founder they descend from.
+- **Records** kept for the whole run (shown on the end screen):
+  - *Oldest person ever:* the highest age anyone reached, alive or dead (on a tie, whoever reached it first; among the living, the lowest id).
+  - *Oldest alive at the end:* the oldest living person when the game ends (on a tie, the lowest id).
+  - *Longest family line:* the highest generation anyone reached, with the first person born into it and the founder at the head of their line.
+  - *Most descendants:* the founder with the most people born into their line (children, grandchildren and so on, alive or dead). It is always a founder, because a parent counts every descendant of their child plus the child. On a tie, the lower founder id. None if nobody was born.
+  - *Worst famine:* the famine with the most starvation deaths (on a tie, the one that ended first). A **famine year** for a civ is a year in which its starvation deaths are at least 2% of its people at the start of that year, and at least 5. Famine years of the same civ in a row make one famine, from its first to its last year. A famine still going on when the game ends counts up to the last year.
+- **History log:** the key events with their year, kept for the whole run: each famine (civ, first and last year, starvation deaths) and each extinction (civ, year). At most 2048 events are kept; once full, later famines are left out (and counted) but extinctions are always kept.
 - While the game runs, the statistics sheet shows each civ's emblem, people and hexes held; the top bar shows the total population, how many civs are still alive, and each civ's emblem with its people alive. Tapping a hex shows its people per civ (see "How civs and people look").
 
 ## How civs and people look
