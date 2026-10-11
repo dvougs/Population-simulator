@@ -24,14 +24,18 @@ export const MIGRATION = Object.freeze({
 
 /**
  * For each land hex, the land hexes reachable in one year (cheapest path cost
- * ≤ movePoints, never through water), excluding itself, in index order.
+ * ≤ movePoints), excluding itself, in index order. Without boats a path never
+ * enters water; with boats (`boatCost` > 0) a path may cross one sea or lake
+ * hex, which costs boatCost, and must step back onto land to end.
  * Returned as offsets/targets (CSR): targets[offsets[h] … offsets[h + 1] − 1].
  */
-export function buildReach(map, movePoints = MIGRATION.movePoints) {
+export function buildReach(map, movePoints = MIGRATION.movePoints, boatCost = 0) {
   const { count, terrain, neighbours } = map;
   const lists = [];
-  const cost = new Float64Array(count).fill(Infinity);
+  // State s = hex + count × (water hexes crossed so far, 0 or 1).
+  const cost = new Float64Array(2 * count).fill(Infinity);
   const touched = [];
+  const found = new Uint8Array(count);
   for (let h = 0; h < count; h++) {
     const out = [];
     lists.push(out);
@@ -47,20 +51,36 @@ export function buildReach(map, movePoints = MIGRATION.movePoints) {
         const a = frontier[k]; const b = frontier[bi];
         if (cost[a] < cost[b] || (cost[a] === cost[b] && a < b)) bi = k;
       }
-      const u = frontier.splice(bi, 1)[0];
+      const s = frontier.splice(bi, 1)[0];
+      const u = s % count;
+      const crossed = s >= count ? 1 : 0;
       for (let d = 0; d < 6; d++) {
         const v = neighbours[u * 6 + d];
-        if (v < 0 || terrain[v] === DEEP_WATER) continue;
-        const c = cost[u] + MOVE_COST[terrain[v]];
-        if (c > movePoints || c >= cost[v]) continue;
-        if (cost[v] === Infinity) touched.push(v);
-        cost[v] = c;
-        if (!frontier.includes(v)) frontier.push(v);
+        if (v < 0) continue;
+        let t;
+        let c;
+        if (terrain[v] === DEEP_WATER) {
+          // Only by boat, only one water hex, and never two in a row.
+          if (!boatCost || crossed || terrain[u] === DEEP_WATER) continue;
+          t = v + count;
+          c = cost[s] + boatCost;
+        } else {
+          t = v + crossed * count;
+          c = cost[s] + MOVE_COST[terrain[v]];
+        }
+        if (c > movePoints || c >= cost[t]) continue;
+        if (cost[t] === Infinity) touched.push(t);
+        cost[t] = c;
+        if (!frontier.includes(t)) frontier.push(t);
       }
     }
-    for (const v of touched) if (v !== h) out.push(v);
+    for (const t of touched) {
+      const v = t % count;
+      if (v !== h && terrain[v] !== DEEP_WATER && !found[v]) { found[v] = 1; out.push(v); }
+    }
+    for (const v of out) found[v] = 0;
     out.sort((a, b) => a - b);
-    for (const v of touched) cost[v] = Infinity;
+    for (const t of touched) cost[t] = Infinity;
     touched.length = 0;
   }
   const offsets = new Int32Array(count + 1);
@@ -113,19 +133,33 @@ export function migrationRules(types, map, reach) {
     stamp: new Int32Array(map.count * n),
     gen: 0,
   };
-  const byPoints = new Map([[MIGRATION.movePoints, reach]]);
+  rules.byPoints = new Map([[`${MIGRATION.movePoints}`, reach]]);
+  rules.movePoints = new Int32Array(n);
+  rules.boats = new Uint8Array(n);
   for (let c = 0; c < n; c++) {
     const t = TYPE_RULES[types[c]] ?? {};
     const factor = t.setOutFactor ?? 1;
     rules.hungryChance[c] = Math.min(1, MIGRATION.hungryChance * factor);
     rules.crowdedChance[c] = t.fedNeverSetsOut ? 0 : Math.min(1, MIGRATION.crowdedChance * factor);
     rules.crowdedShare[c] = t.crowdedShare ?? MIGRATION.crowdedShare;
-    const mp = t.movePoints ?? MIGRATION.movePoints;
-    if (!byPoints.has(mp)) byPoints.set(mp, buildReach(map, mp));
-    rules.reach[c] = byPoints.get(mp);
-    rules.cum[c] = new Float64Array(rules.reach[c].targets.length);
+    rules.movePoints[c] = t.movePoints ?? MIGRATION.movePoints;
+    setReach(rules, c, map, false);
   }
   return rules;
+}
+
+/**
+ * Give civ c the reach table for its movement points, with or without boats
+ * (boatCost: movement points to cross one water hex). Tables are built once
+ * per kind and shared; only called when a civ gains or loses boats.
+ */
+export function setReach(rules, c, map, boats, boatCost = 1) {
+  const mp = rules.movePoints[c];
+  const key = boats ? `${mp}b${boatCost}` : `${mp}`;
+  if (!rules.byPoints.has(key)) rules.byPoints.set(key, buildReach(map, mp, boats ? boatCost : 0));
+  rules.boats[c] = boats ? 1 : 0;
+  rules.reach[c] = rules.byPoints.get(key);
+  rules.cum[c] = new Float64Array(rules.reach[c].targets.length);
 }
 
 /** Scratch for callers that do not pass one (tests); the Simulation passes its own. */

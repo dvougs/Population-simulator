@@ -1,7 +1,7 @@
 // Setup screen: game settings for the map chosen on the map-generation screen.
 
 import { h } from './dom.js';
-import { LIMITS, normalizeParams, randomParams, YEAR_LIMIT_CHOICES } from '../sim/params.js';
+import { LIMITS, normalizeParams, randomParams, YEAR_LIMIT_CHOICES, END_CONDITIONS } from '../sim/params.js';
 import { CIV_TYPES, CIV_TYPE_NAMES, civTypeText, defaultCivType } from '../sim/civTypes.js';
 import { slider } from './mapgenScreen.js';
 import { emblem } from './inspector.js';
@@ -104,7 +104,7 @@ export class SetupScreen {
     return [countRow, list];
   }
 
-  /** End conditions: Sandbox or any mix of Last civ standing, Dominance and Year limit. */
+  /** End conditions: Sandbox or any mix of Last civ standing, First to Kingdom, Dominance and Year limit. */
   renderEnd(p) {
     const ticked = (k) => p.endConditions.includes(k);
     const checks = {};
@@ -125,7 +125,7 @@ export class SetupScreen {
           if (key !== 'sandbox') setTicked(key, e.target.checked);
           // Sandbox means nothing else is ticked; it cannot be unticked on its own.
           else { if (e.target.checked) p.endConditions = []; sync(); }
-          for (const k of ['lastCiv', 'dominance', 'years']) checks[k].checked = ticked(k);
+          for (const k of END_CONDITIONS) checks[k].checked = ticked(k);
         } });
       return h('div', { class: 'row check' }, checks[key], h('label', { for: id }, label));
     };
@@ -158,6 +158,7 @@ export class SetupScreen {
       h('legend', {}, 'End'),
       check('f-end-sandbox', 'sandbox', 'Sandbox (no end)'),
       check('f-end-last', 'lastCiv', 'Last civ standing'),
+      check('f-end-kingdom', 'kingdom', 'First to Kingdom (level 5)'),
       check('f-end-dominance', 'dominance', 'Dominance'),
       ...domRows,
       check('f-end-year', 'years', 'Year limit'),

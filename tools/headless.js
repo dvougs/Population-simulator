@@ -11,7 +11,8 @@
 // Prints the map summary, per-civ population every --every years (with the state
 // hash), per-civ totals (type, births, deaths by cause including war, fights fought
 // and won, civ switches in and out, lifespans, extinction year and cause),
-// each civ's average traits, the end-screen records, the end conditions and how the run ended,
+// each civ's average traits, each civ's level (with the year it reached each level), food security
+// and stockpile, the end-screen records and the history log's events by kind, the end conditions and how the run ended,
 // the map hash, the final state hash and ticks per second. --json prints the
 // same plus the recorded year-by-year history per civ.
 // --min-tps makes it exit non-zero if throughput is below the floor (used in CI).
@@ -19,6 +20,8 @@
 import { Simulation } from '../src/sim/simulation.js';
 import { DEFAULT_PARAMS, presetParams } from '../src/sim/params.js';
 import { TERRAIN_NAMES } from '../src/sim/terrain.js';
+import { MATERIAL_IDS } from '../src/sim/materials.js';
+import { LEVEL_NAMES } from '../src/sim/levels.js';
 
 function parseArgs(argv) {
   const args = {};
@@ -57,14 +60,14 @@ const pad = (v, n) => String(v).padStart(n);
 const colW = Math.max(7, ...civNames.map((n) => n.length + 1));
 const sample = () => {
   const st = sim.stats();
-  return { year: st.tick, pop: st.civs.map((c) => c.pop), total: st.totalPop, hash: sim.hash() };
+  return { year: st.tick, pop: st.civs.map((c) => c.pop), level: st.civs.map((c) => c.level), total: st.totalPop, hash: sim.hash() };
 };
 const samples = [];
-const printSample = (s) => console.log(`${pad(s.year, 6)}${s.pop.map((v) => pad(v, colW)).join('')}${pad(s.total, 8)}  ${s.hash}`);
+const printSample = (s) => console.log(`${pad(s.year, 6)}${s.pop.map((v, k) => pad(`${v} L${s.level[k]}`, colW + 3)).join('')}${pad(s.total, 8)}  ${s.hash}`);
 if (every > 0) {
   samples.push(sample());
   if (!args.json) {
-    console.log(`${pad('year', 6)}${civNames.map((n) => pad(n, colW)).join('')}${pad('total', 8)}  hash`);
+    console.log(`${pad('year', 6)}${civNames.map((n) => pad(n, colW + 3)).join('')}${pad('total', 8)}  hash`);
     printSample(samples[0]);
   }
 }
@@ -115,6 +118,7 @@ const result = {
     const h = sim.starts[k];
     return { ...c, start: h === undefined ? null : { col: h % sim.map.cols, row: Math.floor(h / sim.map.cols) } };
   }),
+  firstKingdom: stats.firstKingdom,
   extinctions: stats.civs.filter((c) => c.extinctYear !== null).map((c) => ({ civ: c.name, year: c.extinctYear, cause: c.extinctCause })),
   fights: stats.civs.reduce((s, c) => s + c.fights, 0) / 2,
   samples,
@@ -126,7 +130,7 @@ function civNamesOf(k) { return `Civ ${k + 1}`; }
 
 /** Recorded history as plain arrays: one entry per row (one row per year unless the run outgrew the history). */
 function historyJson(hist, names) {
-  const fields = ['pop', 'hexes', 'births', 'deathsOldAge', 'deathsStarvation', 'deathsWar', 'lifespanSum'];
+  const fields = ['pop', 'hexes', 'level', 'births', 'deathsOldAge', 'deathsStarvation', 'deathsWar', 'lifespanSum'];
   const tc = hist.traitCount;
   const trait = (r, k, t) => {
     const v = hist.traits[(r * hist.civs + k) * tc + t];
@@ -163,6 +167,15 @@ if (args.json) {
   for (const c of result.civs) {
     if (c.traits) console.log(`  ${c.name} traits${c.pop === 0 ? ' (when it died out)' : ''}: ${Object.entries(c.traits).map(([k, v]) => `${short[k]} ${v.toFixed(3)}`).join(', ')}`);
   }
+  const amt = (v) => (Math.floor(v * 10) / 10).toString();
+  for (const c of result.civs) {
+    const reached = c.reached.map((y, k) => (y === null ? null : `L${k + 1} ${y}`)).filter(Boolean).join(', ');
+    const stock = MATERIAL_IDS.map((id) => `${id} ${amt(c.stockpile[id])}`).join(', ');
+    const next = c.next ? `; next ${LEVEL_NAMES[c.next.level - 1]}: ${c.yearsAtLevel}/${c.next.years} years, ${c.pop}/${c.next.pop} people, `
+      + `${c.hexes}/${c.next.hexes} hexes` : '';
+    console.log(`  ${c.name} level ${c.level} ${c.levelName} (reached ${reached}); food ${c.foodSecure ? 'secure' : 'not secure'}${next}; stockpile ${stock}`);
+  }
+  if (result.firstKingdom) console.log(`  first Kingdom: Civ ${result.firstKingdom.civ + 1} in year ${result.firstKingdom.year}`);
   console.log(result.extinctions.length
     ? `  extinctions: ${result.extinctions.map((e) => `${e.civ} in year ${e.year} (${e.cause})`).join(', ')}`
     : '  extinctions: none');
@@ -173,6 +186,9 @@ if (args.json) {
     + `most descendants ${rec.mostDescendants ? `${who(rec.mostDescendants)} ${rec.mostDescendants.descendants}` : '-'}; `
     + `worst famine ${rec.worstFamine ? `Civ ${rec.worstFamine.civ + 1} years ${rec.worstFamine.startYear}-${rec.worstFamine.endYear}, ${rec.worstFamine.deaths} starved` : 'none'}; `
     + `${result.fights} fights; ${rec.events.length} events`);
+  const kinds = {};
+  for (const e of rec.events) kinds[e.type] = (kinds[e.type] ?? 0) + 1;
+  console.log(`  events: ${Object.entries(kinds).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}${rec.eventsDropped ? `; ${rec.eventsDropped} dropped` : ''}`);
   console.log(`  end conditions: ${p.endConditions.length ? p.endConditions.join(', ') : 'sandbox'}`);
   if (stats.finished) console.log(`  ended: ${stats.endReason}; winner: ${result.winner ?? 'none'}`);
   console.log(`map ${result.mapHash}  hash ${result.hash}  generated in ${result.generateMs} ms  ${result.ticksPerSecond} ticks/s`);

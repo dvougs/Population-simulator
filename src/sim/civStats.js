@@ -8,12 +8,14 @@ import { DEATH_OLD_AGE, DEATH_WAR } from './life.js';
 import { TRAITS, TRAIT_COUNT } from './traits.js';
 
 export const HISTORY_ROWS = 8192;
-/** History columns, per civ. pop and hexes are counts at the end of the row's last year; the rest are sums over the row. */
-export const HISTORY_FIELDS = ['pop', 'hexes', 'births', 'deathsOldAge', 'deathsStarvation', 'lifespanSum', 'deathsWar'];
+/** History columns, per civ. pop, hexes and level are values at the end of the row's last year; the rest are sums over the row. */
+export const HISTORY_FIELDS = ['pop', 'hexes', 'births', 'deathsOldAge', 'deathsStarvation', 'lifespanSum', 'deathsWar', 'level'];
 /** What a civ died out of: the cause of most of its deaths in its last year, or switching when nobody died that year. */
 export const EXTINCT_CAUSES = ['oldAge', 'starvation', 'war', 'switching'];
 const F = HISTORY_FIELDS.length;
-const SNAPSHOT_FIELDS = 2;
+const LEVEL_FIELD = HISTORY_FIELDS.indexOf('level');
+/** Columns merged by keeping the later row (the rest are added). */
+const SNAPSHOT = HISTORY_FIELDS.map((f) => f === 'pop' || f === 'hexes' || f === 'level');
 
 export class CivStats {
   constructor(civs) {
@@ -84,9 +86,10 @@ export class CivStats {
 
   /**
    * Close the year: pop and hexes per civ (counted by the caller), oldest age
-   * alive per civ, and each civ's trait averages ([civ × TRAIT_COUNT + trait], NaN for an empty civ).
+   * alive per civ, each civ's trait averages ([civ × TRAIT_COUNT + trait], NaN for an empty civ)
+   * and each civ's level (1 when absent).
    */
-  endYear(year, pop, hexes, oldest, traitAvg = null) {
+  endYear(year, pop, hexes, oldest, traitAvg = null, level = null) {
     const c = this.civs;
     if (traitAvg) {
       this.traitNow.set(traitAvg);
@@ -110,6 +113,7 @@ export class CivStats {
       if (oldest[k] > this.oldestAge[k]) this.oldestAge[k] = oldest[k];
       this.pending[k * F] = pop[k];
       this.pending[k * F + 1] = hexes[k];
+      this.pending[k * F + LEVEL_FIELD] = level ? level[k] : 1;
     }
     this.yearDeaths.fill(0);
     this.pendingYears++;
@@ -135,7 +139,7 @@ export class CivStats {
     for (let r = 0; r < half; r++) {
       const a = 2 * r * w;
       const b = a + w;
-      for (let j = 0; j < w; j++) h[r * w + j] = j % F < SNAPSHOT_FIELDS ? h[b + j] : h[a + j] + h[b + j];
+      for (let j = 0; j < w; j++) h[r * w + j] = SNAPSHOT[j % F] ? h[b + j] : h[a + j] + h[b + j];
       this.years[r] = this.years[2 * r + 1];
       // Trait averages are snapshots: keep the later row's.
       const tw = this.civs * TRAIT_COUNT;

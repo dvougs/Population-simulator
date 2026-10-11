@@ -9,7 +9,9 @@ import { CIV_TYPES, defaultCivType } from './civTypes.js';
  * End conditions a run can have, in the order they are checked. None ticked
  * is Sandbox (no end). Total extinction always ends the run and is not a setting.
  */
-export const END_CONDITIONS = ['lastCiv', 'dominance', 'years'];
+export const END_CONDITIONS = ['lastCiv', 'kingdom', 'dominance', 'years'];
+/** The conditions randomise drew before First to Kingdom existed (drawn first, so their draws are unchanged). */
+const OLDER_END_CONDITIONS = ['lastCiv', 'dominance', 'years'];
 /** Year limits offered on the setup screen (any other value in range is "custom"). */
 export const YEAR_LIMIT_CHOICES = Object.freeze([1000, 2500, 5000, 10000]);
 /** Lowland terrain weights, in the order they appear on the map-generation screen. */
@@ -69,7 +71,7 @@ export const PRESETS = {
   default: { label: 'Small world', params: { civTypes: ['expansionist', 'aggressive', 'cooperative'], ...MUTATION, ...END_DEFAULTS } },
   continent: { label: 'Continent', params: {
     seed: 'continent', size: 30, water: 0.2, mountains: 0.12, rivers: 6, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
-    civCount: 4, civTypes: ['expansionist', 'aggressive', 'cooperative', 'isolationist'], startPop: 30, ...MUTATION, ...END_DEFAULTS, endConditions: ['dominance', 'years'], endTicks: 5000 } },
+    civCount: 4, civTypes: ['expansionist', 'aggressive', 'cooperative', 'isolationist'], startPop: 30, ...MUTATION, ...END_DEFAULTS, endConditions: ['kingdom', 'dominance', 'years'], endTicks: 5000 } },
   archipelago: { label: 'Archipelago', params: {
     seed: 'islands', size: 30, water: 0.6, mountains: 0.08, rivers: 2, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
     civCount: 5, civTypes: ['nomadic', 'expansionist', 'isolationist', 'cooperative', 'aggressive'], startPop: 20, ...MUTATION, ...END_DEFAULTS, endConditions: ['lastCiv', 'years'], endTicks: 10000 } },
@@ -155,12 +157,14 @@ export function randomParams(random = Math.random) {
     civCount: 2 + Math.floor(random() * 5),
     startPop: 10 + Math.floor(random() * 41),
     mutation: Math.floor(random() * 11) / 100,
-    endConditions: END_CONDITIONS.filter(() => random() < 0.5),
+    endConditions: OLDER_END_CONDITIONS.filter(() => random() < 0.5),
     endTicks: YEAR_LIMIT_CHOICES[Math.floor(random() * YEAR_LIMIT_CHOICES.length)],
     dominanceShare: 0.5 + random() * 0.3,
     dominanceYears: DOMINANCE_YEAR_CHOICES[Math.floor(random() * DOMINANCE_YEAR_CHOICES.length)],
   };
   // Drawn last so the other settings get the same draws as before types existed.
   p.civTypes = Array.from({ length: p.civCount }, () => CIV_TYPES[Math.floor(random() * CIV_TYPES.length)]);
+  // First to Kingdom came later still, so it is drawn after the types.
+  if (random() < 0.5) p.endConditions.push('kingdom');
   return normalizeParams(p);
 }

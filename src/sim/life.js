@@ -9,7 +9,7 @@
 // the step, so the order people are visited in never changes who eats, dies
 // or gives birth.
 
-import { DEEP_WATER } from './terrain.js';
+import { DEEP_WATER, DESERT, TUNDRA, MOUNTAIN } from './terrain.js';
 import { NO_PARENT } from './people.js';
 import { indexToAxial, distance } from './hex.js';
 import {
@@ -89,17 +89,20 @@ export function pickStarts(map, civs, rng) {
   return starts;
 }
 
-/** Old-age death chance this year at a given age, for life expectancy l. */
-export function oldAgeChance(age, l = TRAIT_RULES.base) {
-  const start = oldAgeStart(l);
+/** Old-age death chance this year at a given age, for life expectancy l, with old age starting `delay` years later. */
+export function oldAgeChance(age, l = TRAIT_RULES.base, delay = 0) {
+  const start = oldAgeStart(l) + delay;
   if (age < start) return 0;
   return Math.min(1, (age - start) / LIFE.oldAgeSpan);
 }
 
-/** Health lost in a year without food, in a hex of the given terrain. */
-export function hungryLoss(f, m, h, c, terrain) {
-  return Math.round(LIFE.healthHungryLoss * hungerBurden(f, m) * climateFactor(terrain, h, c));
+/** Health lost in a year without food, in a hex of the given terrain (× shelter: 1, or less with a civ's shelter there). */
+export function hungryLoss(f, m, h, c, terrain, shelter = 1) {
+  return Math.round(LIFE.healthHungryLoss * hungerBurden(f, m) * climateFactor(terrain, h, c) * shelter);
 }
+
+/** Terrain where shelter (from level 3) softens hunger. */
+export const isHarsh = (t) => t === DESERT || t === TUNDRA || t === MOUNTAIN;
 
 /**
  * Everyone eats. A hex whose food covers the total need N of its n people
@@ -108,9 +111,11 @@ export function hungryLoss(f, m, h, c, terrain) {
  * order people are visited in). Food falls by the eaters' needs, never below 0.
  * Scratch arrays (per hex): pop (people in the hex, filled here), seen, picked,
  * and optionally needSum and eaten (Float64Array; allocated if absent).
+ * shelter: optional per-civ multiplier of hunger's health loss in desert,
+ * tundra and mountain (see levels.js); 1 for every civ when absent.
  */
-export function eat(people, map, rng, pop, seen, picked, needSum, eaten) {
-  const { alive, hex, health, hunger, need, traits } = people;
+export function eat(people, map, rng, pop, seen, picked, needSum, eaten, shelter = null) {
+  const { alive, hex, health, hunger, need, traits, civ } = people;
   const fert = traits[FERTILITY];
   const meta = traits[METABOLISM];
   const heat = traits[HEAT_TOLERANCE];
@@ -144,7 +149,8 @@ export function eat(people, map, rng, pop, seen, picked, needSum, eaten) {
       health[i] = Math.min(LIFE.healthMax, health[i] + LIFE.healthFedGain);
     } else {
       if (hunger[i] < 255) hunger[i]++;
-      health[i] = Math.max(0, health[i] - hungryLoss(fert[i], meta[i], heat[i], cold[i], terrain[h]));
+      const s = shelter && isHarsh(terrain[h]) ? shelter[civ[i]] : 1;
+      health[i] = Math.max(0, health[i] - hungryLoss(fert[i], meta[i], heat[i], cold[i], terrain[h], s));
     }
   }
   for (let h = 0; h < map.count; h++) if (picked[h]) food[h] = Math.max(0, food[h] - eaten[h]);
@@ -154,15 +160,19 @@ export function eat(people, map, rng, pop, seen, picked, needSum, eaten) {
  * Deaths: starvation when health has reached 0, otherwise old age by chance.
  * A death depends only on the person's own state, so removing at once is the
  * same as deciding for everyone first. onDeath(slot, cause) records it.
+ * delay: optional per-civ years added to the old-age start (Kingdoms).
  */
-export function deaths(people, rng, onDeath) {
-  const { alive, age, health } = people;
+export function deaths(people, rng, onDeath, delay = null) {
+  const { alive, age, health, civ } = people;
   const life = people.traits[LIFE_EXPECTANCY];
   for (let i = 0; i < people.high; i++) {
     if (!alive[i]) continue;
     let cause = -1;
     if (health[i] === 0) cause = DEATH_STARVATION;
-    else if (age[i] >= oldAgeStart(life[i]) && rng.next() < oldAgeChance(age[i], life[i])) cause = DEATH_OLD_AGE;
+    else {
+      const d = delay ? delay[civ[i]] : 0;
+      if (age[i] >= oldAgeStart(life[i]) + d && rng.next() < oldAgeChance(age[i], life[i], d)) cause = DEATH_OLD_AGE;
+    }
     if (cause < 0) continue;
     onDeath(i, cause);
     people.remove(i);
@@ -178,10 +188,11 @@ const childTraits = new Float64Array(TRAIT_COUNT);
  * starts at age 0, full health, in the parent's hex and civ, with the
  * parent's traits each moved by uniform(−mutation, +mutation) from traitRng,
  * clamped to 0 … 1 (copied exactly without traitRng or with mutation 0).
- * parents: scratch Int32Array at least people.high long. Returns births added.
+ * parents: scratch Int32Array at least people.high long. bonus: optional
+ * per-civ addition to the birth chance (levels). Returns births added.
  */
-export function births(people, map, rng, pop, parents, onBirth, traitRng = null, mutation = 0) {
-  const { alive, age, hunger, hex } = people;
+export function births(people, map, rng, pop, parents, onBirth, traitRng = null, mutation = 0, bonus = null) {
+  const { alive, age, hunger, hex, civ } = people;
   const fert = people.traits[FERTILITY];
   const meta = people.traits[METABOLISM];
   pop.fill(0);
@@ -191,7 +202,8 @@ export function births(people, map, rng, pop, parents, onBirth, traitRng = null,
     if (!alive[i] || hunger[i] !== 0) continue;
     if (age[i] < LIFE.fertileMin || age[i] > LIFE.fertileMax) continue;
     if (pop[hex[i]] >= map.foodCap[hex[i]]) continue;
-    if (rng.next() < birthChance(fert[i], meta[i])) parents[n++] = i;
+    const chance = birthChance(fert[i], meta[i]) + (bonus ? bonus[civ[i]] : 0);
+    if (rng.next() < chance) parents[n++] = i;
   }
   for (let k = 0; k < n; k++) {
     const p = parents[k];
