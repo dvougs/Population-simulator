@@ -2,7 +2,8 @@
 // Run the simulation without a browser.
 //
 //   node tools/headless.js [--seed s] [--ticks n] [--size n] [--water f] [--mountains f]
-//                          [--rivers n] [--preset name] [--every n] [--min-tps n] [--json]
+//                          [--rivers n] [--plains f] [--forest f] [--desert f] [--tundra f]
+//                          [--preset name] [--every n] [--min-tps n] [--json]
 //
 // Prints the map summary, the map hash, the final state hash and ticks per second.
 // --min-tps makes it exit non-zero if throughput is below the floor (used in CI).
@@ -27,7 +28,7 @@ function parseArgs(argv) {
 const args = parseArgs(process.argv.slice(2));
 const params = { ...(args.preset ? presetParams(args.preset) : DEFAULT_PARAMS) };
 if (args.seed) params.seed = String(args.seed);
-for (const key of ['size', 'water', 'mountains', 'rivers']) if (args[key] !== undefined) params[key] = Number(args[key]);
+for (const key of ['size', 'water', 'mountains', 'rivers', 'plains', 'forest', 'desert', 'tundra']) if (args[key] !== undefined) params[key] = Number(args[key]);
 const ticks = Number(args.ticks ?? 1000);
 const every = Number(args.every ?? 0);
 
@@ -55,6 +56,7 @@ const result = {
   water: p.water,
   mountains: p.mountains,
   rivers: p.rivers,
+  lowland: { plains: p.plains, forest: p.forest, desert: p.desert, tundra: p.tundra },
   ticks: sim.tickCount,
   mapHash: sim.mapHash(),
   hash: sim.hash(),
@@ -69,7 +71,8 @@ const result = {
 if (args.json) {
   console.log(JSON.stringify(result, null, 2));
 } else {
-  console.log(`seed "${result.seed}"  ${result.size} hexes  water ${p.water}  mountains ${p.mountains}  rivers ${p.rivers}  ${result.ticks} years`);
+  console.log(`seed "${result.seed}"  ${result.size} hexes  water ${p.water}  mountains ${p.mountains}  rivers ${p.rivers}  `
+    + `lowland ${p.plains}/${p.forest}/${p.desert}/${p.tundra}  ${result.ticks} years`);
   console.log(`  ${Object.entries(terrain).map(([k, v]) => `${k} ${v}`).join(', ')}; ${rivers} river hexes`);
   if (stats.finished) console.log(`  ended: ${stats.endReason}`);
   console.log(`map ${result.mapHash}  hash ${result.hash}  generated in ${result.generateMs} ms  ${result.ticksPerSecond} ticks/s`);

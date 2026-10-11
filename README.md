@@ -6,9 +6,9 @@ A browser game where civilisations grow, age, starve and spread across a generat
 
 ## What's in it (Phase 1: the map)
 
-- A map-generation screen with a live preview: seed, size (10 × 10 up to 50 × 50 hexes), water, mountains, rivers, presets and randomise. Every map is reproducible from its seed.
+- A map-generation screen with a live preview: seed, size (10 × 10 up to 50 × 50 hexes), water, mountains, rivers, and plains, forest, desert and tundra shares, with presets and randomise. Every map is reproducible from its seed.
 - A hex world with ocean on every edge, coasts, plains, forest, hills, mountain ranges, desert, tundra, lakes, and rivers that run downhill. Each terrain has its own food capacity, movement cost, defence bonus and materials.
-- Drawn with PixiJS: drag to pan, pinch or wheel to zoom, fit to screen, tap a hex to inspect it.
+- Drawn with PixiJS, with a gentle tide on the sea, lakes and rivers (static if your device asks for reduced motion): drag to pan, pinch or wheel to zoom, fit to screen, tap a hex to inspect it.
 - Pause, single step and speeds from 1× to Max, and an optional year limit.
 - No people yet: individual people, births, deaths and migration arrive in Phase 2 (see [project/ROADMAP.md](project/ROADMAP.md)).
 - Add to Home Screen for a full-screen app.

@@ -1,5 +1,5 @@
 // Seeded hex map generation. The map depends only on the map parameters
-// (seed, size, water, mountains, rivers), so the preview and the game agree.
+// (MAP_KEYS in params.js), so the preview and the game agree.
 //
 // Shares are hit by ranking hexes on noise values (ties broken by index), not
 // by thresholds, so each setting gives an exact, reproducible count.
@@ -16,9 +16,6 @@ import {
 /** Shares of land and lowland used by the generator (also in RULES.md). */
 export const GEN = Object.freeze({
   hillsShare: 0.15, // of land, next below the mountains on the mountain score
-  tundraShare: 0.15, // of inland lowland, coldest
-  desertShare: 0.15, // of inland lowland, hottest and driest
-  forestShare: 0.3, // of inland lowland, wettest
 });
 
 export function createMap(cols, rows) {
@@ -80,14 +77,15 @@ export function generateMap(input) {
     edge[i] = col === 0 || row === 0 || col === n - 1 || row === n - 1 ? 1 : 0;
   }
 
-  // Water: every edge hex, plus the lowest share of the inner hexes.
+  // Water counts against the whole map: the edge ring is always water, and only
+  // what is left of the total comes from the lowest inner hexes.
   const inner = [];
   for (let i = 0; i < count; i++) {
     if (edge[i]) terrain[i] = DEEP_WATER;
     else inner.push(i);
   }
   inner.sort(byValueAsc(elev));
-  const waterCount = Math.round(p.water * inner.length);
+  const waterCount = Math.max(0, Math.round(p.water * count) - (count - inner.length));
   const land = [];
   for (let k = 0; k < inner.length; k++) {
     if (k < waterCount) terrain[inner[k]] = DEEP_WATER;
@@ -137,11 +135,16 @@ export function generateMap(input) {
     for (let k = 0; k < howMany && k < sorted.length; k++) terrain[sorted[k]] = t;
     return sorted.slice(howMany).sort((a, c) => a - c);
   };
-  rest = takeTop(rest, temp, Math.round(GEN.tundraShare * lowland), false, TUNDRA);
+  // The four lowland settings are relative weights. Work in whole percents so
+  // e.g. 40 + 30 + 15 + 15 sums to exactly 100 (fractions would not).
+  const w = (k) => Math.round(p[k] * 100);
+  const weightSum = w('plains') + w('forest') + w('desert') + w('tundra');
+  const share = (k) => (weightSum > 0 ? Math.round((w(k) * lowland) / weightSum) : 0);
+  rest = takeTop(rest, temp, share('tundra'), false, TUNDRA);
   const dryness = new Float64Array(count);
   for (const i of rest) dryness[i] = 1 - moist[i] + 0.3 * temp[i];
-  rest = takeTop(rest, dryness, Math.round(GEN.desertShare * lowland), true, DESERT);
-  takeTop(rest, moist, Math.round(GEN.forestShare * lowland), true, FOREST);
+  rest = takeTop(rest, dryness, share('desert'), true, DESERT);
+  takeTop(rest, moist, share('forest'), true, FOREST);
 
   traceRivers(map, elev, p.rivers, riverRng);
 

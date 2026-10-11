@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  normalizeParams, presetParams, randomParams, mapParams, PRESETS, DEFAULT_PARAMS, LIMITS, MAP_KEYS, END_CONDITIONS,
+  normalizeParams, presetParams, randomParams, mapParams, PRESETS, DEFAULT_PARAMS, LIMITS, MAP_KEYS, LOWLAND_KEYS,
+  END_CONDITIONS,
 } from '../../src/sim/params.js';
 
 function lcg(seed) {
@@ -11,7 +12,8 @@ function lcg(seed) {
 
 test('defaults match RULES.md "Map settings" and "Game settings"', () => {
   assert.deepEqual({ ...DEFAULT_PARAMS }, {
-    seed: 'pangaea', size: 10, water: 0.25, mountains: 0.12, rivers: 2, endCondition: 'none', endTicks: 1000,
+    seed: 'pangaea', size: 10, water: 0.25, mountains: 0.12, rivers: 2,
+    plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15, endCondition: 'none', endTicks: 1000,
   });
   assert.deepEqual(normalizeParams(), { ...DEFAULT_PARAMS });
   assert.deepEqual(normalizeParams({}), { ...DEFAULT_PARAMS });
@@ -23,10 +25,12 @@ test('ranges match RULES.md', () => {
   assert.deepEqual(LIMITS.water, { min: 0, max: 0.7 });
   assert.deepEqual(LIMITS.mountains, { min: 0, max: 0.4 });
   assert.deepEqual(LIMITS.rivers, { min: 0, max: 20 });
+  for (const k of ['plains', 'forest', 'desert', 'tundra']) assert.deepEqual(LIMITS[k], { min: 0, max: 1 }, k);
   assert.deepEqual(LIMITS.endTicks, { min: 10, max: 100000 });
   assert.equal(LIMITS.seedLength, 64);
   assert.deepEqual(END_CONDITIONS, ['none', 'ticks']);
-  assert.deepEqual(MAP_KEYS, ['seed', 'size', 'water', 'mountains', 'rivers']);
+  assert.deepEqual(MAP_KEYS, ['seed', 'size', 'water', 'mountains', 'rivers', 'plains', 'forest', 'desert', 'tundra']);
+  assert.deepEqual(LOWLAND_KEYS, ['plains', 'forest', 'desert', 'tundra']);
 });
 
 test('size: 10 to 50, clamped on both sides, rounded to whole hexes', () => {
@@ -62,6 +66,29 @@ test('mountains: 0% to 40%, whole percent, clamped', () => {
   assert.equal(m(0.4), 0.4);
   assert.equal(m(0.41), 0.4);
   assert.equal(m(0.124), 0.12);
+});
+
+test('plains, forest, desert, tundra: 0% to 100%, whole percent, clamped, default on bad input', () => {
+  const defaults = { plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15 };
+  for (const [k, d] of Object.entries(defaults)) {
+    const v = (x) => normalizeParams({ [k]: x })[k];
+    assert.equal(v(undefined), d, k);
+    assert.equal(v(-0.01), 0, k);
+    assert.equal(v(-5), 0, k);
+    assert.equal(v(0), 0, k);
+    assert.equal(v(0.01), 0.01, k);
+    assert.equal(v(0.99), 0.99, k);
+    assert.equal(v(1), 1, k);
+    assert.equal(v(1.01), 1, k);
+    assert.equal(v(7), 1, k);
+    assert.equal(v(0.333), 0.33, k);
+    assert.equal(v(0.256), 0.26, k);
+    assert.equal(v('0.5'), 0.5, k);
+    for (const bad of ['lots', '', null, NaN, Infinity, {}, 'NaN']) assert.equal(v(bad), d, `${k} ${String(bad)}`);
+  }
+  // Each key is normalised on its own.
+  const p = normalizeParams({ plains: 2, forest: -1, desert: 0.5, tundra: 'x' });
+  assert.deepEqual([p.plains, p.forest, p.desert, p.tundra], [1, 0, 0.5, 0.15]);
 });
 
 test('rivers: 0 to 20, whole number, clamped', () => {
@@ -117,39 +144,49 @@ test('normalizeParams is idempotent and drops unknown keys', () => {
 
 test('presets match RULES.md', () => {
   const expected = {
-    default: ['Small world', 'pangaea', 10, 0.25, 0.12, 2],
-    continent: ['Continent', 'continent', 30, 0.2, 0.12, 6],
-    archipelago: ['Archipelago', 'islands', 30, 0.6, 0.08, 2],
-    highlands: ['Highlands', 'peaks', 20, 0.15, 0.3, 5],
-    large: ['Large world', 'vast', 50, 0.3, 0.12, 12],
+    default: ['Small world', 'pangaea', 10, 0.25, 0.12, 2, 0.4, 0.3, 0.15, 0.15],
+    continent: ['Continent', 'continent', 30, 0.2, 0.12, 6, 0.4, 0.3, 0.15, 0.15],
+    archipelago: ['Archipelago', 'islands', 30, 0.6, 0.08, 2, 0.4, 0.3, 0.15, 0.15],
+    highlands: ['Highlands', 'peaks', 20, 0.15, 0.3, 5, 0.4, 0.3, 0.15, 0.15],
+    large: ['Large world', 'vast', 50, 0.3, 0.12, 12, 0.4, 0.3, 0.15, 0.15],
   };
   assert.deepEqual(Object.keys(PRESETS).sort(), Object.keys(expected).sort());
-  for (const [key, [label, seed, size, water, mountains, rivers]] of Object.entries(expected)) {
+  for (const [key, [label, seed, size, water, mountains, rivers, plains, forest, desert, tundra]] of Object.entries(expected)) {
     assert.equal(PRESETS[key].label, label);
     const p = presetParams(key);
-    assert.deepEqual(mapParams(p), { seed, size, water, mountains, rivers }, key);
+    assert.deepEqual(mapParams(p), { seed, size, water, mountains, rivers, plains, forest, desert, tundra }, key);
+    // Non-default presets list every map setting themselves.
+    if (key !== 'default') for (const k of MAP_KEYS) assert.ok(k in PRESETS[key].params, `${key} lists ${k}`);
     assert.deepEqual(normalizeParams(p), p, `${key} is already normal`);
   }
   assert.throws(() => presetParams('nope'));
 });
 
-test('mapParams keeps only the five map settings', () => {
+test('mapParams keeps only the nine map settings', () => {
   const m = mapParams({ seed: 's', size: 12, endCondition: 'ticks', endTicks: 50 });
   assert.deepEqual(Object.keys(m), MAP_KEYS);
-  assert.deepEqual(m, { seed: 's', size: 12, water: 0.25, mountains: 0.12, rivers: 2 });
+  assert.equal(Object.keys(m).length, 9);
+  assert.deepEqual(m, {
+    seed: 's', size: 12, water: 0.25, mountains: 0.12, rivers: 2, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
+  });
+  const w = mapParams({ seed: 's', forest: 0.9, tundra: 2 });
+  assert.equal(w.forest, 0.9);
+  assert.equal(w.tundra, 1);
 });
 
-test('randomise ranges match RULES.md (size 10–50, water 10–60%, mountains 5–30%, rivers 0–⌊size/4⌋)', () => {
+test('randomise ranges match RULES.md (size 10–50, water 10–60%, mountains 5–30%, rivers 0–⌊size/4⌋, plains 20–60%, forest 10–50%, desert 0–30%, tundra 0–30%)', () => {
   const lo = randomParams(() => 0);
   assert.equal(lo.size, 10);
   assert.equal(lo.water, 0.1);
   assert.equal(lo.mountains, 0.05);
   assert.equal(lo.rivers, 0);
+  assert.deepEqual([lo.plains, lo.forest, lo.desert, lo.tundra], [0.2, 0.1, 0, 0]);
   const hi = randomParams(() => 0.9999999);
   assert.equal(hi.size, 50);
   assert.equal(hi.water, 0.6);
   assert.equal(hi.mountains, 0.3);
   assert.equal(hi.rivers, 12);
+  assert.deepEqual([hi.plains, hi.forest, hi.desert, hi.tundra], [0.6, 0.5, 0.3, 0.3]);
 
   const random = lcg(99);
   const sizes = new Set();
@@ -160,6 +197,10 @@ test('randomise ranges match RULES.md (size 10–50, water 10–60%, mountains 5
     assert.ok(p.water >= 0.1 && p.water <= 0.6);
     assert.ok(p.mountains >= 0.05 && p.mountains <= 0.3);
     assert.ok(p.rivers >= 0 && p.rivers <= Math.floor(p.size / 4));
+    assert.ok(p.plains >= 0.2 && p.plains <= 0.6, `plains ${p.plains}`);
+    assert.ok(p.forest >= 0.1 && p.forest <= 0.5, `forest ${p.forest}`);
+    assert.ok(p.desert >= 0 && p.desert <= 0.3, `desert ${p.desert}`);
+    assert.ok(p.tundra >= 0 && p.tundra <= 0.3, `tundra ${p.tundra}`);
     assert.equal(p.endCondition, 'none');
     assert.ok(typeof p.seed === 'string' && p.seed.length > 0 && p.seed.length <= 64);
     sizes.add(p.size);
