@@ -38,6 +38,15 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
 
 Ideas the director draws from headless simulation runs and the code. At most 6 wait here at a time.
 
+### P-007: Show every civ in a shared hex, not just the largest
+- Date: 2026-10-11
+- Category: visuals
+- What: Zoomed out, a hex shows only the emblem of its largest civ, so a hex where three civs live side by side looks like one civ owns it. Draw up to three small emblems per hex (largest first, a "+" when there are more), or a thin ring around the count split by each civ's share, so you can see at a glance where civs mix, which is also where contact and fights (T-023) will happen.
+- Evidence: Headless runs of seeds review-20261011c-1 to -3 on claude/cycle-20261011-0807 at c6150dc, default setup, 400 years: the 3 civs hold 106, 128 and 147 hex-slots on 64 land hexes (1.7 to 2.3 civs per hex on average), even with the new own-civ pull. src/render/peopleLayer.js:228-246 picks one civ per hex (the largest) and draws only its emblem.
+- Effort: S
+- Phone performance risk: low: two more sprites per populated hex from the same atlas, updated only when the yearly counts change.
+- Decision:
+
 ## Requests
 
 ## Answered

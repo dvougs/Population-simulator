@@ -2,13 +2,27 @@
 
 ## Status
 
-- Phase: 1 live with its follow-ups (lowland sliders, whole-map water, water tide). Phase 2 (people) in a release candidate: life cycle, migration, per-civ stats (T-013, T-014, T-016, T-017). T-015 (people on screen, tap a person) blocked on Q-005.
-- Last full cycle: 2026-10-11 04:05 UTC
-- Live on GitHub Pages: Phase 1 and its follow-ups (PRs #10 and #13). https://dvougs.github.io/Population-simulator/
-- Open release candidate: #14 "Release candidate: Phase 2 people, life cycle, migration and per-civ stats" https://github.com/dvougs/Population-simulator/pull/14
-- Blockers: none. Open questions Q-003 (what 1.0 contains), Q-004 (traits and mutation), Q-005 (civ and people visuals; blocks T-015); proposals P-003, P-004, P-005 (civ homelands, gameplay), P-006 (food abundance, scale).
+- Phase: Phase 2 (people) live with life cycle, migration and per-civ stats (PR #14). People on the map with civ colours and emblems, the person card, height shading and the own-civ migration pull are in a release candidate (T-015, T-018, T-019, T-020). Version 1.0 scope set by the owner (Q-003): civ types, 8 traits with mutation, contact and fighting, materials and levels 1 to 5, end conditions, end screen and home page (T-021 to T-030).
+- Last full cycle: 2026-10-11 08:07 UTC
+- Live on GitHub Pages: Phase 1 with its follow-ups and Phase 2 people, life cycle, migration and stats (PRs #10, #13, #14). https://dvougs.github.io/Population-simulator/
+- Open release candidate: "Release candidate: people on the map, height shading, own-civ migration pull" (branch claude/cycle-20261011-0807).
+- Ready next: T-024 (material deposits), T-026 (end conditions), T-027 (end screen), T-028 (home page), T-029 (their tests).
+- Blockers: T-021 waits on Q-006 (trait numbers); T-022 and T-023 on Q-007 (Cooperative, Nomadic, who fights, how a fight works); T-025 on Q-008 (gathering and level-effect numbers); T-030 on all three. Proposal P-007 (show every civ in a shared hex, visuals) is undecided.
 
 ## Cycle log
+
+### 2026-10-11 08:07: people on the map, height shading, own-civ pull; 1.0 planned
+
+- Owner input: Q-003 answered (1.0 = option 1 plus levels 1 to 5, materials, basic fighting and end conditions; full civ design summary), Q-004 answered 1 (8 traits with mutation), Q-005 answered 2 (colour plus shape emblem); P-003 no, P-004 yes, P-005 yes, P-006 later; requests R-003 (civ list and types on setup), R-004 (basic fighting), R-005 (home page), R-006 (materials and levels spec) and R-007 (end conditions and end screen spec). Tasks T-018 to T-030 created; T-015 unblocked and rewritten for emblems; ROADMAP gained a "Version 1.0" section.
+- The owner's "not defined yet" list became three questions, each with a full recommended number set: Q-006 (trait numbers and type starting values), Q-007 (Cooperative and Nomadic behaviour, which types always fight, how a fight works), Q-008 (gathering yields, food security, level effects). T-021, T-022, T-023, T-025 and T-030 are blocked on them. T-024, T-026 to T-029 are ready for the next cycle.
+- Merged since last cycle: #14 (T-013, T-014, T-016, T-017 now done).
+- Built on claude/cycle-20261011-0807 by game-dev: T-019 (a migrant counts a hex's spare food ×2 when it already holds their own civ), T-018 (elevation kept on the map; land ±6%, water up to 25% darker by depth; preview shares it), T-015 (8 civ colour and emblem pairs, zoomed-out emblem and head count per hex, people as atlas sprites from 200 px per hex with 0.6 s glides, hex people list, person card, emblems in HUD and sheet). npm run perf 503 ticks/s.
+- The game-dev and unit-tester agent types became unavailable after the first game-dev run; unit-tester and the fix round ran as general-purpose agents following .claude/agents/*.md verbatim.
+- unit-tester (T-020): 189 passed, 0 failed; e2e spec read against every UI change, no edit needed. BUG-1: frames rose from 16.7 ms to about 100 ms at 20× on the iPhone viewport (the e2e speed test failed on both phone projects), because every tick frame redrew the whole map. One fix round: head-count redraws at most every 0.4 s (in RULES.md), pure helpers hexTotal and largestCiv extracted. Retest: 193 passed, 0 failed; e2e locally 71 passed, 1 skipped (existing conditional skip); BUG-1 fixed.
+- RULES.md checked against src/sim/migration.js (ownCivWeight 2), src/render/palette.js (0.06, 0.25), src/render/civStyle.js and peopleLayer.js (200 px, table): values match. Ownership clean (game-dev: src/, RULES.md, index.html, styles/; unit-tester: tests/ only).
+- Design review on the cycle branch at c6150dc (the fix after it changed drawing only), seeds review-20261011c-1/-2/-3, default setup, 400 years: final population 1144 (441/370/333), 1434 (578/447/409), 1364 (562/351/451), still rising; hashes f908ac74, ff02b718, f264c69f. Deaths: old age 2884/3353/3407, starvation 8/238/237. Average lifespan 50.0–52.6, oldest 64–67. No extinctions. Hex-slots on 64 land hexes 106/128/147. game-dev's before/after on the b seeds: 146 → 142, 143 → 135, 131 → 136, so the ×2 pull is a weak effect (noted in the PR; the owner approved ×2). Levels not reported: they do not exist yet (T-025 adds them; headless reporting goes with it). Proposal P-007 (show every civ in a shared hex, visuals). No second proposal: the clearest balance signal (slow growth, the map about half full at year 400) depends on the fertility numbers asked in Q-006.
+- Docs pass: README.md updated on the cycle branch for people on the map, emblems and shading. RULES.md updated by game-dev. No other drift.
+- Release candidate opened from claude/cycle-20261011-0807. Email to the owner (questions, proposals, release candidate).
 
 ### 2026-10-11 04:05: Phase 2 people, life cycle, migration, stats
 
