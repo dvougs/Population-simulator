@@ -55,9 +55,26 @@ When several hexes tie on a value, the one with the lower index (row × size + c
 - Food capacity is in food units; a person eats 1 food a year (see "People").
 - Movement cost limits how far people migrate in a year (see "Migration"). The defence bonus and materials have no effect yet: they are used once fights and levels arrive.
 
+### Terrain colours
+
+| Terrain | Colour (RGB) |
+|---|---|
+| Sea | 29, 78, 122 |
+| Lake | 56, 118, 170 |
+| Coast | 232, 222, 178 |
+| Plains | 134, 172, 88 |
+| Forest | 52, 112, 58 |
+| Hills | 150, 136, 92 |
+| Mountain | 128, 120, 116 |
+| Desert | 226, 170, 88 |
+| Tundra | 190, 204, 206 |
+| River (line through the hex) | 86, 164, 226 |
+
+- **Shading by height.** Each hex keeps its elevation from step 1 of "How the map is made" (same settings, same values). Land hexes are drawn up to 6% darker or lighter by elevation: the lowest land hex on the map is 6% darker, the highest 6% lighter, and the rest in proportion between. Sea and lake hexes are drawn darker with depth: the highest water hex keeps its colour and the lowest is 25% darker, in proportion between. The shading is only drawn; it changes no rule. The map-generation preview uses the same colours.
+
 ## Civilisations and people
 
-- The game starts with *civ count* civilisations (civs), named Civ 1, Civ 2 and so on, each with *starting population* people.
+- The game starts with *civ count* civilisations (civs), named Civ 1, Civ 2 and so on, each with *starting population* people. Each civ has its own colour and shape emblem (see "How civs and people look").
 - **Start hexes.** A good start hex is land with food capacity 40 or more (coast, plains, forest, and any river hex). The first civ starts on a random good hex. Each next civ starts on a random good hex at least 3 steps from every earlier start; if there is none, on the good hex farthest from the earlier starts (lowest index on ties). With no good hexes at all, any land hex counts as good. On very small land several civs can start on the same hex.
 - All of a civ's founders start together on its start hex, each with a random age from 0 to 39, full health (100) and no hunger, and no parent.
 - Every person has an age (years), health (0 to 100), hunger (years in a row without food), a hex, a civ and a parent (the person who bore them; none for founders).
@@ -88,8 +105,8 @@ Each year (tick) runs these steps in order. Within a step everyone decides first
 - A person who ate, in a crowded hex, sets out with chance 20%. A hex is crowded when it holds more people (all civs) than 80% of its food capacity.
 - **Reach.** A person has 3 movement points a year. Entering a hex costs its movement cost (coast and plains 1, desert and tundra 1.5, forest and hills 2, mountain 3). The hexes in reach are the land hexes that can be reached along a path of land hexes costing 3 or less in total. Seas and lakes cannot be entered or crossed.
 - **Spare food** of a hex = the food it will hold after this year's regrowth (food + 50% of capacity, at most the capacity) − the people in it now (after this year's births).
-- A person who sets out picks one hex in reach whose spare food is above 0 and above their own hex's spare food, at random, with chances in proportion to each hex's spare food. With no such hex, they stay.
-- Everyone chooses against the same counts, taken before anyone moves; then everyone who chose moves at once.
+- A person who sets out picks one hex in reach whose spare food is above 0 and above their own hex's spare food, at random, with chances in proportion to each hex's weight. A hex's weight is its spare food, counted twice (×2) if it already holds at least one person of the mover's own civ. With no such hex, they stay.
+- Everyone chooses against the same counts (food, people and which civs are in each hex), taken before anyone moves; then everyone who chose moves at once.
 
 ## Statistics
 
@@ -97,7 +114,28 @@ Recorded at the end of every year, for each civ: people alive, hexes held (hexes
 
 - Kept for the whole run: total births and deaths by cause, average lifespan (average age at death), oldest age reached, peak population, most hexes held, and the year the civ died out (its people fell to 0), if it did.
 - The yearly history keeps one row per year for the first 8192 rows. When it is full, pairs of rows are merged (people and hexes from the later year, the other numbers added together) and each new row covers twice as many years, so a long game never runs out of memory.
-- While the game runs, the statistics sheet shows each civ's people and hexes held; the top bar shows the total population and how many civs are still alive. Tapping a hex shows its people per civ.
+- While the game runs, the statistics sheet shows each civ's emblem, people and hexes held; the top bar shows the total population, how many civs are still alive, and each civ's emblem with its people alive. Tapping a hex shows its people per civ (see "How civs and people look").
+
+## How civs and people look
+
+Each civ has a colour and a shape emblem, chosen by civ number, so civs can be told apart by shape as well as colour. Emblems are drawn with a dark outline.
+
+| Civ | Colour (RGB) | Emblem |
+|---|---|---|
+| Civ 1 | red (230, 57, 70) | circle |
+| Civ 2 | blue (58, 134, 255) | square |
+| Civ 3 | yellow (255, 214, 10) | triangle |
+| Civ 4 | magenta (220, 60, 220) | diamond |
+| Civ 5 | cyan (0, 220, 230) | plus |
+| Civ 6 | orange (255, 140, 20) | star |
+| Civ 7 | white (245, 245, 245) | upside-down triangle |
+| Civ 8 | violet (150, 100, 255) | ring |
+
+- **Zoomed out**, each land hex with people shows the emblem of its largest civ (on a tie, the lower civ number) in that civ's colour, and below it the total people in the hex (all civs). Counts of 1000 or more are shortened: 1.2k (one decimal, rounded down) under 10000, then 46k, then 2M. While the game runs, the labels show the latest year and refresh at most 2.5 times a second (every 0.4 seconds), so a fast game does not redraw the whole map every frame; panning, zooming or tapping shows the latest counts at once.
+- **Zoomed in**, once a hex is at least 200 pixels across on screen (corner to corner), the hex labels give way to the people themselves: each person is a tiny emblem in their civ's colour, at a fixed spot inside their hex (picked from their id, within 60% of the hex size from its centre).
+- A person who migrates glides from where they were drawn to their spot in the new hex over 0.6 seconds. This is drawing only: in the game they move at once, as "Migration" says.
+- **Tap a hex** to see its terrain, food and its people per civ with each civ's emblem. *List people* opens the list of the people in the hex, lowest id first (the first 100, then how many more); tap a row to open that person.
+- **Tap a person** (zoomed in; the nearest person within 22 pixels of the tap) to see their id, civ, age, health, hunger, parent (their id, or none for founders; "died" if the parent is no longer alive) and their living children. Tapping the same person again closes the card. If the person dies while the card is open, it shows "Died" with the last values seen.
 
 ## Map settings
 
@@ -153,4 +191,4 @@ Out-of-range values are clamped to the range; values that are not numbers fall b
 
 ## Not in the game yet
 
-People drawn on the map and tapping a person, land degrading, inherited traits and mutation, civ types, contact and war, materials and levels, boats, god powers, more end conditions and the end screen. See [project/ROADMAP.md](project/ROADMAP.md).
+Land degrading, inherited traits and mutation, civ types, contact and war, materials and levels, boats, god powers, more end conditions and the end screen. See [project/ROADMAP.md](project/ROADMAP.md).

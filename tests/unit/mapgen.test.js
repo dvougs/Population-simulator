@@ -362,3 +362,27 @@ test('countTerrain counts every hex once', () => {
     assert.equal(c.reduce((a, b) => a + b, 0), map.count);
   }
 });
+
+// RULES.md "Terrain colours": each hex keeps its elevation from step 1 (same settings, same values).
+test('generateMap keeps elevation: a Float32Array of size², finite, the same for the same params', () => {
+  for (const { p, map } of maps) {
+    assert.ok(map.elevation instanceof Float32Array);
+    assert.equal(map.elevation.length, p.size * p.size);
+    for (const e of map.elevation) assert.ok(Number.isFinite(e));
+    assert.deepEqual(generateMap(p).elevation, map.elevation, p.seed);
+  }
+});
+
+test('elevation differs between seeds and varies across the map', () => {
+  const a = generateMap({ seed: 'hills-a', size: 20 }).elevation;
+  const b = generateMap({ seed: 'hills-b', size: 20 }).elevation;
+  assert.notDeepEqual(a, b);
+  assert.ok(new Set(a).size > 20, 'not flat');
+});
+
+test('elevation is drawing data only: hashMap ignores it', () => {
+  const map = generateMap({ seed: 'elev-hash', size: 16 });
+  const h = hashMap(map);
+  map.elevation.fill(0.5);
+  assert.equal(hashMap(map), h);
+});

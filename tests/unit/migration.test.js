@@ -20,6 +20,7 @@ test('RULES.md "Migration" numbers', () => {
   assert.equal(MIGRATION.crowdedShare, 0.8);
   assert.equal(MIGRATION.hungryChance, 0.5);
   assert.equal(MIGRATION.crowdedChance, 0.2);
+  assert.equal(MIGRATION.ownCivWeight, 2);
 });
 
 test('RULES.md "Migration" reach: a mountain neighbour (cost 3) is reachable, two forest steps (cost 4) are not', () => {
@@ -227,5 +228,153 @@ test('in a running sim, migration never lands on water and never leaves the move
       assert.notEqual(map.terrain[people.hex[i]], DEEP_WATER);
     }
     people.hex.set(hexes); // keep the run itself unchanged by the probe
+  }
+});
+
+/**
+ * Hex C (plains) with exactly two coast neighbours A and B as the only other land.
+ * movers: hungry people of the given civs in C; residents: [hex, civ] pairs of fed people.
+ */
+function twoTargets({ movers, residents = [] }) {
+  const probe = makeMap(10, 10, () => PLAINS);
+  const [A, B] = nb(probe, C);
+  const map = makeMap(10, 10, (i) => (i === C ? PLAINS : i === A || i === B ? COAST : DEEP_WATER));
+  const people = new People(movers.length + residents.length + 16);
+  for (const [h, c] of residents) people.add(h, c, 25, 100, 0); // fed, uncrowded: they stay
+  for (const c of movers) { const p = people.add(C, c, 25, 50, 0); people.hunger[p] = 1; }
+  map.food[C] = 0; // own spare = 30 - movers: below anything A or B offers
+  map.food[A] = 0;
+  map.food[B] = 0;
+  return { map, people, reach: buildReach(map), s: scratch(map, people), A, B };
+}
+
+/** Share of the movers from C (people of civ `c`, or all) who went to A. */
+function shareToA({ map, people, A, B }, c = -1) {
+  let a = 0; let b = 0;
+  for (let i = 0; i < people.high; i++) {
+    if (c >= 0 && people.civ[i] !== c) continue;
+    if (people.hunger[i] === 0) continue; // residents
+    if (people.hex[i] === A) a++;
+    else if (people.hex[i] === B) b++;
+  }
+  return { a, b, share: a / Math.max(1, a + b) };
+}
+
+const civHeld = (map, civs) => new Uint8Array(civs * map.count);
+
+test('RULES.md "Migration": a hex holding the mover\'s own civ weighs ×2 against an equal hex held by another civ', () => {
+  // A and B each hold one resident, so both have spare 25 - 1 = 24.
+  const w = twoTargets({ movers: new Array(4000).fill(0), residents: [[nb(makeMap(10, 10, () => PLAINS), C)[0], 0], [nb(makeMap(10, 10, () => PLAINS), C)[1], 1]] });
+  migrate(w.people, w.map, w.reach, new Rng('own-vs-other'), w.s.pop, w.s.spare, w.s.dest, civHeld(w.map, 2));
+  assert.equal(w.s.spare[w.A], 24);
+  assert.equal(w.s.spare[w.B], 24);
+  const r = shareToA(w);
+  assert.ok(r.a + r.b > 1800, `${r.a + r.b} moved`);
+  assert.ok(Math.abs(r.share - 2 / 3) < 0.04, `own-civ share ${r.share}, expected 2/3`);
+});
+
+test('RULES.md "Migration": a hex holding the mover\'s own civ weighs ×2 against an equal empty hex', () => {
+  // A holds one civ-0 resident (spare 24); B is empty, with its capacity lowered so its spare is also 24.
+  const [A0] = nb(makeMap(10, 10, () => PLAINS), C);
+  const w = twoTargets({ movers: new Array(4000).fill(0), residents: [[A0, 0]] });
+  w.map.food[w.B] = 0;
+  w.map.foodCap[w.B] = 48; // spare = min(48, 0 + 24) - 0 = 24
+  migrate(w.people, w.map, w.reach, new Rng('own-vs-empty'), w.s.pop, w.s.spare, w.s.dest, civHeld(w.map, 1));
+  assert.equal(w.s.spare[w.A], 24);
+  assert.equal(w.s.spare[w.B], 24);
+  const r = shareToA(w);
+  assert.ok(Math.abs(r.share - 2 / 3) < 0.04, `own-civ share ${r.share}, expected 2/3`);
+});
+
+test('RULES.md "Migration": hexes held only by other civs are not doubled', () => {
+  const [A0, B0] = nb(makeMap(10, 10, () => PLAINS), C);
+  const w = twoTargets({ movers: new Array(4000).fill(0), residents: [[A0, 1], [B0, 2]] });
+  migrate(w.people, w.map, w.reach, new Rng('others'), w.s.pop, w.s.spare, w.s.dest, civHeld(w.map, 3));
+  const r = shareToA(w);
+  assert.ok(Math.abs(r.share - 1 / 2) < 0.04, `share ${r.share}, expected 1/2`);
+  // Both held by the mover's civ: both doubled, still 1/2.
+  const v = twoTargets({ movers: new Array(4000).fill(0), residents: [[A0, 0], [B0, 0]] });
+  migrate(v.people, v.map, v.reach, new Rng('both-own'), v.s.pop, v.s.spare, v.s.dest, civHeld(v.map, 1));
+  assert.ok(Math.abs(shareToA(v).share - 1 / 2) < 0.04);
+});
+
+test('RULES.md "Migration": each mover doubles the hexes of their own civ, not someone else\'s', () => {
+  const [A0, B0] = nb(makeMap(10, 10, () => PLAINS), C);
+  const movers = Array.from({ length: 6000 }, (_, k) => k % 2); // civ 0 and civ 1 interleaved
+  const w = twoTargets({ movers, residents: [[A0, 0], [B0, 1]] });
+  migrate(w.people, w.map, w.reach, new Rng('mixed'), w.s.pop, w.s.spare, w.s.dest, civHeld(w.map, 2));
+  const c0 = shareToA(w, 0).share;
+  const c1 = shareToA(w, 1).share;
+  assert.ok(Math.abs(c0 - 2 / 3) < 0.04, `civ 0 to its own hex A: ${c0}`);
+  assert.ok(Math.abs(c1 - 1 / 3) < 0.04, `civ 1 to A (B is its own): ${c1}`);
+});
+
+test('RULES.md "Migration": doubling does not change which hexes qualify (spare above 0 and above own)', () => {
+  const [A0, B0] = nb(makeMap(10, 10, () => PLAINS), C);
+  // Own spare: min(60, 0 + 30) - 4 = 26. A: food 2 -> 27 - 1 resident = 26, equal, so not eligible even doubled.
+  const w = twoTargets({ movers: [0, 0, 0, 0], residents: [[A0, 0]] });
+  w.map.food[w.A] = 2;
+  w.map.food[w.B] = 0;
+  w.map.foodCap[w.B] = 10; // B: min(10, 5) - 0 = 5, below own
+  for (let t = 0; t < 30; t++) {
+    assert.equal(migrate(w.people, w.map, w.reach, new Rng(`eq${t}`), w.s.pop, w.s.spare, w.s.dest, civHeld(w.map, 1)), 0);
+  }
+  assert.equal(w.s.spare[C], 26);
+  assert.equal(w.s.spare[w.A], 26);
+  // Spare 0 own-civ hex with negative own spare: weight 0 × 2 is still nothing.
+  const z = twoTargets({ movers: new Array(100).fill(0), residents: [...new Array(25).fill([A0, 0]), ...new Array(30).fill([B0, 1])] });
+  for (let t = 0; t < 10; t++) {
+    assert.equal(migrate(z.people, z.map, z.reach, new Rng(`zero${t}`), z.s.pop, z.s.spare, z.s.dest, civHeld(z.map, 2)), 0);
+  }
+  assert.equal(z.s.spare[z.A], 0);
+  assert.equal(z.s.spare[z.B], -5);
+});
+
+test('migrate without the held scratch (7 arguments) gives the same moves as with it', () => {
+  const [A0, B0] = nb(makeMap(10, 10, () => PLAINS), C);
+  const make = () => twoTargets({ movers: Array.from({ length: 500 }, (_, k) => k % 3), residents: [[A0, 0], [B0, 2]] });
+  const a = make(); const b = make();
+  const ma = migrate(a.people, a.map, a.reach, new Rng('args'), a.s.pop, a.s.spare, a.s.dest);
+  const mb = migrate(b.people, b.map, b.reach, new Rng('args'), b.s.pop, b.s.spare, b.s.dest, civHeld(b.map, 3));
+  assert.equal(ma, mb);
+  assert.deepEqual(a.people.hex, b.people.hex);
+});
+
+test('own-civ weighting is order-independent: shuffling pool slots keeps the same split', () => {
+  const [A0, B0] = nb(makeMap(10, 10, () => PLAINS), C);
+  const run = (order) => {
+    const entries = order([
+      ...Array.from({ length: 3000 }, (_, k) => ({ mover: true, civ: k % 2 })),
+      { mover: false, hex: A0, civ: 0 }, { mover: false, hex: B0, civ: 1 },
+    ]);
+    const w = twoTargets({ movers: [] });
+    const people = new People(entries.length + 16);
+    for (const e of entries) {
+      if (e.mover) { const p = people.add(C, e.civ, 25, 50, 0); people.hunger[p] = 1; }
+      else people.add(e.hex, e.civ, 25, 100, 0);
+    }
+    const s = scratch(w.map, people);
+    migrate(people, w.map, w.reach, new Rng('order-civ'), s.pop, s.spare, s.dest, civHeld(w.map, 2));
+    const v = { ...w, people };
+    return [shareToA(v, 0).share, shareToA(v, 1).share];
+  };
+  const sorted = run((a) => a);
+  const reversed = run((a) => a.slice().reverse());
+  const rng = new Rng('shuffle-civ');
+  const shuffled = run((a) => { for (let i = a.length - 1; i > 0; i--) { const j = rng.int(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; });
+  for (const r of [sorted, reversed, shuffled]) {
+    assert.ok(Math.abs(r[0] - 2 / 3) < 0.05, `civ 0: ${r[0]}`);
+    assert.ok(Math.abs(r[1] - 1 / 3) < 0.05, `civ 1: ${r[1]}`);
+  }
+});
+
+test('seeded runs: with several civs, migrants never enter water and the Simulation passes a civ-sized held scratch', () => {
+  for (const seed of ['wet', 'crowd', 'isles']) {
+    const sim = new Simulation({ seed, size: 18, water: 0.5, civCount: 8, startPop: 80 });
+    assert.equal(sim.civHeld.length, 8 * sim.map.count);
+    for (let year = 0; year < 80; year++) {
+      sim.tick(1);
+      for (let i = 0; i < sim.people.high; i++) if (sim.people.alive[i]) assert.notEqual(sim.map.terrain[sim.people.hex[i]], DEEP_WATER);
+    }
   }
 });

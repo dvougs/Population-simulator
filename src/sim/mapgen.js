@@ -31,6 +31,8 @@ export function createMap(cols, rows) {
     river: new Uint8Array(count),
     /** Hex the river flows into next, or -1. */
     riverTo: new Int32Array(count).fill(-1),
+    /** Elevation from step 1 of generation, kept for drawing (shading by height and depth). */
+    elevation: new Float32Array(count),
     foodCap: new Float32Array(count),
     food: new Float32Array(count),
     neighbours: buildNeighbourTable(cols, rows),
@@ -147,6 +149,7 @@ export function generateMap(input) {
   takeTop(rest, moist, share('forest'), true, FOREST);
 
   traceRivers(map, elev, p.rivers, riverRng);
+  map.elevation.set(elev);
 
   for (let i = 0; i < count; i++) {
     map.foodCap[i] = FOOD_CAPACITY[terrain[i]] + (map.river[i] ? RIVER_FOOD_BONUS : 0);

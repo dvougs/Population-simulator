@@ -10,16 +10,16 @@ import { MapgenScreen } from './ui/mapgenScreen.js';
 import { SetupScreen } from './ui/setupScreen.js';
 import { initBottomSheet } from './ui/bottomSheet.js';
 import { initControls } from './ui/controls.js';
-import { renderInspector } from './ui/inspector.js';
+import { renderInspector, renderPersonCard } from './ui/inspector.js';
 import { formatNumber } from './ui/dom.js';
-import { renderStats, renderCivStats } from './ui/statsPanel.js';
+import { renderStats, renderCivStats, renderHudCivs } from './ui/statsPanel.js';
 import { mapParams } from './sim/params.js';
 import { DEEP_WATER } from './sim/terrain.js';
 
 const $ = (id) => document.getElementById(id);
 const ui = {
   mapgen: $('mapgen'), setup: $('setup'), game: $('game'), resume: $('btn-resume'),
-  canvas: $('map'), year: $('hud-year'), pop: $('hud-pop'), inspector: $('inspector'), toast: $('toast'),
+  canvas: $('map'), year: $('hud-year'), pop: $('hud-pop'), hudCivs: $('hud-civs'), inspector: $('inspector'), toast: $('toast'),
   sheet: $('sheet'), handle: $('sheet-handle'), stats: $('stats'), civStats: $('civ-stats'),
 };
 
@@ -29,6 +29,8 @@ const renderer = new Renderer(ui.canvas);
 let rendererReady = null;
 let map = null;
 let selected = -1;
+/** Person shown in the card: { slot, id, last } (last = latest SimHost.person() data), or null. */
+let person = null;
 let dirty = true;
 let userMovedCamera = false;
 let lastPanelUpdate = 0;
@@ -37,8 +39,10 @@ let shownEnd = false;
 const loop = new Loop({
   tick: (n) => host.tick(n),
   frame: (ran, now) => {
+    // New head counts are drawn on the renderer's throttled clock, not every tick frame.
+    if (ran > 0) renderer.setPopulation(host.population(), now);
     // The water shimmer keeps redrawing on its own clock; the sim never sees it.
-    if (dirty || (!ui.game.hidden && renderer.needsFrame(now))) { renderer.draw(camera, selected, now); dirty = false; }
+    if (dirty || (!ui.game.hidden && renderer.needsFrame(now))) { renderer.draw(camera, outlinedHex(), now); dirty = false; }
     if (ran > 0 && now - lastPanelUpdate > 100) { updatePanels(); lastPanelUpdate = now; }
     if (host.finished && !shownEnd) {
       shownEnd = true;
@@ -85,8 +89,11 @@ async function startGame(params) {
   host.start(params);
   map = host.map();
   renderer.setMap(map);
+  renderer.setPopulation(host.population(), performance.now());
   camera.setBounds(worldBounds(map.cols, map.rows));
   selected = -1;
+  person = null;
+  renderer.selectPerson(-1);
   shownEnd = false;
   userMovedCamera = false;
   renderInspector(ui.inspector, null);
@@ -115,23 +122,71 @@ function updatePanels() {
   const alive = stats.civs.filter((c) => c.pop > 0).length;
   ui.pop.textContent = `${formatNumber(stats.totalPop)} people · ${alive} of ${stats.civs.length} civs · ${map.cols} × ${map.rows} hexes`;
   renderCivStats(ui.civStats, stats);
+  renderHudCivs(ui.hudCivs, stats);
   renderStats(ui.stats, stats);
-  // Keep the open hex card's people and food current.
-  if (selected >= 0) renderInspector(ui.inspector, host.inspect(selected % map.cols, Math.floor(selected / map.cols)), () => select(-1));
+  // Keep the open card's values current.
+  if (selected >= 0) showHexCard();
+  else if (person) showPersonCard();
+}
+
+/** The hex outlined on the map: the selected hex, or the hex of the person shown. */
+function outlinedHex() {
+  if (selected >= 0) return selected;
+  return person ? person.last.hex : -1;
+}
+
+function showHexCard() {
+  const col = selected % map.cols;
+  const row = Math.floor(selected / map.cols);
+  const listOpen = ui.inspector.dataset.list === 'open';
+  renderInspector(ui.inspector, host.inspect(col, row), () => select(-1), {
+    people: listOpen ? host.hexPeople(col, row, 100) : null,
+    onToggleList: () => { showHexCard(); placeInspector(true); },
+    onPerson: (slot, id) => selectPerson(slot, id),
+  });
+}
+
+function showPersonCard() {
+  const now = host.person(person.slot, person.id);
+  if (now) person.last = now;
+  renderPersonCard(ui.inspector, person.last, {
+    dead: !now,
+    onClose: () => select(-1),
+    onShowHex: () => select(person.last.hex),
+  });
 }
 
 function select(index) {
   selected = index;
+  person = null;
+  renderer.selectPerson(-1);
   if (index < 0) renderInspector(ui.inspector, null);
   else {
-    renderInspector(ui.inspector, host.inspect(index % map.cols, Math.floor(index / map.cols)), () => select(-1));
+    showHexCard();
     placeInspector(true);
   }
   dirty = true;
 }
 
-/** Screen box around the selected hex (CSS px, relative to the map canvas). */
+function selectPerson(slot, id) {
+  const p = host.person(slot, id);
+  if (!p) return;
+  selected = -1;
+  person = { slot, id, last: p };
+  renderer.selectPerson(slot, id);
+  showPersonCard();
+  placeInspector(true);
+  dirty = true;
+}
+
+/** Screen box around the selected hex or person (CSS px, relative to the map canvas). */
 function selectedBox() {
+  if (selected < 0 && person) {
+    const w = renderer.personPosition(person.slot, person.id) ?? hexCentre(map.cols, person.last.hex);
+    const p = camera.worldToScreen(w.x, w.y);
+    const r = 22;
+    return { left: p.x - r, right: p.x + r, top: p.y - r, bottom: p.y + r };
+  }
   const c = hexCentre(map.cols, selected);
   const p = camera.worldToScreen(c.x, c.y);
   const r = HEX_SIZE * camera.scale;
@@ -148,7 +203,7 @@ const overlaps = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bot
  * selection pan the map, so the map does not jump in the usual case.
  */
 function placeInspector(panIfCovered = false) {
-  if (selected < 0 || ui.inspector.hidden) return;
+  if ((selected < 0 && !person) || ui.inspector.hidden) return;
   const el = ui.inspector;
   const canvasRect = ui.canvas.getBoundingClientRect();
   const cardRect = () => {
@@ -217,6 +272,13 @@ attachGestures(ui.canvas, {
   onZoom: (f, x, y) => { camera.zoomAt(f, x, y); userMovedCamera = true; dirty = true; placeInspector(); },
   onTap: (x, y) => {
     if (!map) return;
+    // Zoomed in, a tap on a person opens their card (tapping them again closes it).
+    const who = renderer.personAt(x, y, camera);
+    if (who) {
+      if (person && person.slot === who.slot && person.id === who.id) select(-1);
+      else selectPerson(who.slot, who.id);
+      return;
+    }
     const w = camera.screenToWorld(x, y);
     const hex = hexAtWorld(map.cols, map.rows, w.x, w.y);
     // Water, off the map, or the selected hex again: close the inspector.
@@ -261,4 +323,8 @@ window.popsim = {
   },
   /** Index of the hex shown in the inspector, or -1. */
   selected: () => selected,
+  /** Person shown in the inspector as { slot, id }, or null. */
+  selectedPerson: () => (person ? { slot: person.slot, id: person.id } : null),
+  /** Whether people are drawn one by one at the current zoom. */
+  peopleShown: () => renderer.people?.shown ?? false,
 };

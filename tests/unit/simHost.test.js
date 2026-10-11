@@ -74,3 +74,120 @@ test('start, tick, stats, inspect and hashes go through the host', () => {
   assert.equal(host.hash(), ref.hash());
   assert.equal(host.mapHash(), ref.mapHash());
 });
+
+// RULES.md "How civs and people look": the hex card, its people list and the person card.
+function grown() {
+  const host = new LocalSimHost();
+  host.start({ seed: 'people-api', size: 16, civCount: 3, startPop: 40 });
+  host.tick(60);
+  return host;
+}
+
+test('population(): people per civ per hex add up to the live people, and the arrays are copies', () => {
+  const host = grown();
+  const pop = host.population();
+  cloneable(pop);
+  const n = host.map().cols * host.map().rows;
+  assert.equal(pop.civs, 3);
+  assert.equal(pop.hexCivPop.length, n * 3);
+  const live = new Int32Array(n);
+  for (let i = 0; i < pop.high; i++) if (pop.alive[i]) live[pop.hex[i]]++;
+  let total = 0;
+  for (let h = 0; h < n; h++) {
+    let sum = 0;
+    for (let c = 0; c < 3; c++) sum += pop.hexCivPop[h * 3 + c];
+    assert.equal(sum, live[h], `hex ${h}`);
+    total += sum;
+  }
+  assert.equal(total, host.stats().totalPop);
+  // Per civ too.
+  for (let c = 0; c < 3; c++) {
+    let byCiv = 0;
+    for (let i = 0; i < pop.high; i++) if (pop.alive[i] && pop.civ[i] === c) byCiv++;
+    let fromHex = 0;
+    for (let h = 0; h < n; h++) fromHex += pop.hexCivPop[h * 3 + c];
+    assert.equal(fromHex, byCiv);
+  }
+  const before = host.population();
+  pop.hexCivPop.fill(99); pop.alive.fill(0); pop.hex.fill(0);
+  assert.deepEqual(host.population(), before, 'mutating the result does not touch the sim');
+  assert.equal(new LocalSimHost().population(), null);
+});
+
+test('person(slot, id): details of a living person; null for a wrong id, a dead or out-of-range slot', () => {
+  const host = grown();
+  const pop = host.population();
+  let founder = -1; let child = -1;
+  for (let i = 0; i < pop.high; i++) {
+    if (!pop.alive[i]) continue;
+    const p = host.person(i, pop.id[i]);
+    if (p.parent === null && founder < 0) founder = i;
+    if (p.parent !== null && p.parentAlive && child < 0) child = i;
+  }
+  assert.ok(child >= 0, 'someone has a living parent after 60 years');
+  const c = host.person(child, pop.id[child]);
+  cloneable(c);
+  assert.equal(c.slot, child);
+  assert.equal(c.id, pop.id[child]);
+  assert.equal(c.civ, pop.civ[child]);
+  assert.equal(c.civName, `Civ ${pop.civ[child] + 1}`);
+  assert.equal(c.hex, pop.hex[child]);
+  assert.equal(c.col + c.row * host.map().cols, c.hex);
+  // The parent's living-children count is the living people whose parent is them.
+  const parentSlot = [...pop.id].findIndex((id, i) => pop.alive[i] && id === c.parent);
+  assert.ok(parentSlot >= 0);
+  const parent = host.person(parentSlot, c.parent);
+  let kids = 0;
+  for (let i = 0; i < pop.high; i++) if (pop.alive[i] && host.person(i, pop.id[i]).parent === c.parent) kids++;
+  assert.ok(kids >= 1);
+  assert.equal(parent.children, kids);
+  if (founder >= 0) {
+    const f = host.person(founder, pop.id[founder]);
+    assert.equal(f.parent, null);
+    assert.equal(f.parentAlive, null);
+  }
+  assert.equal(host.person(child, pop.id[child] + 100000), null, 'wrong id');
+  assert.equal(host.person(-1, 1), null);
+  assert.equal(host.person(pop.high, 1), null);
+  assert.equal(host.person(1.5, pop.id[1]), null);
+  const dead = [...pop.alive].findIndex((a, i) => !a && i < pop.high);
+  if (dead >= 0) assert.equal(host.person(dead, pop.id[dead]), null, 'dead slot');
+  assert.equal(new LocalSimHost().person(0, 1), null);
+});
+
+test('hexPeople(col, row, limit): lowest id first, total counts everyone, limit respected, null off the map', () => {
+  const host = grown();
+  const pop = host.population();
+  const cols = host.map().cols;
+  let best = 0;
+  for (let h = 1; h < cols * cols; h++) {
+    let a = 0; let b = 0;
+    for (let c = 0; c < 3; c++) { a += pop.hexCivPop[h * 3 + c]; b += pop.hexCivPop[best * 3 + c]; }
+    if (a > b) best = h;
+  }
+  const col = best % cols; const row = Math.floor(best / cols);
+  const all = host.hexPeople(col, row, 100000);
+  cloneable(all);
+  const ids = [];
+  for (let i = 0; i < pop.high; i++) if (pop.alive[i] && pop.hex[i] === best) ids.push(pop.id[i]);
+  ids.sort((x, y) => x - y);
+  assert.ok(ids.length > 3);
+  assert.equal(all.index, best);
+  assert.equal(all.total, ids.length);
+  assert.deepEqual(all.people.map((p) => p.id), ids);
+  for (const p of all.people) {
+    assert.equal(pop.id[p.slot], p.id);
+    assert.equal(pop.civ[p.slot], p.civ);
+  }
+  const few = host.hexPeople(col, row, 3);
+  assert.equal(few.total, ids.length);
+  assert.deepEqual(few.people.map((p) => p.id), ids.slice(0, 3));
+  assert.equal(host.hexPeople(col, row, 0).people.length, 0);
+  assert.equal(host.hexPeople(col, row).people.length, Math.min(100, ids.length), 'default limit 100');
+  assert.equal(host.hexPeople(-1, 0, 10), null);
+  assert.equal(host.hexPeople(cols, 0, 10), null);
+  assert.equal(host.hexPeople(0, cols, 10), null);
+  const water = host.hexPeople(0, 0, 10);
+  assert.equal(water.total, 0);
+  assert.deepEqual(water.people, []);
+});
