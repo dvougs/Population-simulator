@@ -88,8 +88,8 @@ Each year (tick) runs these steps in order. Within a step everyone decides first
 - A person who ate, in a crowded hex, sets out with chance 20%. A hex is crowded when it holds more people (all civs) than 80% of its food capacity.
 - **Reach.** A person has 3 movement points a year. Entering a hex costs its movement cost (coast and plains 1, desert and tundra 1.5, forest and hills 2, mountain 3). The hexes in reach are the land hexes that can be reached along a path of land hexes costing 3 or less in total. Seas and lakes cannot be entered or crossed.
 - **Spare food** of a hex = the food it will hold after this year's regrowth (food + 50% of capacity, at most the capacity) − the people in it now (after this year's births).
-- A person who sets out picks one hex in reach whose spare food is above 0 and above their own hex's spare food, at random, with chances in proportion to each hex's spare food. With no such hex, they stay.
-- Everyone chooses against the same counts, taken before anyone moves; then everyone who chose moves at once.
+- A person who sets out picks one hex in reach whose spare food is above 0 and above their own hex's spare food, at random, with chances in proportion to each hex's weight. A hex's weight is its spare food, counted twice (×2) if it already holds at least one person of the mover's own civ. With no such hex, they stay.
+- Everyone chooses against the same counts (food, people and which civs are in each hex), taken before anyone moves; then everyone who chose moves at once.
 
 ## Statistics
 

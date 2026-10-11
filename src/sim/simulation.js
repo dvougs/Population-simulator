@@ -51,6 +51,7 @@ export class Simulation {
     this.picked = new Int32Array(n);
     this.spare = new Float64Array(n);
     this.civHex = new Uint8Array(n * civs);
+    this.civHeld = new Uint8Array(n * civs);
     this.civPop = new Int32Array(civs);
     this.civHexes = new Int32Array(civs);
     this.civOldest = new Int32Array(civs);
@@ -78,7 +79,7 @@ export class Simulation {
     deaths(people, this.rng.death, this.onDeath);
     births(people, this.map, this.rng.birth, this.hexPop, this.parents, this.onBirth);
     if (this.dest.length < people.capacity) this.allocPersonScratch();
-    migrate(people, this.map, this.reach, this.rng.migration, this.hexPop, this.spare, this.dest);
+    migrate(people, this.map, this.reach, this.rng.migration, this.hexPop, this.spare, this.dest, this.civHeld);
     regrow(this.map);
   }
 

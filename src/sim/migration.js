@@ -17,6 +17,8 @@ export const MIGRATION = Object.freeze({
   hungryChance: 0.5,
   /** Yearly chance a fed person in a crowded hex sets out. */
   crowdedChance: 0.2,
+  /** A hex in reach that already holds people of the mover's own civ counts its spare food this many times. */
+  ownCivWeight: 2,
 });
 
 /**
@@ -69,28 +71,45 @@ export function buildReach(map) {
 
 /**
  * Spare food of every hex: the food it will hold after this year's regrowth
- * minus the people in it now. Fills pop and spare (scratch, per hex).
+ * minus the people in it now. Fills pop and spare (scratch, per hex) and
+ * held[civ × hex count + hex] = 1 where that civ has people.
  */
-function snapshot(people, map, pop, spare) {
-  const { alive, hex } = people;
+function snapshot(people, map, pop, spare, held) {
+  const { alive, hex, civ } = people;
+  const n = map.count;
   pop.fill(0);
-  for (let i = 0; i < people.high; i++) if (alive[i]) pop[hex[i]]++;
+  held.fill(0);
+  for (let i = 0; i < people.high; i++) {
+    if (!alive[i]) continue;
+    pop[hex[i]]++;
+    held[civ[i] * n + hex[i]] = 1;
+  }
   for (let h = 0; h < map.count; h++) {
     const cap = map.foodCap[h];
     spare[h] = Math.min(cap, map.food[h] + LIFE.foodRegrowth * cap) - pop[h];
   }
 }
 
+/** Scratch for callers that do not pass one (tests); the Simulation passes its own. */
+let sharedHeld = new Uint8Array(0);
+
 /**
  * Each hungry person (hunger > 0) sets out with hungryChance; each fed person
  * in a crowded hex with crowdedChance. A mover picks among reachable hexes
  * whose spare food is positive and above its own hex's, at random with weight
- * equal to that spare food. With no such hex it stays.
- * dest: scratch Int32Array at least people.high long. Returns how many moved.
+ * equal to that spare food, times ownCivWeight where its own civ already has
+ * people (before anyone moves). With no such hex it stays.
+ * dest: scratch Int32Array at least people.high long. held: scratch
+ * Uint8Array of (civ count × map.count); without it a shared one sized for any civ id is used. Returns how many moved.
  */
-export function migrate(people, map, reach, rng, pop, spare, dest) {
-  snapshot(people, map, pop, spare);
-  const { alive, hex, hunger } = people;
+export function migrate(people, map, reach, rng, pop, spare, dest, held = null) {
+  const n = map.count;
+  if (!held) {
+    if (sharedHeld.length < 256 * n) sharedHeld = new Uint8Array(256 * n);
+    held = sharedHeld;
+  }
+  snapshot(people, map, pop, spare, held);
+  const { alive, hex, hunger, civ } = people;
   const { offsets, targets } = reach;
   const cap = map.foodCap;
   for (let i = 0; i < people.high; i++) {
@@ -102,10 +121,12 @@ export function migrate(people, map, reach, rng, pop, spare, dest) {
     else if (pop[h] > MIGRATION.crowdedShare * cap[h]) chance = MIGRATION.crowdedChance;
     if (chance === 0 || rng.next() >= chance) continue;
     const own = spare[h];
+    const base = civ[i] * n;
     let total = 0;
     for (let k = offsets[h]; k < offsets[h + 1]; k++) {
-      const s = spare[targets[k]];
-      if (s > 0 && s > own) total += s;
+      const t = targets[k];
+      const s = spare[t];
+      if (s > 0 && s > own) total += held[base + t] ? s * MIGRATION.ownCivWeight : s;
     }
     if (total <= 0) continue;
     let r = rng.next() * total;
@@ -113,7 +134,7 @@ export function migrate(people, map, reach, rng, pop, spare, dest) {
       const t = targets[k];
       const s = spare[t];
       if (!(s > 0 && s > own)) continue;
-      r -= s;
+      r -= held[base + t] ? s * MIGRATION.ownCivWeight : s;
       dest[i] = t;
       if (r < 0) break;
     }
