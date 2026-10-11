@@ -2,9 +2,10 @@
 // boundary is plain data or typed arrays, so a Web Worker implementation can
 // replace LocalSimHost without touching the UI.
 
-import { Simulation } from '../sim/simulation.js';
+import { Simulation, startHexes } from '../sim/simulation.js';
+import { mapParams, normalizeParams } from '../sim/params.js';
 import { generateMap, hashMap, countTerrain } from '../sim/mapgen.js';
-import { buildReach } from '../sim/migration.js';
+import { buildReach, buildStepReach } from '../sim/migration.js';
 
 /** The drawable part of a map: sizes and typed arrays only. */
 function mapData(map) {
@@ -33,8 +34,26 @@ export class LocalSimHost {
   }
 
   /** Generate a map without starting a game (map-generation preview). */
-  preview(mapParams) {
-    return mapData(generateMap(mapParams));
+  preview(params) {
+    return mapData(this.generated(params));
+  }
+
+  /**
+   * Where each civ of `params` would start (hex indices, as a new game places
+   * them, chosen starts included), and which of those were chosen by hand.
+   */
+  starts(params) {
+    const map = this.generated(params);
+    const at = startHexes(params, map);
+    const fixed = normalizeParams(params).starts;
+    return { starts: Array.from(at), chosen: at.map((h, c) => h >= 0 && fixed[c] === h) };
+  }
+
+  /** The map for params, kept while the map settings stay the same (the setup screen asks often). */
+  generated(params) {
+    const key = JSON.stringify(mapParams(params));
+    if (this.cacheKey !== key) { this.cacheMap = generateMap(params); this.cacheKey = key; }
+    return this.cacheMap;
   }
 
   /** Run up to n ticks; returns how many ran. */
@@ -67,14 +86,15 @@ export class LocalSimHost {
   /** Living people in hex (col, row): { index, total, people: [{ slot, id, age, health, hunger, civ }] }, lowest id first. */
   hexPeople(col, row, limit) { return this.sim?.hexPeople(col, row, limit) ?? null; }
   /**
-   * Land hexes a person in hex `index` of the running map could walk to in one
-   * year with `movePoints` and no boats (RULES.md "Migration"), ascending; for
-   * the How to play pictures. Null without a game or off the map.
+   * Land hexes a person in hex `index` of the running map could move to in one
+   * year with `movePoints` (0: one hex, as most civs move) and no boats
+   * (RULES.md "Migration"), ascending; for the How to play pictures. Null
+   * without a game or off the map.
    */
   reach(index, movePoints) {
     const map = this.sim?.map;
     if (!map || !Number.isInteger(index) || index < 0 || index >= map.count) return null;
-    const { offsets, targets } = buildReach(map, movePoints);
+    const { offsets, targets } = movePoints === 0 ? buildStepReach(map) : buildReach(map, movePoints);
     return targets.slice(offsets[index], offsets[index + 1]);
   }
   hash() { return this.sim?.hash() ?? null; }

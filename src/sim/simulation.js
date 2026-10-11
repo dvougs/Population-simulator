@@ -9,8 +9,8 @@ import { indexToAxial } from './hex.js';
 import { Rng } from './rng.js';
 import { People, NO_PARENT } from './people.js';
 import { pickStarts, found, eat, deaths, births, regrow } from './life.js';
-import { buildReach, migrate, migrationRules, setReach } from './migration.js';
-import { Contact } from './contact.js';
+import { buildStepReach, migrate, migrationRules, setReach } from './migration.js';
+import { Contact, CONTACT } from './contact.js';
 import { Levels, LEVEL_EFFECTS, GATHER } from './levels.js';
 import { CIV_TYPE_NAMES } from './civTypes.js';
 import { CivStats } from './civStats.js';
@@ -45,13 +45,14 @@ export class Simulation {
       birth: rng.fork('birth'),
       migration: rng.fork('migration'),
     };
+    // The same stream startHexes uses, so the setup screen shows where civs will start.
     const placement = rng.fork('placement');
     // Founders' trait spread and every child's mutation; forked last so the other streams are as before traits.
     this.rng.traits = rng.fork('traits');
     // Fights and civ switching (also forked after the older streams).
     this.rng.war = rng.fork('war');
     this.rng.switch = rng.fork('switch');
-    this.starts = pickStarts(map, civs, placement);
+    this.starts = pickStarts(map, civs, placement, this.params.starts);
     this.civCount = civs;
     this.civTypes = this.params.civTypes.slice();
     // Room for every hex filled to capacity, so the pool rarely has to grow.
@@ -59,7 +60,7 @@ export class Simulation {
     for (let h = 0; h < map.count; h++) capSum += map.foodCap[h];
     this.people = new People(Math.max(civs * this.params.startPop, Math.ceil(capSum * 1.25)));
     found(this.people, this.starts, this.params.startPop, placement, this.rng.traits, this.civTypes);
-    this.reach = buildReach(map);
+    this.reach = buildStepReach(map);
     this.migrationRules = migrationRules(this.civTypes, map, this.reach);
     this.contact = new Contact(map, this.civTypes);
     this.levels = new Levels(map, this.civTypes);
@@ -128,11 +129,46 @@ export class Simulation {
     deaths(people, this.rng.death, this.onDeath, lv.oldAgeDelay);
     births(people, this.map, this.rng.birth, this.hexPop, this.parents, this.onBirth, this.rng.traits, this.params.mutation, lv.birthBonus);
     if (this.dest.length < people.capacity) this.allocPersonScratch();
+    this.expansionPriorities();
     migrate(people, this.map, this.reach, this.rng.migration, this.hexPop, this.spare, this.dest, this.civHeld, this.migrationRules);
     regrow(this.map);
     // hexCivPop still holds last year's counts here: it decides each fight's defender.
     this.contact.year(people, this.map, this.hexCivPop, this.tickCount, this.rng.war, this.rng.switch,
       this.onDeath, this.onFight, this.onSwitch);
+  }
+
+  /**
+   * What steers migration this year (RULES.md "Where civs expand"): the materials each civ's
+   * next level still needs, which civs threaten it, and which of those it is stronger than.
+   * Threats: an Aggressive civ, a civ it lost a fight to in the last revengeYears, or a
+   * Kingdom when it is not one. It beats a threat when it can start fights and is Aggressive,
+   * or is a Kingdom facing a civ that is not, or has more people (unless the threat is a
+   * Kingdom and it is not). People counts are those of the start of the year.
+   */
+  expansionPriorities() {
+    const lv = this.levels;
+    const ct = this.contact;
+    const r = this.migrationRules;
+    const civs = this.civCount;
+    if (!r.want) r.want = new Uint16Array(civs);
+    lv.wanted(r.want);
+    const K = LEVEL_EFFECTS.kingdomLevel;
+    for (let c = 0; c < civs; c++) {
+      let hostile = 0;
+      let beats = 0;
+      const kc = lv.level[c] === K;
+      for (let o = 0; o < civs; o++) {
+        if (o === c || lv.civPop[o] === 0) continue;
+        const ko = lv.level[o] === K;
+        const threat = ct.always[o] === 1 || this.tickCount - ct.lostTo[c * civs + o] <= CONTACT.revengeYears || (ko && !kc);
+        if (!threat) continue;
+        hostile |= 1 << o;
+        const stronger = ct.always[c] === 1 || (kc && !ko) || (!(ko && !kc) && lv.civPop[c] > lv.civPop[o]);
+        if (ct.never[c] !== 1 && stronger) beats |= 1 << o;
+      }
+      r.hostile[c] = hostile;
+      r.beats[c] = beats;
+    }
   }
 
   /** Winner of this year's fight in each hex (civ index), or −1 where there was none. */
@@ -401,6 +437,17 @@ export class Simulation {
   }
 
   get mapParams() { return mapParams(this.params); }
+}
+
+/**
+ * Where each civ of `params` will start on `map` (generated from the same
+ * params): chosen hexes where valid, the rest placed as a new game would.
+ */
+export function startHexes(params, map) {
+  const p = normalizeParams(params);
+  const rng = new Rng(`${p.seed}:people`);
+  for (const label of ['eat', 'death', 'birth', 'migration']) rng.fork(label);
+  return pickStarts(map, p.civCount, rng.fork('placement'), p.starts);
 }
 
 export function describeHex(map, col, row) {

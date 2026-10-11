@@ -20,7 +20,7 @@ export const MAP_KEYS = ['seed', 'size', 'water', 'mountains', 'rivers', ...LOWL
 
 /** Valid ranges, shared by validation, the setup screens and RULES.md. */
 export const LIMITS = Object.freeze({
-  size: { min: 10, max: 50 },
+  size: { min: 10, max: 100 },
   water: { min: 0, max: 0.7 },
   mountains: { min: 0, max: 0.4 },
   rivers: { min: 0, max: 20 },
@@ -60,6 +60,8 @@ export const DEFAULT_PARAMS = Object.freeze({
   endTicks: 2500,
   dominanceShare: 0.6,
   dominanceYears: 300,
+  // Starting hex per civ (hex index), or −1 to place that civ automatically. Not a map key: the map is the same either way.
+  starts: Object.freeze([]),
 });
 
 /** The end settings every preset starts from (sandbox); presets override some. */
@@ -112,7 +114,23 @@ export function normalizeParams(input = {}) {
   p.endTicks = Math.round(range(input.endTicks, 'endTicks', d.endTicks));
   p.dominanceShare = Math.round(range(input.dominanceShare, 'dominanceShare', d.dominanceShare) * 100) / 100;
   p.dominanceYears = Math.round(range(input.dominanceYears, 'dominanceYears', d.dominanceYears));
+  p.starts = normalizeStarts(input.starts, p.civCount, p.size);
   return p;
+}
+
+/**
+ * One entry per civ: a hex index on the size × size map, or −1 (placed
+ * automatically). All −1 is stored as [] so ordinary params stay as before.
+ * Whether a chosen hex is land is checked when the game starts (see pickStarts).
+ */
+function normalizeStarts(starts, count, size) {
+  const list = Array.isArray(starts) ? starts : [];
+  const out = Array.from({ length: count }, (_, k) => {
+    const raw = list[k];
+    const v = typeof raw === 'number' || (typeof raw === 'string' && raw.trim() !== '') ? Number(raw) : NaN;
+    return Number.isInteger(v) && v >= 0 && v < size * size ? v : -1;
+  });
+  return out.some((v) => v >= 0) ? out : [];
 }
 
 /**

@@ -23,7 +23,6 @@ import { TERRAIN_RGB, rgbCss } from '../render/palette.js';
 import { civStyle } from '../render/civStyle.js';
 import { buildNeighbourTable } from '../sim/hex.js';
 import { DEEP_WATER, PLAINS, COAST } from '../sim/terrain.js';
-import { MIGRATION } from '../sim/migration.js';
 import { TYPE_RULES } from '../sim/civTypes.js';
 import { TRAITS, TRAIT_NAMES, TRAIT_RULES } from '../sim/traits.js';
 
@@ -108,8 +107,8 @@ export class HowScreen {
       ],
       migration: () => [
         figure('How far one person can walk in a year from the outlined hex',
-          `From the outlined hex, a year's walk reaches ${pick.reach3.length} hexes with ${MIGRATION.movePoints} movement points (bright), `
-            + `and ${pick.reach5.length} with a Nomad's ${TYPE_RULES.nomadic.movePoints} (faint). Rough ground and water hold them back.`,
+          `From the outlined hex, most people can move to the ${pick.reach3.length} land hexes next door in a year (bright); `
+            + `a Nomad's ${TYPE_RULES.nomadic.movePoints} movement points reach ${pick.reach5.length} (faint). Rough ground and water hold Nomads back.`,
           (c) => drawWorld(c, { ...world, pop: null }, {
             focus: [pick.origin, ...pick.reach5], pad: 0.2, mark: pick.origin,
             reach: [{ hexes: pick.reach5, fill: 'rgba(255,255,255,0.22)' }, { hexes: pick.reach3, fill: 'rgba(255,255,255,0.38)' }],
@@ -260,7 +259,7 @@ function pickHexes(demo, world) {
     const score = (c.x - cx) ** 2 + (c.y - cy) ** 2 + wet * 4000;
     if (score < best) { best = score; origin = i; }
   }
-  const reach3 = Array.from(demo.host.reach(origin, MIGRATION.movePoints) ?? []);
+  const reach3 = Array.from(demo.host.reach(origin, 0) ?? []);
   const reach5 = Array.from(demo.host.reach(origin, TYPE_RULES.nomadic.movePoints) ?? []);
   return { busy, border, origin, reach3, reach5 };
 }

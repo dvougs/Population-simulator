@@ -49,13 +49,15 @@ export const DEATH_STARVATION = 1;
 export const DEATH_WAR = 2;
 
 /**
- * Picks a start hex for each civ. The first is a random good hex (land with
- * food capacity ≥ startMinFood); each next is a random good hex at least
- * startMinDistance steps from the earlier starts, or else the good hex
- * farthest from them (lowest index on ties). Without good hexes, any land.
- * Returns an array of hex indices (several civs may share one on tiny land).
+ * Starting hex for each civ. fixed[c] (optional) is a hex chosen on the setup
+ * screen: it is used when it is land and no earlier civ already starts there;
+ * otherwise (or with −1) the civ is placed automatically. Automatic placement
+ * draws from good hexes (food capacity ≥ startMinFood; any land if none):
+ * each is a random one at least startMinDistance from every start so far
+ * (chosen ones included), or the farthest if there is none. Returns
+ * hex indices; fewer than `civs` only if there is no land.
  */
-export function pickStarts(map, civs, rng) {
+export function pickStarts(map, civs, rng, fixed = []) {
   const land = [];
   const good = [];
   for (let i = 0; i < map.count; i++) {
@@ -66,16 +68,24 @@ export function pickStarts(map, civs, rng) {
   const pool = good.length ? good : land;
   const starts = [];
   if (!pool.length) return starts;
+  // Chosen starts first, so the automatic ones keep their distance from them.
+  const chosen = new Array(civs).fill(-1);
+  for (let c = 0; c < civs; c++) {
+    const h = fixed[c] ?? -1;
+    if (h >= 0 && h < map.count && map.terrain[h] !== DEEP_WATER && !chosen.includes(h)) chosen[c] = h;
+  }
+  const placed = chosen.filter((h) => h >= 0);
   const ax = pool.map((i) => indexToAxial(i, map.cols));
   const nearest = (k) => {
     let best = Infinity;
-    for (const s of starts) {
+    for (const s of placed) {
       const b = indexToAxial(s, map.cols);
       best = Math.min(best, distance(ax[k].q, ax[k].r, b.q, b.r));
     }
     return best;
   };
   for (let c = 0; c < civs; c++) {
+    if (chosen[c] >= 0) { starts.push(chosen[c]); continue; }
     const far = [];
     let bestK = 0;
     let bestD = -1;
@@ -84,7 +94,9 @@ export function pickStarts(map, civs, rng) {
       if (d >= LIFE.startMinDistance) far.push(k);
       if (d > bestD) { bestD = d; bestK = k; }
     }
-    starts.push(pool[far.length ? far[rng.int(far.length)] : bestK]);
+    const h = pool[far.length ? far[rng.int(far.length)] : bestK];
+    starts.push(h);
+    placed.push(h);
   }
   return starts;
 }

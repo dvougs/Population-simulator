@@ -207,9 +207,13 @@ export function howText() {
         paras: [
           `A person who went hungry sets out with a ${pct(M.hungryChance)} chance. A fed person in a crowded hex, with more people than `
             + `${pct(M.crowdedShare)} of its food, sets out with a ${pct(M.crowdedChance)} chance.`,
-          `A walker has ${M.movePoints} movement points a year (a Nomadic one has ${nomadic.movePoints}). Seas and lakes block the way, until a civ builds boats.`,
-          'They head for a hex in reach with more spare food than home, picked at random but weighted by that spare food, '
-            + `and counted ${M.ownCivWeight === 2 ? 'twice' : `× ${M.ownCivWeight}`} where their own civ already lives. So civs spread like ink: along rivers and coasts first, into the hills last.`,
+          `People move one hex a year, into a land hex next door. Nomads walk instead, with ${nomadic.movePoints} movement points a year. `
+            + 'Seas and lakes block the way, until a civ builds boats.',
+          'They head for a hex with more spare food than home, picked at random but weighted by that spare food, '
+            + `counted ${M.ownCivWeight === 2 ? 'twice' : `× ${M.ownCivWeight}`} where their own civ already lives. So civs spread like ink: along rivers and coasts first, into the hills last.`,
+          `Civs also choose with a plan: a hex with a material their next level needs counts × ${M.materialWeight}; `
+            + `next to a hostile civ they cannot beat, × ${M.avoidWeight}; next to hostile civs they can beat, × ${M.pushWeight} (if they ever start fights); `
+            + `and +${pct(M.contiguityPerHex)} for each neighbouring hex they already hold, so their land stays in one piece.`,
         ],
       },
       {

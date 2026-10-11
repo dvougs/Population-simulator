@@ -10,7 +10,10 @@ import { LIFE } from './life.js';
 import { TYPE_RULES } from './civTypes.js';
 
 export const MIGRATION = Object.freeze({
-  /** Movement points a person has in a year; entering a hex costs its movement cost. */
+  /**
+   * Movement points of buildReach's default walk (entering a hex costs its movement cost). Only
+   * civ types with movePoints of their own (Nomadic) walk; everyone else moves one hex (buildStepReach).
+   */
   movePoints: 3,
   /** A hex is crowded when it holds more than this share of its food capacity in people. */
   crowdedShare: 0.8,
@@ -20,7 +23,51 @@ export const MIGRATION = Object.freeze({
   crowdedChance: 0.2,
   /** A hex in reach that already holds people of the mover's own civ counts its spare food this many times. */
   ownCivWeight: 2,
+  /**
+   * Where civs expand (see migrate): a hex's weight is also × materialWeight if it holds a deposit
+   * of a material the civ's next level still needs; × avoidWeight next to a hostile civ it is not
+   * stronger than, or × pushWeight next to hostile civs it is stronger than (only civs that start
+   * fights push); and × (1 + contiguityPerHex × the land neighbours its civ already holds).
+   */
+  materialWeight: 3,
+  avoidWeight: 0.25,
+  pushWeight: 2,
+  contiguityPerHex: 0.2,
 });
+
+/**
+ * One-hex reach: for each land hex, its land neighbours in index order. With
+ * boats, also the land hexes next to a water neighbour (one water hex
+ * crossed), never the hex itself. Same CSR shape as buildReach.
+ */
+export function buildStepReach(map, boats = false) {
+  const { count, terrain, neighbours } = map;
+  const offsets = new Int32Array(count + 1);
+  const lists = [];
+  const seen = new Uint8Array(count);
+  for (let h = 0; h < count; h++) {
+    const out = [];
+    if (terrain[h] !== DEEP_WATER) {
+      for (let d = 0; d < 6; d++) {
+        const v = neighbours[h * 6 + d];
+        if (v < 0) continue;
+        if (terrain[v] !== DEEP_WATER) { if (!seen[v]) { seen[v] = 1; out.push(v); } continue; }
+        if (!boats) continue;
+        for (let e = 0; e < 6; e++) {
+          const u = neighbours[v * 6 + e];
+          if (u >= 0 && u !== h && terrain[u] !== DEEP_WATER && !seen[u]) { seen[u] = 1; out.push(u); }
+        }
+      }
+      for (const v of out) seen[v] = 0;
+      out.sort((a, b) => a - b);
+    }
+    lists.push(out);
+    offsets[h + 1] = offsets[h] + out.length;
+  }
+  const targets = new Int32Array(offsets[count]);
+  for (let h = 0; h < count; h++) targets.set(lists[h], offsets[h]);
+  return { offsets, targets };
+}
 
 /**
  * For each land hex, the land hexes reachable in one year (cheapest path cost
@@ -134,8 +181,17 @@ export function migrationRules(types, map, reach) {
     gen: 0,
     /** Per hex, the Kingdom enclosing it or −1 (set by the Simulation): no other civ may move in. */
     inside: null,
+    /** Set by the Simulation each year (null: no expansion priorities): per civ, the materials its next level still needs (bitmask). */
+    want: null,
+    /** Per civ, bitmasks over civs: hostile[c] the civs threatening c, beats[c] the hostile civs c pushes towards. */
+    hostile: new Uint32Array(n),
+    beats: new Uint32Array(n),
+    /** Scratch: civs with people in or next to each hex, and each hex's threat for each civ (−1 avoid, 0, +1 push). */
+    near: new Uint32Array(map.count),
+    threat: new Int8Array(map.count * n),
   };
-  rules.byPoints = new Map([[`${MIGRATION.movePoints}`, reach]]);
+  // Reach tables by kind ('step', '5', 'stepb1', …), built as civs need them.
+  rules.byPoints = new Map();
   rules.movePoints = new Int32Array(n);
   rules.boats = new Uint8Array(n);
   for (let c = 0; c < n; c++) {
@@ -144,7 +200,8 @@ export function migrationRules(types, map, reach) {
     rules.hungryChance[c] = Math.min(1, MIGRATION.hungryChance * factor);
     rules.crowdedChance[c] = t.fedNeverSetsOut ? 0 : Math.min(1, MIGRATION.crowdedChance * factor);
     rules.crowdedShare[c] = t.crowdedShare ?? MIGRATION.crowdedShare;
-    rules.movePoints[c] = t.movePoints ?? MIGRATION.movePoints;
+    // 0: one hex a year (buildStepReach).
+    rules.movePoints[c] = t.movePoints ?? 0;
     setReach(rules, c, map, false);
   }
   return rules;
@@ -157,11 +214,61 @@ export function migrationRules(types, map, reach) {
  */
 export function setReach(rules, c, map, boats, boatCost = 1) {
   const mp = rules.movePoints[c];
-  const key = boats ? `${mp}b${boatCost}` : `${mp}`;
-  if (!rules.byPoints.has(key)) rules.byPoints.set(key, buildReach(map, mp, boats ? boatCost : 0));
+  const base = mp === 0 ? 'step' : `${mp}`;
+  const key = boats ? `${base}b${boatCost}` : base;
+  if (!rules.byPoints.has(key)) rules.byPoints.set(key, mp === 0 ? buildStepReach(map, boats) : buildReach(map, mp, boats ? boatCost : 0));
   rules.boats[c] = boats ? 1 : 0;
   rules.reach[c] = rules.byPoints.get(key);
   rules.cum[c] = new Float64Array(rules.reach[c].targets.length);
+}
+
+/**
+ * A hex's weight per unit of spare food for a mover of civ c (see MIGRATION):
+ * own civ there, a needed material, threats, and land already held around it.
+ */
+function priority(map, held, base, t, c, n, wantMask, threat) {
+  const M = MIGRATION;
+  let w = held[base + t] ? M.ownCivWeight : 1;
+  if (map.deposits[t] & wantMask) w *= M.materialWeight;
+  if (threat < 0) w *= M.avoidWeight;
+  else if (threat > 0) w *= M.pushWeight;
+  let own = 0;
+  for (let d = 0; d < 6; d++) {
+    const v = map.neighbours[t * 6 + d];
+    if (v >= 0 && held[base + v]) own++;
+  }
+  return w * (1 + M.contiguityPerHex * own);
+}
+
+/**
+ * Threat of every hex for every civ, from who is where now (held): a hostile
+ * civ with people in the hex or next to it makes it −1 (avoid) for a civ that
+ * does not beat it, else +1 (push) when every hostile civ there is one it beats.
+ */
+function markThreats(map, held, rules, civs) {
+  const n = map.count;
+  const { near, threat, hostile, beats } = rules;
+  near.fill(0);
+  for (let c = 0; c < civs; c++) {
+    const bit = 1 << c;
+    const base = c * n;
+    for (let h = 0; h < n; h++) {
+      if (!held[base + h]) continue;
+      near[h] |= bit;
+      for (let d = 0; d < 6; d++) {
+        const v = map.neighbours[h * 6 + d];
+        if (v >= 0) near[v] |= bit;
+      }
+    }
+  }
+  for (let h = 0; h < n; h++) {
+    const b = h * civs;
+    const here = near[h];
+    for (let c = 0; c < civs; c++) {
+      const hs = here & hostile[c];
+      threat[b + c] = hs === 0 ? 0 : (hs & ~beats[c]) !== 0 ? -1 : 1;
+    }
+  }
 }
 
 /** Scratch for callers that do not pass one (tests); the Simulation passes its own. */
@@ -190,6 +297,9 @@ export function migrate(people, map, reach, rng, pop, spare, dest, held = null, 
   const civs = rules ? rules.hungryChance.length : 0;
   if (rules) rules.gen++;
   const inside = rules?.inside ?? null;
+  const want = rules?.want ?? null;
+  const threat = rules?.threat ?? null;
+  if (want) markThreats(map, held, rules, civs);
   for (let i = 0; i < people.high; i++) {
     dest[i] = -1;
     if (!alive[i]) continue;
@@ -214,7 +324,9 @@ export function migrate(people, map, reach, rng, pop, spare, dest, held = null, 
         for (let k = offsets[h]; k < offsets[h + 1]; k++) {
           const t = targets[k];
           const s = spare[t];
-          if (s > 0 && s > own && !(inside && inside[t] >= 0 && inside[t] !== c)) total += held[base + t] ? s * MIGRATION.ownCivWeight : s;
+          if (s > 0 && s > own && !(inside && inside[t] >= 0 && inside[t] !== c)) {
+            total += want ? s * priority(map, held, base, t, c, n, want[c], threat[t * civs + c]) : (held[base + t] ? s * MIGRATION.ownCivWeight : s);
+          }
           cum[k] = total;
         }
         rules.stamp[key] = rules.gen;

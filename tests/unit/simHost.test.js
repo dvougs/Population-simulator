@@ -191,3 +191,18 @@ test('hexPeople(col, row, limit): lowest id first, total counts everyone, limit 
   assert.equal(water.total, 0);
   assert.deepEqual(water.people, []);
 });
+
+test('RULES.md "Start hexes": the host shows where each civ will start and which starts were chosen', () => {
+  const host = new LocalSimHost();
+  const auto = host.starts({ seed: 'hs', civCount: 3 });
+  assert.equal(auto.starts.length, 3);
+  assert.deepEqual(auto.chosen, [false, false, false]);
+  cloneable(auto);
+  const pick = auto.starts[0];
+  const moved = host.starts({ seed: 'hs', civCount: 3, starts: [-1, pick, -1] });
+  assert.equal(moved.starts[1], pick);
+  assert.deepEqual(moved.chosen, [false, true, false]);
+  assert.notEqual(moved.starts[0], pick, 'civ 0 is placed elsewhere');
+  host.start({ seed: 'hs', civCount: 3, starts: [-1, pick, -1] });
+  assert.deepEqual([...host.sim.starts], moved.starts, 'the game starts where the preview showed');
+});
