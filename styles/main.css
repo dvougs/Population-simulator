@@ -126,6 +126,7 @@ input[type="range"] { width: 100%; height: var(--tap); accent-color: var(--accen
 .death-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--surface-2); margin-bottom: 8px; }
 .death-bar .old-age { background: #8aa4c8; }
 .death-bar .starvation { background: var(--danger); }
+.death-bar .war { background: #c9a227; }
 .end-log { gap: 4px; }
 .end-log li { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 10px; background: var(--surface-2); font-size: 0.9rem; }
 .table-wrap { overflow-x: auto; margin-top: 8px; }

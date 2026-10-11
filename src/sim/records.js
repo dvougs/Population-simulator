@@ -13,13 +13,18 @@ import { DEATH_STARVATION } from './life.js';
 export const FAMINE = Object.freeze({ minShare: 0.02, minDeaths: 5 });
 /** Most events kept; room for one extinction per civ is always left. */
 export const EVENT_CAP = 2048;
-export const EVENT_TYPES = ['famine', 'extinction'];
+export const EVENT_TYPES = ['famine', 'extinction', 'fight'];
 const EV_FAMINE = 0;
 const EV_EXTINCTION = 1;
+const EV_FIGHT = 2;
+/** Order of events in the same year: famines, then fights, then extinctions. */
+const EVENT_ORDER = { famine: 0, fight: 1, extinction: 2 };
 
 export class Records {
-  constructor(civs, founders) {
+  /** cols: the map's width, to give fights a column and row. */
+  constructor(civs, founders, cols = 1) {
     this.civs = civs;
+    this.cols = cols;
     this.founderId = new Uint32Array(founders);
     this.founderCiv = new Uint8Array(founders);
     this.founderDesc = new Int32Array(founders);
@@ -51,6 +56,21 @@ export class Records {
     this.evYear = new Int32Array(EVENT_CAP);
     this.evEnd = new Int32Array(EVENT_CAP);
     this.evDeaths = new Int32Array(EVENT_CAP);
+    // Fights only: the hex, the civ attacked, the civ that held the hex and the winner (evCiv is the attacker).
+    this.evHex = new Int32Array(EVENT_CAP);
+    this.evDefender = new Uint8Array(EVENT_CAP);
+    this.evHolder = new Uint8Array(EVENT_CAP);
+    this.evWinner = new Uint8Array(EVENT_CAP);
+  }
+
+  /** A fight this year in hex h; deaths on both sides together. Dropped (and counted) once the log is full. */
+  fight(year, h, attacker, defender, holder, winner, deaths) {
+    const k = this.evCount;
+    if (!this.push(EV_FIGHT, attacker, year, year, deaths, false)) return;
+    this.evHex[k] = h;
+    this.evDefender[k] = defender;
+    this.evHolder[k] = holder;
+    this.evWinner[k] = winner;
   }
 
   /** Register the founders (every person alive before the first year). */
@@ -117,13 +137,14 @@ export class Records {
   }
 
   push(type, civ, year, end, deaths, always) {
-    if (this.evCount >= EVENT_CAP - (always ? 0 : this.civs)) { this.evDropped++; return; }
+    if (this.evCount >= EVENT_CAP - (always ? 0 : this.civs)) { this.evDropped++; return false; }
     const k = this.evCount++;
     this.evType[k] = type;
     this.evCiv[k] = civ;
     this.evYear[k] = year;
     this.evEnd[k] = end;
     this.evDeaths[k] = deaths;
+    return true;
   }
 
   /**
@@ -143,7 +164,12 @@ export class Records {
 
     const events = [];
     for (let k = 0; k < this.evCount; k++) {
-      events.push({ type: EVENT_TYPES[this.evType[k]], civ: this.evCiv[k], year: this.evYear[k], endYear: this.evEnd[k], deaths: this.evDeaths[k], ongoing: false });
+      const e = { type: EVENT_TYPES[this.evType[k]], civ: this.evCiv[k], year: this.evYear[k], endYear: this.evEnd[k], deaths: this.evDeaths[k], ongoing: false };
+      if (this.evType[k] === EV_FIGHT) {
+        const h = this.evHex[k];
+        Object.assign(e, { hex: h, col: h % this.cols, row: Math.floor(h / this.cols), attacker: e.civ, defender: this.evDefender[k], holder: this.evHolder[k], winner: this.evWinner[k] });
+      }
+      events.push(e);
     }
     let worst = this.worstCiv < 0 ? null
       : { civ: this.worstCiv, startYear: this.worstStart, endYear: this.worstEnd, deaths: this.worstDeaths, ongoing: false };
@@ -154,7 +180,7 @@ export class Records {
       // Ties go to the famine that ended first, so an ongoing one needs strictly more deaths.
       if (!worst || f.deaths > worst.deaths) worst = f;
     }
-    events.sort((a, b) => a.year - b.year || EVENT_TYPES.indexOf(a.type) - EVENT_TYPES.indexOf(b.type) || a.civ - b.civ);
+    events.sort((a, b) => a.year - b.year || EVENT_ORDER[a.type] - EVENT_ORDER[b.type] || a.civ - b.civ);
 
     let most = -1;
     for (let f = 0; f < this.founderDesc.length; f++) if (this.founderDesc[f] > 0 && (most < 0 || this.founderDesc[f] > this.founderDesc[most])) most = f;

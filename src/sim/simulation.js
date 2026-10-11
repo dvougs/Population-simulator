@@ -1,7 +1,7 @@
 // Simulation: owns the map, the people and the clock. The only entry point the
 // UI, the headless runner and the tests use. One tick is one year:
-// birthdays, eating, deaths, births, migration, food regrowth, then the
-// year's stats are recorded.
+// birthdays, eating, deaths, births, migration, food regrowth, contact
+// (fights and switching civ), then the year's stats are recorded.
 
 import { normalizeParams, mapParams } from './params.js';
 import { generateMap, countTerrain, hashMap, fnv } from './mapgen.js';
@@ -10,6 +10,7 @@ import { Rng } from './rng.js';
 import { People, NO_PARENT } from './people.js';
 import { pickStarts, found, eat, deaths, births, regrow } from './life.js';
 import { buildReach, migrate, migrationRules } from './migration.js';
+import { Contact } from './contact.js';
 import { CIV_TYPE_NAMES } from './civTypes.js';
 import { CivStats } from './civStats.js';
 import { Records, FAMINE } from './records.js';
@@ -46,6 +47,9 @@ export class Simulation {
     const placement = rng.fork('placement');
     // Founders' trait spread and every child's mutation; forked last so the other streams are as before traits.
     this.rng.traits = rng.fork('traits');
+    // Fights and civ switching (also forked after the older streams).
+    this.rng.war = rng.fork('war');
+    this.rng.switch = rng.fork('switch');
     this.starts = pickStarts(map, civs, placement);
     this.civCount = civs;
     this.civTypes = this.params.civTypes.slice();
@@ -56,6 +60,7 @@ export class Simulation {
     found(this.people, this.starts, this.params.startPop, placement, this.rng.traits, this.civTypes);
     this.reach = buildReach(map);
     this.migrationRules = migrationRules(this.civTypes, map, this.reach);
+    this.contact = new Contact(map, this.civTypes);
 
     // Scratch arrays, allocated once (per-person ones again only if the pool grows).
     const n = map.count;
@@ -82,11 +87,16 @@ export class Simulation {
     this.civStats = new CivStats(civs);
     const people = this.people;
     const st = this.civStats;
-    this.records = new Records(civs, this.starts.length * this.params.startPop);
+    this.records = new Records(civs, this.starts.length * this.params.startPop, map.cols);
     this.records.founders(people);
     const rec = this.records;
     this.onDeath = (i, cause) => { st.death(people.civ[i], cause, people.age[i]); rec.death(i, people, cause, this.tickCount); };
     this.onBirth = (i) => { st.birth(people.civ[i]); rec.birth(i, people, this.tickCount); };
+    this.onFight = (h, attacker, defender, holder, winner, deaths) => {
+      st.fight(attacker, defender, winner);
+      rec.fight(this.tickCount, h, attacker, defender, holder, winner, deaths);
+    };
+    this.onSwitch = (from, to) => st.switched(from, to);
     this.recordYear();
   }
 
@@ -106,6 +116,14 @@ export class Simulation {
     if (this.dest.length < people.capacity) this.allocPersonScratch();
     migrate(people, this.map, this.reach, this.rng.migration, this.hexPop, this.spare, this.dest, this.civHeld, this.migrationRules);
     regrow(this.map);
+    // hexCivPop still holds last year's counts here: it decides each fight's defender.
+    this.contact.year(people, this.map, this.hexCivPop, this.tickCount, this.rng.war, this.rng.switch,
+      this.onDeath, this.onFight, this.onSwitch);
+  }
+
+  /** Winner of this year's fight in each hex (civ index), or −1 where there was none. */
+  get fightWinner() {
+    return this.contact.fightWinner;
   }
 
   /** Count people, hexes held, the oldest person and trait averages per civ, and append the year's stats row. */
@@ -230,8 +248,8 @@ export class Simulation {
    */
   report() {
     const civs = this.civStats.summary();
-    const deaths = { oldAge: 0, starvation: 0 };
-    for (const c of civs) { deaths.oldAge += c.deaths.oldAge; deaths.starvation += c.deaths.starvation; }
+    const deaths = { oldAge: 0, starvation: 0, war: 0 };
+    for (const c of civs) { deaths.oldAge += c.deaths.oldAge; deaths.starvation += c.deaths.starvation; deaths.war += c.deaths.war; }
     return {
       ...this.stats(),
       winnerName: this.winner === null ? null : `Civ ${this.winner + 1}`,

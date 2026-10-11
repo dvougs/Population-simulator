@@ -59,9 +59,13 @@ function civsCard(r) {
     h('ol', { class: 'end-civs' }, order.map((c) => h('li', { 'data-civ': c.id, class: c.pop === 0 ? 'dead' : undefined },
       h('div', { class: 'end-civ-head' }, civLabel(c.id), h('span', { class: 'num' }, `${formatNumber(c.pop)} people`)),
       dl([
+        ['Type', c.typeName ?? '-'],
         ['Peak population', `${formatNumber(c.peakPop)} in year ${c.peakPopYear}`],
         ['Average lifespan', c.avgLifespan === null ? 'No deaths' : `${c.avgLifespan} years`],
         ['Peak hexes held', formatNumber(c.peakHexes)],
+        ['Fights', `${formatNumber(c.fights)} (${formatNumber(c.fightsWon)} won)`],
+        ['War deaths', formatNumber(c.deaths.war)],
+        ['Switched in / out', `${formatNumber(c.switchesIn)} / ${formatNumber(c.switchesOut)}`],
         ['Died out', c.extinctYear === null ? 'No' : `Year ${c.extinctYear}`],
       ])))));
 }
@@ -149,14 +153,15 @@ function peopleCard(r) {
 }
 
 function deathsCard(r) {
-  const { oldAge, starvation } = r.deaths;
-  const total = oldAge + starvation;
+  const { oldAge, starvation, war } = r.deaths;
+  const total = oldAge + starvation + war;
   const bar = (n, cls) => h('span', { class: `bar ${cls}`, style: { width: pct(n, total) } });
   return card('end-deaths', 'Deaths by cause',
-    h('div', { class: 'death-bar', 'aria-hidden': 'true' }, bar(oldAge, 'old-age'), bar(starvation, 'starvation')),
+    h('div', { class: 'death-bar', 'aria-hidden': 'true' }, bar(oldAge, 'old-age'), bar(starvation, 'starvation'), bar(war, 'war')),
     dl([
       ['Old age', `${formatNumber(oldAge)} (${pct(oldAge, total)})`],
       ['Starvation', `${formatNumber(starvation)} (${pct(starvation, total)})`],
+      ['War', `${formatNumber(war)} (${pct(war, total)})`],
       ['Total', formatNumber(total)],
     ]));
 }
@@ -176,12 +181,16 @@ function recordsCard(r) {
 
 function historyCard(r) {
   const { events, eventsDropped } = r.records;
-  const text = (e) => (e.type === 'extinction'
-    ? `${civName(e.civ)} died out`
-    : `Famine in ${civName(e.civ)}${e.ongoing ? ' (still going)' : ''}: ${formatNumber(e.deaths)} starved${e.endYear > e.year ? ` by year ${e.endYear}` : ''}`);
+  const text = (e) => {
+    if (e.type === 'extinction') return `${civName(e.civ)} died out`;
+    if (e.type === 'fight') {
+      return `${civName(e.attacker)} attacked ${civName(e.defender)} at (${e.col}, ${e.row}); ${civName(e.winner)} won; ${formatNumber(e.deaths)} killed`;
+    }
+    return `Famine in ${civName(e.civ)}${e.ongoing ? ' (still going)' : ''}: ${formatNumber(e.deaths)} starved${e.endYear > e.year ? ` by year ${e.endYear}` : ''}`;
+  };
   return card('end-history', 'History',
-    events.length === 0 ? h('p', { class: 'muted' }, 'No famines or extinctions.')
+    events.length === 0 ? h('p', { class: 'muted' }, 'No famines, fights or extinctions.')
       : h('ol', { class: 'end-log' }, events.map((e) => h('li', { 'data-type': e.type, 'data-civ': e.civ },
         h('span', { class: 'log-year' }, `Year ${e.year}`), emblem(e.civ, 12), h('span', {}, text(e))))),
-    eventsDropped > 0 ? h('p', { class: 'muted' }, `${formatNumber(eventsDropped)} later famines not listed.`) : null);
+    eventsDropped > 0 ? h('p', { class: 'muted' }, `${formatNumber(eventsDropped)} later famines and fights not listed.`) : null);
 }

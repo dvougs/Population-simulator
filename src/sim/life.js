@@ -45,6 +45,8 @@ export const LIFE = Object.freeze({
 
 export const DEATH_OLD_AGE = 0;
 export const DEATH_STARVATION = 1;
+/** Killed in a fight (contact.js). */
+export const DEATH_WAR = 2;
 
 /**
  * Picks a start hex for each civ. The first is a random good hex (land with

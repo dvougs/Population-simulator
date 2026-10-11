@@ -2,7 +2,7 @@
 
 How the game works, as currently implemented. Every number here is the value the code uses. If the game and this file disagree, the game has a bug (see CLAUDE.md).
 
-This describes the current build (Phase 2, in progress): a generated hex map where civilisations of individual people eat, have children, grow old, starve and migrate, year by year, until an end condition you chose is met. Every person carries 8 inherited traits that set their birth chance, lifespan, food need and how hard hunger hits them; each civ has a type that biases how its people move. The full design is in [project/ROADMAP.md](project/ROADMAP.md); this file changes as each part of it ships.
+This describes the current build (Phase 2, in progress): a generated hex map where civilisations of individual people eat, have children, grow old, starve, migrate, fight and switch civ, year by year, until an end condition you chose is met. Every person carries 8 inherited traits that set their birth chance, lifespan, food need, how hard hunger hits them, how they fight and how readily they switch civ; each civ has a type that biases how its people move and fight. The full design is in [project/ROADMAP.md](project/ROADMAP.md); this file changes as each part of it ships.
 
 ## Saving
 
@@ -57,7 +57,7 @@ When several hexes tie on a value, the one with the lower index (row × size + c
 - Seas and lakes are impassable.
 - Every hex starts with food equal to its food capacity.
 - Food capacity is in food units; a person eats 0.75 to 1.25 food a year by their metabolism, 1 at metabolism 0.5 (see "Traits").
-- Movement cost limits how far people migrate in a year (see "Migration"). The defence bonus has no effect yet: it is used once fights arrive.
+- Movement cost limits how far people migrate in a year (see "Migration"). The defence bonus is added to the strength of the civ that held the hex in a fight (see "Contact").
 
 ### Material deposits
 
@@ -105,7 +105,7 @@ Chance a hex holds a deposit (%); a terrain not listed is 0:
 - **Start hexes.** A good start hex is land with food capacity 40 or more (coast, plains, forest, and any river hex). The first civ starts on a random good hex. Each next civ starts on a random good hex at least 3 steps from every earlier start; if there is none, on the good hex farthest from the earlier starts (lowest index on ties). With no good hexes at all, any land hex counts as good. On very small land several civs can start on the same hex.
 - All of a civ's founders start together on its start hex, each with a random age from 0 to 39, full health (100) and no hunger, no parent, and traits drawn as "Traits" says.
 - Every person has an age (years), health (0 to 100), hunger (years in a row without food), a hex, a civ, a parent (the person who bore them; none for founders) and 8 traits.
-- Several civs can live in the same hex. They do not interact yet: no contact, fights or switching civ.
+- Several civs can live in the same hex. When they do, they may fight or people may switch civ (see "Contact").
 - The fertile ages (16 to 40) are the same for everyone; birth chance, old age, food need and hunger's health loss depend on the person's traits.
 
 ## Traits
@@ -119,7 +119,9 @@ Every person has 8 traits, each a number from 0 to 1: fertility (f), life expect
 | Metabolism m | Food eaten a year = 0.75 + 0.5 × m (0.75 to 1.25). Also multiplies the birth chance (above) and raises the hunger burden. |
 | Heat tolerance h | Lowers hunger's health loss in desert; raises it in tundra and mountain. |
 | Cold tolerance c | Lowers hunger's health loss in tundra and mountain; raises it in desert. |
-| Strength, aggression, cooperation | Carried and inherited, but no effect yet (they are used once fights and civ switching arrive). |
+| Strength | A civ's strength in a fight is the sum of its people's strength in the hex (see "Contact"). |
+| Aggression | A civ's average aggression in a hex decides whether it starts a fight and the chance it does (see "Contact"). |
+| Cooperation | The yearly chance of switching civ is 2% × cooperation (see "Contact"). |
 
 - **Hunger's health loss** in a year without food = round(35 × B × climate), where:
   - the hunger burden B = 1 + 2.8 × (f − 0.5) + 1.2 × (m − 0.5), kept between 0.5 and 3, so fertile, fast-burning people starve faster;
@@ -131,13 +133,13 @@ Every person has 8 traits, each a number from 0 to 1: fertility (f), life expect
 
 ## Civ types
 
-Each civ has one of 5 types, picked per civ on the setup screen. A type biases the odds on top of each person's own traits: it sets the founders' starting traits (see "Traits") and changes how its people migrate and fight. A person always acts by the type of the civ they belong to now.
+Each civ has one of 5 types, picked per civ on the setup screen. A type biases the odds on top of each person's own traits: it sets the founders' starting traits (see "Traits") and changes how its people migrate and fight. A person always acts by the type of the civ they belong to now (after switching civ, by their new civ's type).
 
 | Type | What it does differently | Starting traits (others 0.5) |
 |---|---|---|
 | Expansionist | Moves on early: a fed person sets out (20% a year) once their hex holds more people than 50% of its food capacity, instead of 80%. | fertility 0.58 |
-| Aggressive | Always fights any civ it shares a hex with (once contact ships; see "Not in the game yet"). | aggression 0.7, strength 0.65 |
-| Cooperative | Never starts a fight; its people switch away to another civ half as often (once contact ships). | cooperation 0.7 |
+| Aggressive | Always fights any civ it shares a hex with (trigger (a) in "Contact"). | aggression 0.7, strength 0.65 |
+| Cooperative | Never starts a fight. Its people switch away to another civ half as often (× 0.5). | cooperation 0.7 |
 | Isolationist | Stays home: its people set out only in a year they went hungry (50%), never because the hex is crowded. | life expectancy 0.6 |
 | Nomadic | Wanders far: 5 movement points a year instead of 3, and sets out at twice the usual chance (100% when hungry, 40% when fed in a crowded hex). | metabolism 0.45, heat tolerance 0.6, cold tolerance 0.6 |
 
@@ -165,8 +167,9 @@ Each year (tick) runs these steps in order. Within a step everyone decides first
 4. **Births.** Each person who ate this year, aged 16 to 40 (inclusive), in a hex with fewer people (all civs, counted after this year's deaths) than its food capacity, has a child with their birth chance, (2.5% + 5% × f) × (0.75 + 0.5 × m) (5% with fertility and metabolism 0.5). No partner is needed. The child starts at age 0 with full health and no hunger, in the parent's hex and civ, with that parent recorded and the parent's traits with mutation (see "Traits").
 5. **Migration** (see below).
 6. **Food regrowth.** Each hex regains food equal to 50% of its food capacity, never above its capacity.
-7. **Statistics** for the year are recorded (see "Statistics").
-8. **End conditions** are checked (see "End of the game").
+7. **Contact:** fights and switching civ in hexes shared by several civs (see "Contact").
+8. **Statistics** for the year are recorded (see "Statistics").
+9. **End conditions** are checked (see "End of the game").
 
 ## Migration
 
@@ -178,11 +181,39 @@ Each year (tick) runs these steps in order. Within a step everyone decides first
 - A person who sets out picks one hex in reach whose spare food is above 0 and above their own hex's spare food, at random, with chances in proportion to each hex's weight. A hex's weight is its spare food, counted twice (×2) if it already holds at least one person of the mover's own civ. With no such hex, they stay.
 - Everyone chooses against the same counts (food, people and which civs are in each hex), taken before anyone moves; then everyone who chose moves at once.
 
+## Contact
+
+Checked once a year, after food regrowth, in every land hex where people of 2 or more civs live. Everything is decided against the same counts, taken when the step starts (people, food and who is where); then the deaths, flights and switches apply together.
+
+### Fights
+
+- **Who starts a fight.** For each pair of civs A and B in the hex, civ A attacks B if one of these triggers holds. Cooperative civs never start a fight (they can still be attacked).
+  - (a) *Aggressive:* A is Aggressive. It always attacks.
+  - (b) *Hunger:* the hex's food is below the total yearly need of the people in it, and A's average aggression there is above 0.5.
+  - (c) *Crowding:* the hex holds at least as many people (all civs) as its food capacity, and A's average aggression there is above 0.4.
+  - (d) *Numbers:* A has at least 3 times as many people in the hex as B, and A's average aggression there is above 0.45.
+  - (e) *Revenge:* A lost a fight to B in the last 20 years (this year minus that year is 20 or less).
+  If any of (b) to (e) holds (and A is not Aggressive), A attacks with a chance equal to its average aggression in the hex: one roll per pair, however many of those triggers hold.
+- **At most one fight per hex a year.** If several pairs would fight, the fight is between the pair holding the civ with the most people in the hex, and among those the pair whose other civ has the most people (ties go to the lower civ number). If both civs of that pair would attack each other, the attacker is the one that did not hold the hex.
+- **The hex holder** is the civ of the two that had more people in the hex at the end of last year; on a tie (for example both just arrived), the one with more people now, then the lower civ number. The holder may be the attacker or the attacked.
+- **Strength** of each side = the sum of its people's strength in the hex. The holder's strength is multiplied by 1 + the hex's defence bonus (forest +25%, hills +50%, mountain +100%, otherwise 0%; see "Terrain").
+- **Result.** The side with more strength wins; on equal strength the holder wins.
+  - The loser loses ⌈20%⌉ of its people in the hex (rounded up, so at least 1), picked at random among them: these are **war deaths**. The rest of the loser's people there flee together to the neighbouring land hex with the most food left over for its people (food − people, counted when the step starts; on a tie the lower index). With no land neighbour they stay.
+  - The winner loses 5% of its people in the hex, rounded to the nearest whole person (half rounds up), picked at random: also war deaths.
+  - Other civs in the hex are not involved.
+- The winner of each hex's fight this year is kept for the year (it will decide who takes a shared hex's yield once gathering arrives).
+
+### Switching civ
+
+- In a shared hex with no fight this year, each person switches civ with a yearly chance of 2% × their cooperation (1% at cooperation 0.5). People of a Cooperative civ switch away with half that chance.
+- A person who switches joins one of the other civs in the hex, picked at random in proportion to their people there. They keep their age, health, traits, family line and hex.
+
 ## Statistics
 
-Recorded at the end of every year, for each civ: people alive, hexes held (hexes with at least one of its people), births, deaths by old age, deaths by starvation, the total age at death of those who died, and the average of each of the 8 traits over its living people (none while it has nobody). When history rows are merged, the trait averages come from the later year, like people and hexes.
+Recorded at the end of every year, for each civ: people alive, hexes held (hexes with at least one of its people), births, deaths by old age, deaths by starvation, war deaths, the total age at death of those who died, and the average of each of the 8 traits over its living people (none while it has nobody). When history rows are merged, the trait averages come from the later year, like people and hexes.
 
-- Kept for the whole run: total births and deaths by cause, average lifespan (average age at death), oldest age reached, peak population and the first year it was reached, most hexes held, and the year the civ died out (its people fell to 0), if it did.
+- Kept for the whole run: total births and deaths by cause (old age, starvation, war), fights fought (as attacker or attacked) and fights won, people who switched into and out of the civ, average lifespan (average age at death, war deaths included), oldest age reached, peak population and the first year it was reached, most hexes held, and the year the civ died out (its people fell to 0), if it did.
+- **Extinction cause:** what a civ died out of is the cause with the most of its deaths in the year it died out (on a tie: old age, then starvation, then war), or switching if none of its people died that year (the last ones switched civ).
 - The yearly history keeps one row per year for the first 8192 rows. When it is full, pairs of rows are merged (people and hexes from the later year, the other numbers added together) and each new row covers twice as many years, so a long game never runs out of memory.
 - **Family lines.** Every person has a generation: founders are generation 1, and a child is its parent's generation + 1. Every person also belongs to the line of the one founder they descend from.
 - **Records** kept for the whole run (shown on the end screen):
@@ -191,7 +222,7 @@ Recorded at the end of every year, for each civ: people alive, hexes held (hexes
   - *Longest family line:* the highest generation anyone reached, with the first person born into it and the founder at the head of their line.
   - *Most descendants:* the founder with the most people born into their line (children, grandchildren and so on, alive or dead). It is always a founder, because a parent counts every descendant of their child plus the child. On a tie, the lower founder id. None if nobody was born.
   - *Worst famine:* the famine with the most starvation deaths (on a tie, the one that ended first). A **famine year** for a civ is a year in which its starvation deaths are at least 2% of its people at the start of that year, and at least 5. Famine years of the same civ in a row make one famine, from its first to its last year. A famine still going on when the game ends counts up to the last year.
-- **History log:** the key events with their year, kept for the whole run: each famine (civ, first and last year, starvation deaths) and each extinction (civ, year). At most 2048 events are kept; once full, later famines are left out (and counted) but extinctions are always kept.
+- **History log:** the key events with their year, kept for the whole run: each famine (civ, first and last year, starvation deaths), each fight (year, hex, attacker, the civ attacked, the hex holder, winner, and war deaths on both sides together) and each extinction (civ, year). At most 2048 events are kept; once full, later famines and fights are left out (and counted) but extinctions are always kept.
 - While the game runs, the statistics sheet shows each civ's emblem, name and type, people and hexes held; the top bar shows the total population, how many civs are still alive, and each civ's emblem with its people alive. Tapping a hex shows its people per civ (see "How civs and people look").
 
 ## How civs and people look
@@ -308,14 +339,14 @@ A scrollable screen that opens when the game ends. Everything on it comes from t
   - *New map:* the map-generation screen with the same settings and a new random seed.
   - *Back to setup:* the setup screen with the settings of the game that ended.
 - **Cards:**
-  - *Civs by final population* (most people first; ties by higher peak population, then lower civ number): people at the end, type, peak population and the first year it was reached, average lifespan (average age at death; "No deaths" if none died), most hexes held at once, and the year the civ died out (or No).
+  - *Civs by final population* (most people first; ties by higher peak population, then lower civ number): people at the end, type, peak population and the first year it was reached, average lifespan (average age at death; "No deaths" if none died), most hexes held at once, fights (and how many won), war deaths, people switched in and out, and the year the civ died out (or No).
   - *Population over time:* one line per civ in its colour, from year 0 to the last year, all on the same scale (the top of the chart is the highest population any civ reached in the recorded history). It draws at most 400 points per civ, taken evenly from the recorded rows, plus the last row.
   - *Traits:* for each civ that ever had people, the average of each of the 8 traits at the end (or in its last year with people, if it died out), to two decimals, with the change since its founders' averages at year 0.
   - *People:* the oldest person ever (id, civ, age, and the year they died or "alive") and the oldest person alive at the end (see "Records" under "Statistics").
-  - *Deaths by cause:* deaths by old age and by starvation over the whole run, all civs together, with their share of all deaths.
+  - *Deaths by cause:* deaths by old age, by starvation and in war over the whole run, all civs together, with their share of all deaths.
   - *Records:* longest family line, the person with the most descendants, and the worst famine (see "Statistics").
-  - *History:* the history log, oldest first (by first year; on the same year famines before extinctions, then by civ number).
+  - *History:* the history log, oldest first (by first year; on the same year famines, then fights, then extinctions, then by civ number (the attacker's for a fight)). A fight reads "Civ A attacked Civ B at (column, row); Civ W won; N killed".
 
 ## Not in the game yet
 
-Land degrading, contact and war (so Aggressive and Cooperative fight and switching rules have no effect yet), gathering materials and levels, boats, god powers, first to Kingdom (comes with levels). See [project/ROADMAP.md](project/ROADMAP.md).
+Land degrading, organised war and alliances, gathering materials and levels, boats, god powers, first to Kingdom (comes with levels). See [project/ROADMAP.md](project/ROADMAP.md).

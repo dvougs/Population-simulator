@@ -9,7 +9,8 @@
 //                          [--dominance-share f] [--dominance-years n]
 //
 // Prints the map summary, per-civ population every --every years (with the state
-// hash), per-civ totals (type, births, deaths by cause, lifespans, extinction year),
+// hash), per-civ totals (type, births, deaths by cause including war, fights fought
+// and won, civ switches in and out, lifespans, extinction year and cause),
 // each civ's average traits, the end-screen records, the end conditions and how the run ended,
 // the map hash, the final state hash and ticks per second. --json prints the
 // same plus the recorded year-by-year history per civ.
@@ -114,7 +115,8 @@ const result = {
     const h = sim.starts[k];
     return { ...c, start: h === undefined ? null : { col: h % sim.map.cols, row: Math.floor(h / sim.map.cols) } };
   }),
-  extinctions: stats.civs.filter((c) => c.extinctYear !== null).map((c) => ({ civ: c.name, year: c.extinctYear })),
+  extinctions: stats.civs.filter((c) => c.extinctYear !== null).map((c) => ({ civ: c.name, year: c.extinctYear, cause: c.extinctCause })),
+  fights: stats.civs.reduce((s, c) => s + c.fights, 0) / 2,
   samples,
   records: sim.report().records,
   history: historyJson(sim.history(), civNames),
@@ -124,7 +126,7 @@ function civNamesOf(k) { return `Civ ${k + 1}`; }
 
 /** Recorded history as plain arrays: one entry per row (one row per year unless the run outgrew the history). */
 function historyJson(hist, names) {
-  const fields = ['pop', 'hexes', 'births', 'deathsOldAge', 'deathsStarvation', 'lifespanSum'];
+  const fields = ['pop', 'hexes', 'births', 'deathsOldAge', 'deathsStarvation', 'deathsWar', 'lifespanSum'];
   const tc = hist.traitCount;
   const trait = (r, k, t) => {
     const v = hist.traits[(r * hist.civs + k) * tc + t];
@@ -149,11 +151,12 @@ if (args.json) {
   console.log(`  ${p.civCount} ${p.civCount === 1 ? 'civ' : 'civs'}, ${p.startPop} people each, mutation ±${Math.round(p.mutation * 100)}%; `
     + `${stats.totalPop} people alive at year ${stats.tick}`);
   for (const c of result.civs) {
-    const deaths = c.deaths.oldAge + c.deaths.starvation;
+    const deaths = c.deaths.oldAge + c.deaths.starvation + c.deaths.war;
     const where = c.start ? ` from (${c.start.col}, ${c.start.row})` : '';
     const fate = c.extinctYear !== null ? `EXTINCT in year ${c.extinctYear}` : `${c.pop} alive in ${c.hexes} ${c.hexes === 1 ? 'hex' : 'hexes'}`;
     console.log(`  ${c.name} (${c.typeName})${where}: ${fate}; peak ${c.peakPop} people, ${c.peakHexes} ${c.peakHexes === 1 ? 'hex' : 'hexes'}; ${c.births} births; `
-      + `${deaths} deaths (old age ${c.deaths.oldAge}, starvation ${c.deaths.starvation}); `
+      + `${deaths} deaths (old age ${c.deaths.oldAge}, starvation ${c.deaths.starvation}, war ${c.deaths.war}); `
+      + `${c.fights} fights, ${c.fightsWon} won; switches in ${c.switchesIn}, out ${c.switchesOut}; `
       + `average lifespan ${c.avgLifespan ?? '-'}; oldest ${c.oldestAge}`);
   }
   const short = { fertility: 'f', lifeExpectancy: 'l', strength: 'str', aggression: 'agg', cooperation: 'coop', metabolism: 'm', heatTolerance: 'h', coldTolerance: 'c' };
@@ -161,7 +164,7 @@ if (args.json) {
     if (c.traits) console.log(`  ${c.name} traits${c.pop === 0 ? ' (when it died out)' : ''}: ${Object.entries(c.traits).map(([k, v]) => `${short[k]} ${v.toFixed(3)}`).join(', ')}`);
   }
   console.log(result.extinctions.length
-    ? `  extinctions: ${result.extinctions.map((e) => `${e.civ} in year ${e.year}`).join(', ')}`
+    ? `  extinctions: ${result.extinctions.map((e) => `${e.civ} in year ${e.year} (${e.cause})`).join(', ')}`
     : '  extinctions: none');
   const rec = result.records;
   const who = (r) => `#${r.id} (Civ ${r.civ + 1})`;
@@ -169,7 +172,7 @@ if (args.json) {
     + `longest line ${rec.longestLine.generations} generations; `
     + `most descendants ${rec.mostDescendants ? `${who(rec.mostDescendants)} ${rec.mostDescendants.descendants}` : '-'}; `
     + `worst famine ${rec.worstFamine ? `Civ ${rec.worstFamine.civ + 1} years ${rec.worstFamine.startYear}-${rec.worstFamine.endYear}, ${rec.worstFamine.deaths} starved` : 'none'}; `
-    + `${rec.events.length} events`);
+    + `${result.fights} fights; ${rec.events.length} events`);
   console.log(`  end conditions: ${p.endConditions.length ? p.endConditions.join(', ') : 'sandbox'}`);
   if (stats.finished) console.log(`  ended: ${stats.endReason}; winner: ${result.winner ?? 'none'}`);
   console.log(`map ${result.mapHash}  hash ${result.hash}  generated in ${result.generateMs} ms  ${result.ticksPerSecond} ticks/s`);
