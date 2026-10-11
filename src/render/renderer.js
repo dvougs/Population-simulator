@@ -18,12 +18,17 @@
 // cause at most one redraw per PEOPLE_FRAME_MS, no more than the shimmer alone
 // was allowed. Any other redraw (pan, tap) shows the latest counts at once.
 // Only gliding people (zoomed in) redraw every frame, so glides stay smooth.
+//
+// Civ overlays (tint, rings, territory outlines; see territoryLayer.js) are
+// rebuilt only when the people per hex changed, at most once per
+// PEOPLE_FRAME_MS, even while panning redraws every frame.
 
 import { Application, Container, Graphics } from '../../vendor/pixi.mjs';
 import { hexPolygon, riverSegments, HEX_SIZE } from './layout.js';
 import { hexColours, rgbToHex, RIVER_RGB } from './palette.js';
 import { DEEP_WATER } from '../sim/terrain.js';
-import { PeopleLayer } from './peopleLayer.js';
+import { PeopleLayer, peopleShown } from './peopleLayer.js';
+import { TerritoryLayer } from './territoryLayer.js';
 
 const SHIMMER_PERIOD_MS = 8000; // one full swell: slow, like a tide
 const SHIMMER_ALPHA = 0.1; // peak white over the water: gentle
@@ -45,6 +50,8 @@ export class Renderer {
     this.lastDraw = -Infinity;
     this.peopleDirty = false;
     this.motionChanged = false;
+    this.territory = null;
+    this.lastTerritory = -Infinity;
     this.reducedMotion = false;
     if (typeof window !== 'undefined' && window.matchMedia) {
       const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -64,6 +71,7 @@ export class Renderer {
     if (this.motionChanged) return true;
     if (this.people?.animating(now)) return true;
     if (this.peopleDirty && now - this.lastDraw >= PEOPLE_FRAME_MS) return true;
+    if (this.territory?.pending && now - this.lastTerritory >= PEOPLE_FRAME_MS) return true;
     if (!this.animating || now - this.lastShimmer < SHIMMER_FRAME_MS) return false;
     return shimmerLevel(now) !== this.shimmerLevel;
   }
@@ -114,15 +122,21 @@ export class Renderer {
 
     this.selection = new Graphics();
     this.people = new PeopleLayer(map);
-    this.world.addChild(terrain, rivers);
+    this.territory = new TerritoryLayer(map);
+    this.lastTerritory = -Infinity;
+    this.world.addChild(terrain, this.territory.tint, rivers);
     if (this.shimmer) this.world.addChild(this.shimmer);
-    this.world.addChild(grid, this.selection, this.people.container);
+    this.world.addChild(grid, this.territory.rings, this.territory.outlines, this.selection, this.people.container);
     this.selected = -1;
   }
 
   /** New population snapshot from SimHost.population(); `now` is render time in ms. */
   setPopulation(data, now = performance.now()) {
-    if (this.people && data) { this.people.setPopulation(data, now); this.peopleDirty = true; }
+    if (this.people && data) {
+      this.people.setPopulation(data, now);
+      this.territory.setPopulation(data);
+      this.peopleDirty = true;
+    }
   }
 
   /** Ring the person (slot, id) on the map while people are drawn; slot -1 for none. */
@@ -151,6 +165,15 @@ export class Renderer {
     this.lastDraw = now;
     this.peopleDirty = false;
     this.updateShimmer(now);
+    if (this.territory) {
+      const rings = !peopleShown(camera.scale);
+      if (this.territory.pending && now - this.lastTerritory >= PEOPLE_FRAME_MS) {
+        this.lastTerritory = now;
+        this.territory.update(rings);
+      } else {
+        this.territory.update(rings, false);
+      }
+    }
     if (selected !== this.selected) {
       this.selected = selected;
       this.selection.clear();
