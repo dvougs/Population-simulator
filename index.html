@@ -44,6 +44,13 @@
     </div></div>
   </section>
 
+  <section id="end" class="screen setup end-screen" aria-labelledby="end-title" hidden>
+    <header class="setup-header">
+      <h1 id="end-title">The end</h1>
+    </header>
+    <div id="end-body" class="end-body"></div>
+  </section>
+
   <section id="game" class="screen game" hidden>
     <canvas id="map" aria-label="Hex map. Pinch or scroll to zoom, drag to pan, tap a hex to inspect it."></canvas>
 
@@ -69,6 +76,7 @@
         <button id="btn-play" class="btn ctl play" type="button" aria-label="Pause">&#10074;&#10074;</button>
         <button id="btn-step" class="btn ctl" type="button" aria-label="Step one year">&#9654;|</button>
         <div id="speed" class="segmented" role="radiogroup" aria-label="Speed"></div>
+        <button id="btn-end-now" class="btn ctl end-now" type="button" hidden>End now</button>
       </div>
       <div id="sheet-body" class="sheet-body">
         <h2 class="sheet-title">Civilisations</h2>

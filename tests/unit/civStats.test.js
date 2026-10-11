@@ -121,3 +121,14 @@ test('RULES.md "Statistics": after 8192 rows, pairs are merged (snapshots from t
   const h2 = st.historyData();
   assert.equal(sum(h2.births) + st.pending[2], st.births[0]);
 });
+
+test('RULES.md "Statistics": peak population year is the first year the peak was reached', () => {
+  const st = new CivStats(1);
+  year(st, 1, [5]);
+  year(st, 2, [9]);
+  year(st, 3, [9]);
+  year(st, 4, [4]);
+  const [c] = st.summary();
+  assert.equal(c.peakPop, 9);
+  assert.equal(c.peakPopYear, 2);
+});

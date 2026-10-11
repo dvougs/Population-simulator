@@ -2,8 +2,9 @@
 
 import { LocalSimHost } from './host/simHost.js';
 import { Loop } from './loop.js';
-import { Camera } from './render/camera.js';
+import { Camera, FLY_MS, flightAt } from './render/camera.js';
 import { Renderer } from './render/renderer.js';
+import { peopleShown, PEOPLE_ZOOM_PX, PEOPLE_FLY_PX } from './render/peopleLayer.js';
 import { hexAtWorld, hexCentre, worldBounds, HEX_SIZE } from './render/layout.js';
 import { attachGestures } from './input/gestures.js';
 import { MapgenScreen } from './ui/mapgenScreen.js';
@@ -13,12 +14,15 @@ import { initControls } from './ui/controls.js';
 import { renderInspector, renderPersonCard } from './ui/inspector.js';
 import { formatNumber } from './ui/dom.js';
 import { renderStats, renderCivStats, renderHudCivs } from './ui/statsPanel.js';
+import { renderEndScreen } from './ui/endScreen.js';
 import { mapParams } from './sim/params.js';
+import { randomSeedString } from './sim/rng.js';
 import { DEEP_WATER } from './sim/terrain.js';
 
 const $ = (id) => document.getElementById(id);
 const ui = {
-  mapgen: $('mapgen'), setup: $('setup'), game: $('game'), resume: $('btn-resume'),
+  mapgen: $('mapgen'), setup: $('setup'), game: $('game'), end: $('end'), endBody: $('end-body'), resume: $('btn-resume'),
+  endNow: $('btn-end-now'),
   canvas: $('map'), year: $('hud-year'), pop: $('hud-pop'), hudCivs: $('hud-civs'), inspector: $('inspector'), toast: $('toast'),
   sheet: $('sheet'), handle: $('sheet-handle'), stats: $('stats'), civStats: $('civ-stats'),
 };
@@ -35,26 +39,29 @@ let dirty = true;
 let userMovedCamera = false;
 let lastPanelUpdate = 0;
 let shownEnd = false;
+/** Settings of the game last started, for "Same settings again" (kept in memory only). */
+let startParams = null;
+/** Tap-to-zoom flight in progress: { from, to, scale0, scale1, sx, sy, t0 }, or null. */
+let flight = null;
 
 const loop = new Loop({
   tick: (n) => host.tick(n),
   frame: (ran, now) => {
+    renderer.setMoving(!loop.paused);
+    if (flight) stepFlight(now);
     // New head counts are drawn on the renderer's throttled clock, not every tick frame.
     if (ran > 0) renderer.setPopulation(host.population(), now);
     // The water shimmer keeps redrawing on its own clock; the sim never sees it.
     if (dirty || (!ui.game.hidden && renderer.needsFrame(now))) { renderer.draw(camera, outlinedHex(), now); dirty = false; }
     if (ran > 0 && now - lastPanelUpdate > 100) { updatePanels(); lastPanelUpdate = now; }
-    if (host.finished && !shownEnd) {
-      shownEnd = true;
-      updatePanels();
-      controls.setPaused(true);
-      showToast(host.stats().endReason);
-    }
+    if (host.finished && !shownEnd) showEnd();
   },
 });
 
 const controls = initControls({
   playBtn: $('btn-play'), stepBtn: $('btn-step'), speedEl: $('speed'), loop,
+  // "End now" belongs to the paused game.
+  onChange: () => { ui.endNow.hidden = !loop.paused; },
 });
 initBottomSheet(ui.sheet, ui.handle);
 
@@ -87,12 +94,14 @@ async function startGame(params) {
     return;
   }
   host.start(params);
+  startParams = host.params;
   map = host.map();
   renderer.setMap(map);
   renderer.setPopulation(host.population(), performance.now());
   camera.setBounds(worldBounds(map.cols, map.rows));
   selected = -1;
   person = null;
+  flight = null;
   renderer.selectPerson(-1);
   shownEnd = false;
   userMovedCamera = false;
@@ -112,7 +121,36 @@ function showScreen(name) {
   ui.mapgen.hidden = name !== 'mapgen';
   ui.setup.hidden = name !== 'setup';
   ui.game.hidden = name !== 'game';
+  ui.end.hidden = name !== 'end';
   ui.resume.hidden = !(name === 'setup' && host.sim);
+}
+
+/** Pause and open the end screen for the finished run. */
+function showEnd() {
+  shownEnd = true;
+  controls.setPaused(true);
+  updatePanels();
+  renderEndScreen(ui.endBody, host.report(), {
+    onKeepWatching: () => {
+      host.keepWatching();
+      shownEnd = false;
+      showScreen('game');
+      resize();
+      updatePanels();
+      controls.setPaused(false);
+    },
+    onSameAgain: () => startGame(startParams),
+    onNewMap: () => {
+      mapgen.setParams({ ...startParams, seed: randomSeedString() }, 'custom');
+      showScreen('mapgen');
+    },
+    onSetup: () => {
+      setup.setParams(startParams);
+      showScreen('setup');
+    },
+  });
+  showScreen('end');
+  ui.end.scrollTop = 0;
 }
 
 function updatePanels() {
@@ -156,16 +194,53 @@ function showPersonCard() {
   });
 }
 
-function select(index) {
+function select(index, panIfCovered = true) {
   selected = index;
   person = null;
   renderer.selectPerson(-1);
   if (index < 0) renderInspector(ui.inspector, null);
   else {
     showHexCard();
-    placeInspector(true);
+    placeInspector(panIfCovered);
   }
   dirty = true;
+}
+
+/** Centre of the open map area (CSS px): below the top bar, clear of the collapsed sheet. */
+function mapCentre() {
+  const inset = sheetInsets();
+  const top = 64;
+  return {
+    x: (camera.viewW - (inset.right ?? 0)) / 2,
+    y: top + (camera.viewH - top - (inset.bottom ?? 0)) / 2,
+  };
+}
+
+/** Fly the camera to hex `index`, zoomed in far enough to see its people (RULES.md "How civs and people look"). */
+function flyTo(index, now = performance.now()) {
+  const c = mapCentre();
+  let scale1 = Math.max(camera.scale, Math.min(camera.maxScale, PEOPLE_FLY_PX / (2 * HEX_SIZE)));
+  if (!peopleShown(scale1)) {
+    scale1 = PEOPLE_ZOOM_PX / (2 * HEX_SIZE);
+    camera.maxScale = Math.max(camera.maxScale, scale1);
+  }
+  flight = {
+    from: camera.screenToWorld(c.x, c.y), to: hexCentre(map.cols, index),
+    scale0: camera.scale, scale1, sx: c.x, sy: c.y, t0: now,
+  };
+  userMovedCamera = true;
+}
+
+function stepFlight(now) {
+  const t = Math.min(1, (now - flight.t0) / FLY_MS);
+  const v = flightAt(flight.from, flight.to, flight.scale0, flight.scale1, t);
+  camera.viewAt(v.wx, v.wy, v.scale, flight.sx, flight.sy);
+  camera.clamp();
+  dirty = true;
+  if (t >= 1) {
+    flight = null;
+    placeInspector(true);
+  } else placeInspector();
 }
 
 function selectPerson(slot, id) {
@@ -268,8 +343,8 @@ new ResizeObserver(() => { if (!ui.game.hidden) resize(); }).observe(ui.canvas);
 window.addEventListener('orientationchange', () => setTimeout(resize, 200));
 
 attachGestures(ui.canvas, {
-  onPan: (dx, dy) => { camera.pan(dx, dy); userMovedCamera = true; dirty = true; placeInspector(); },
-  onZoom: (f, x, y) => { camera.zoomAt(f, x, y); userMovedCamera = true; dirty = true; placeInspector(); },
+  onPan: (dx, dy) => { flight = null; camera.pan(dx, dy); userMovedCamera = true; dirty = true; placeInspector(); },
+  onZoom: (f, x, y) => { flight = null; camera.zoomAt(f, x, y); userMovedCamera = true; dirty = true; placeInspector(); },
   onTap: (x, y) => {
     if (!map) return;
     // Zoomed in, a tap on a person opens their card (tapping them again closes it).
@@ -283,17 +358,27 @@ attachGestures(ui.canvas, {
     const hex = hexAtWorld(map.cols, map.rows, w.x, w.y);
     // Water, off the map, or the selected hex again: close the inspector.
     if (!hex || map.terrain[hex.index] === DEEP_WATER || hex.index === selected) { select(-1); return; }
+    // Zoomed out, a hex also flies the camera in to its people; the card finds its corner on landing.
+    if (!peopleShown(camera.scale)) {
+      select(hex.index, false);
+      flyTo(hex.index);
+      return;
+    }
     select(hex.index);
   },
 });
 
-$('btn-fit').addEventListener('click', () => { userMovedCamera = false; fitCamera(); placeInspector(); });
+$('btn-fit').addEventListener('click', () => { flight = null; userMovedCamera = false; fitCamera(); placeInspector(); });
 $('btn-setup').addEventListener('click', () => {
   controls.setPaused(true);
   setup.setParams(host.params);
   showScreen('setup');
 });
 ui.resume.addEventListener('click', () => { showScreen('game'); resize(); });
+ui.endNow.addEventListener('click', () => {
+  host.endNow();
+  showEnd();
+});
 
 try {
   const saved = JSON.parse(localStorage.getItem('popsim:lastParams') || 'null');
@@ -325,6 +410,10 @@ window.popsim = {
   selected: () => selected,
   /** Person shown in the inspector as { slot, id }, or null. */
   selectedPerson: () => (person ? { slot: person.slot, id: person.id } : null),
+  /** End-screen data of the running game (SimHost.report()), or null. */
+  report: () => host.report(),
   /** Whether people are drawn one by one at the current zoom. */
   peopleShown: () => renderer.people?.shown ?? false,
+  /** Whether the camera is flying to a tapped hex. */
+  flying: () => flight !== null,
 };

@@ -41,6 +41,12 @@ export class LocalSimHost {
     return this.sim ? this.sim.tick(n) : 0;
   }
 
+  /** End the run now ("End now"); no winner. */
+  endNow() { this.sim?.endNow(); }
+
+  /** Continue a finished run as a sandbox ("Keep watching"). */
+  keepWatching() { this.sim?.keepWatching(); }
+
   get params() { return this.sim ? { ...this.sim.params } : null; }
   get finished() { return this.sim?.finished ?? false; }
   get tickCount() { return this.sim?.tickCount ?? 0; }
@@ -50,6 +56,8 @@ export class LocalSimHost {
   stats() { return this.sim?.stats() ?? null; }
   /** Per-civ yearly history recorded during the run: plain data and typed arrays (copies). */
   history() { return this.sim?.history() ?? null; }
+  /** End-screen data: header, per-civ summary, history, records and events (plain data and typed arrays). */
+  report() { return this.sim?.report() ?? null; }
   inspect(col, row) { return this.sim?.inspect(col, row) ?? null; }
   /** People per civ per hex and every person's slot, id, hex and civ (typed array copies), for drawing. */
   population() { return this.sim?.population() ?? null; }

@@ -2,7 +2,7 @@
 
 How the game works, as currently implemented. Every number here is the value the code uses. If the game and this file disagree, the game has a bug (see CLAUDE.md).
 
-This describes the current build (Phase 2, in progress): a generated hex map where civilisations of individual people eat, have children, grow old, starve and migrate, year by year. All people share the same base values for now; inherited traits and civ types come later. The full design is in [project/ROADMAP.md](project/ROADMAP.md); this file changes as each part of it ships.
+This describes the current build (Phase 2, in progress): a generated hex map where civilisations of individual people eat, have children, grow old, starve and migrate, year by year, until an end condition you chose is met. All people share the same base values for now; inherited traits and civ types come later. The full design is in [project/ROADMAP.md](project/ROADMAP.md); this file changes as each part of it ships.
 
 ## Time
 
@@ -98,6 +98,7 @@ Each year (tick) runs these steps in order. Within a step everyone decides first
 5. **Migration** (see below).
 6. **Food regrowth.** Each hex regains food equal to 50% of its food capacity, never above its capacity.
 7. **Statistics** for the year are recorded (see "Statistics").
+8. **End conditions** are checked (see "End of the game").
 
 ## Migration
 
@@ -112,8 +113,16 @@ Each year (tick) runs these steps in order. Within a step everyone decides first
 
 Recorded at the end of every year, for each civ: people alive, hexes held (hexes with at least one of its people), births, deaths by old age, deaths by starvation, and the total age at death of those who died.
 
-- Kept for the whole run: total births and deaths by cause, average lifespan (average age at death), oldest age reached, peak population, most hexes held, and the year the civ died out (its people fell to 0), if it did.
+- Kept for the whole run: total births and deaths by cause, average lifespan (average age at death), oldest age reached, peak population and the first year it was reached, most hexes held, and the year the civ died out (its people fell to 0), if it did.
 - The yearly history keeps one row per year for the first 8192 rows. When it is full, pairs of rows are merged (people and hexes from the later year, the other numbers added together) and each new row covers twice as many years, so a long game never runs out of memory.
+- **Family lines.** Every person has a generation: founders are generation 1, and a child is its parent's generation + 1. Every person also belongs to the line of the one founder they descend from.
+- **Records** kept for the whole run (shown on the end screen):
+  - *Oldest person ever:* the highest age anyone reached, alive or dead (on a tie, whoever reached it first; among the living, the lowest id).
+  - *Oldest alive at the end:* the oldest living person when the game ends (on a tie, the lowest id).
+  - *Longest family line:* the highest generation anyone reached, with the first person born into it and the founder at the head of their line.
+  - *Most descendants:* the founder with the most people born into their line (children, grandchildren and so on, alive or dead). It is always a founder, because a parent counts every descendant of their child plus the child. On a tie, the lower founder id. None if nobody was born.
+  - *Worst famine:* the famine with the most starvation deaths (on a tie, the one that ended first). A **famine year** for a civ is a year in which its starvation deaths are at least 2% of its people at the start of that year, and at least 5. Famine years of the same civ in a row make one famine, from its first to its last year. A famine still going on when the game ends counts up to the last year.
+- **History log:** the key events with their year, kept for the whole run: each famine (civ, first and last year, starvation deaths) and each extinction (civ, year). At most 2048 events are kept; once full, later famines are left out (and counted) but extinctions are always kept.
 - While the game runs, the statistics sheet shows each civ's emblem, people and hexes held; the top bar shows the total population, how many civs are still alive, and each civ's emblem with its people alive. Tapping a hex shows its people per civ (see "How civs and people look").
 
 ## How civs and people look
@@ -132,9 +141,14 @@ Each civ has a colour and a shape emblem, chosen by civ number, so civs can be t
 | Civ 8 | violet (150, 100, 255) | ring |
 
 - **Zoomed out**, each land hex with people shows the emblem of its largest civ (on a tie, the lower civ number) in that civ's colour, and below it the total people in the hex (all civs). Counts of 1000 or more are shortened: 1.2k (one decimal, rounded down) under 10000, then 46k, then 2M. While the game runs, the labels show the latest year and refresh at most 2.5 times a second (every 0.4 seconds), so a fast game does not redraw the whole map every frame; panning, zooming or tapping shows the latest counts at once.
-- **Zoomed in**, once a hex is at least 200 pixels across on screen (corner to corner), the hex labels give way to the people themselves: each person is a tiny emblem in their civ's colour, at a fixed spot inside their hex (picked from their id, within 60% of the hex size from its centre).
+- **Shared-hex ring.** Zoomed out, each land hex with people also has a thin ring around its label: a circle centred on the hex, radius 70% of the hex size (centre to corner), line 7% of the hex size wide over a faint dark backing. The ring is split into arcs, one per civ living there, each as long as that civ's share of the hex's people, in civ colours. Arcs run clockwise from the top, largest civ first (on a tie, the lower civ number); a hex with one civ has a whole ring in its colour.
+- **Territory outlines.** Every civ gets a bold outline in its colour, 10% of the hex size wide over a dark casing, around the outer edge of all the hexes it holds (hexes with at least one of its people), so its land reads as one area: an edge between two hexes it holds is not drawn, an edge to a hex it does not hold or to the map's edge is. Outlines of civs that share hexes may overlap, so each civ's line sits slightly inside the territory edge: the middle of the line is (½ + (civ number − 1) mod 4) × the line width inside, that is 5%, 15%, 25% and 35% of the hex size for Civs 1 to 4, then again from 5% for Civs 5 to 8. Outlines show at every zoom, above the rings and below the people.
+- **Hex tint.** Each land hex with people is tinted toward the colour of the civs living there, mixed by each civ's share of its people: drawn colour = 70% terrain colour (with its height shading) + 30% civ mix. Empty hexes keep their terrain colour. The map-generation preview is never tinted.
+- The ring, outlines and tint are redrawn only when the people per hex changed, and at most 2.5 times a second (every 0.4 seconds), like the labels.
+- **Zoomed in**, once a hex is at least 120 pixels across on screen (corner to corner), the hex labels and rings give way to the people themselves: each person is a tiny emblem in their civ's colour, at a fixed spot inside their hex (picked from their id, within 60% of the hex size from its centre).
+- **Idling.** While time runs, each person drawn circles slowly around their spot, at a radius of 10% of the hex size, one lap every 4 to 8 seconds (picked from their id, either way round). Paused, they stop where they are. With the device's reduced-motion setting on, they stay still. This is drawing only and changes nothing in the game.
 - A person who migrates glides from where they were drawn to their spot in the new hex over 0.6 seconds. This is drawing only: in the game they move at once, as "Migration" says.
-- **Tap a hex** to see its terrain, food and its people per civ with each civ's emblem. *List people* opens the list of the people in the hex, lowest id first (the first 100, then how many more); tap a row to open that person.
+- **Tap a hex** to see its terrain, food and its people per civ with each civ's emblem. Zoomed out (people not drawn), the tap also flies the camera to that hex over 0.4 seconds: the hex ends centred in the open map area, zoomed in until a hex is 180 pixels across (less if the view cannot zoom that far, but always at least far enough to show people). Panning, zooming or Fit during the flight stops it. *List people* opens the list of the people in the hex, lowest id first (the first 100, then how many more); tap a row to open that person.
 - **Tap a person** (zoomed in; the nearest person within 22 pixels of the tap) to see their id, civ, age, health, hunger, parent (their id, or none for founders; "died" if the parent is no longer alive) and their living children. Tapping the same person again closes the card. If the person dies while the card is open, it shows "Died" with the last values seen.
 
 ## Map settings
@@ -176,19 +190,58 @@ Chosen on the setup screen, after the map.
 |---|---|---|
 | Civ count | 3 | 1 to 8 |
 | Starting population | 20 people per civ | 2 to 200 |
-| End condition | None (run forever) | None, Year limit |
-| Year limit | 1000 | 10 to 100000 |
+| End conditions | none ticked (Sandbox: no end) | any combination of Last civ standing, Dominance, Year limit; ticking none is Sandbox |
+| Dominance share | 60% of land hexes | 25% to 100%, whole percent |
+| Dominance years | 300 | 10 to 10000 |
+| Year limit | 2500 (choices 1000, 2500, 5000, 10000, or custom) | 10 to 100000 |
 
-Out-of-range values are clamped to the range; values that are not numbers fall back to the default.
+Out-of-range values are clamped to the range; values that are not numbers fall back to the default. Unknown end conditions are ignored, and anything that is not a list of end conditions means Sandbox.
 
-- Each map preset also sets the civs: Small world 3 civs of 20 people, Continent 4 of 30, Archipelago 5 of 20, Highlands 3 of 20, Large world 6 of 40.
-- Randomise on the setup screen picks 2 to 6 civs and 10 to 50 people each; it does not change the map. Randomise on the map screen does not change the civs.
+- Each map preset also sets the civs and the end conditions:
+
+| Preset | Civs | People each | End conditions |
+|---|---|---|---|
+| Small world | 3 | 20 | Sandbox |
+| Continent | 4 | 30 | Dominance (60%, 300 years), Year limit 5000 |
+| Archipelago | 5 | 20 | Last civ standing, Year limit 10000 |
+| Highlands | 3 | 20 | Year limit 2500 |
+| Large world | 6 | 40 | Last civ standing, Dominance (60%, 300 years) |
+
+  Settings a preset does not list keep their defaults (dominance 60% and 300 years, year limit 2500).
+- Randomise on the setup screen picks 2 to 6 civs and 10 to 50 people each, ticks each of Last civ standing, Dominance and Year limit with chance 50% (none ticked is Sandbox), a dominance share of 50% to 80%, dominance years of 100, 200, 300 or 500, and a year limit of 1000, 2500, 5000 or 10000; it does not change the map. Randomise on the map screen does not change the civs or the end conditions.
 
 ## End of the game
 
-- With a year limit, the game ends when that year is reached. Otherwise it runs until you leave.
-- There is no end screen yet; the end reason is shown when the game stops.
+On the setup screen you tick any combination of these end conditions. Ticking none of them is **Sandbox**: the game never ends on its own.
+
+- **Last civ standing:** the game ends in the year only one civ still has people. That civ wins. Needs at least 2 civs at the start (with 1 civ it never fires).
+- **Dominance:** the game ends when one civ has held at least the dominance share (default 60%) of the land hexes for the dominance years (default 300) in a row. Land hexes are all hexes that are not sea or lake; a civ holds a hex when at least one of its people lives there (several civs can hold the same hex). The years count from the first year the civ reaches the share and start again from 0 in any year it is below it. That civ wins. If several civs complete their years in the same year (possible only with a share of 50% or less), the one holding the most hexes that year wins, then the lower civ number.
+- **Year limit:** the game ends when the year limit is reached (1000, 2500, 5000, 10000 or a custom year). There is no score and no winner.
+- **Total extinction always ends the game,** whatever is ticked, Sandbox included: when no civ has any people left. There is no winner.
+
+The conditions are checked at the end of each year, after the statistics. The first one met ends the game; if several are met in the same year, the first in this order counts: total extinction, last civ standing, dominance, year limit.
+
+- **End now:** while the game is paused, the controls show an *End now* button. It ends the game at once, with no winner (reason "Ended by the player"), and opens the end screen. On a game that has already ended it reopens the end screen.
+- When the game ends it pauses, the top bar shows "(ended)" after the year, and the end screen opens.
+
+## End screen
+
+A scrollable screen that opens when the game ends. Everything on it comes from the statistics and records kept during the run (see "Statistics"), so it opens at once.
+
+- **Header:** the winner (the surviving civ for Last civ standing, the dominant civ for Dominance; "No winner" otherwise), the end reason, and the years run.
+- **Buttons:**
+  - *Keep watching:* back to the map; the game carries on from where it stopped as a sandbox, where no end condition applies any more (not even total extinction). Not shown after a total extinction. *End now* still opens the end screen again.
+  - *Same settings again:* starts a new game with exactly the settings of the one that ended (same seed, so the same map and start). The settings are kept in memory only.
+  - *New map:* the map-generation screen with the same settings and a new random seed.
+  - *Back to setup:* the setup screen with the settings of the game that ended.
+- **Cards:**
+  - *Civs by final population* (most people first; ties by higher peak population, then lower civ number): people at the end, peak population and the first year it was reached, average lifespan (average age at death; "No deaths" if none died), most hexes held at once, and the year the civ died out (or No).
+  - *Population over time:* one line per civ in its colour, from year 0 to the last year, all on the same scale (the top of the chart is the highest population any civ reached in the recorded history). It draws at most 400 points per civ, taken evenly from the recorded rows, plus the last row.
+  - *People:* the oldest person ever (id, civ, age, and the year they died or "alive") and the oldest person alive at the end (see "Records" under "Statistics").
+  - *Deaths by cause:* deaths by old age and by starvation over the whole run, all civs together, with their share of all deaths.
+  - *Records:* longest family line, the person with the most descendants, and the worst famine (see "Statistics").
+  - *History:* the history log, oldest first (by first year; on the same year famines before extinctions, then by civ number).
 
 ## Not in the game yet
 
-Land degrading, inherited traits and mutation, civ types, contact and war, materials and levels, boats, god powers, more end conditions and the end screen. See [project/ROADMAP.md](project/ROADMAP.md).
+Land degrading, inherited traits and mutation, civ types, contact and war, materials and levels, boats, god powers, first to Kingdom (comes with levels). See [project/ROADMAP.md](project/ROADMAP.md).

@@ -120,14 +120,14 @@ test('emblemSvg draws the civ colour with a dark outline', () => {
   }
 });
 
-test('RULES.md: people are drawn once a hex is at least 200 px across (corner to corner)', () => {
-  assert.equal(PEOPLE_ZOOM_PX, 200);
+test('RULES.md: people are drawn once a hex is at least 120 px across (corner to corner)', () => {
+  assert.equal(PEOPLE_ZOOM_PX, 120);
   assert.equal(HEX_SIZE, 32);
   // Corner to corner is 2 × HEX_SIZE = 64 world px.
-  assert.equal(peopleShown(200 / 64), true, 'exactly 200 px');
-  assert.equal(peopleShown(199.9 / 64), false, 'just under');
+  assert.equal(peopleShown(120 / 64), true, 'exactly 120 px');
+  assert.equal(peopleShown(119.9 / 64), false, 'just under');
   assert.equal(peopleShown(4), true);
-  assert.equal(peopleShown(165 / 64), false, 'the e2e zoom level stays zoomed out');
+  assert.equal(peopleShown(100 / 64), false);
 });
 
 test('RULES.md: hex counts of 1000 or more are shortened (1.2k rounded down under 10000, then 46k, then 2M)', () => {

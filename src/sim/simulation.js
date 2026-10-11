@@ -11,6 +11,7 @@ import { People, NO_PARENT } from './people.js';
 import { pickStarts, found, eat, deaths, births, regrow } from './life.js';
 import { buildReach, migrate } from './migration.js';
 import { CivStats } from './civStats.js';
+import { Records, FAMINE } from './records.js';
 import {
   DEEP_WATER, TERRAIN_IDS, TERRAIN_NAMES, MOVE_COST, DEFENCE_BONUS, MATERIALS,
 } from './terrain.js';
@@ -23,6 +24,11 @@ export class Simulation {
     this.tickCount = 0;
     this.finished = false;
     this.endReason = null;
+    /** How the run ended ('extinction', 'lastCiv', 'dominance', 'years', 'player') and the winning civ, if any. */
+    this.endKind = null;
+    this.winner = null;
+    /** Set by Keep watching: no end condition applies any more, not even extinction. */
+    this.sandbox = false;
 
     const map = this.map;
     const civs = this.params.civCount;
@@ -57,13 +63,19 @@ export class Simulation {
     this.civPop = new Int32Array(civs);
     this.civHexes = new Int32Array(civs);
     this.civOldest = new Int32Array(civs);
+    /** Years in a row each civ has held at least the dominance share of the land. */
+    this.dominanceStreak = new Int32Array(civs);
+    this.landHexes = n - this.terrainCounts[DEEP_WATER];
     this.allocPersonScratch();
 
     this.civStats = new CivStats(civs);
     const people = this.people;
     const st = this.civStats;
-    this.onDeath = (i, cause) => st.death(people.civ[i], cause, people.age[i]);
-    this.onBirth = (i) => st.birth(people.civ[i]);
+    this.records = new Records(civs, this.starts.length * this.params.startPop);
+    this.records.founders(people);
+    const rec = this.records;
+    this.onDeath = (i, cause) => { st.death(people.civ[i], cause, people.age[i]); rec.death(i, people, cause, this.tickCount); };
+    this.onBirth = (i) => { st.birth(people.civ[i]); rec.birth(i, people, this.tickCount); };
     this.recordYear();
   }
 
@@ -106,6 +118,7 @@ export class Simulation {
       if (!this.civHex[k]) { this.civHex[k] = 1; this.civHexes[c]++; }
     }
     this.civStats.endYear(this.tickCount, this.civPop, this.civHexes, this.civOldest);
+    this.records.endYear(this.tickCount, this.civPop);
   }
 
   /** Advance n ticks (stops early when the end condition is met). Returns ticks run. */
@@ -121,14 +134,53 @@ export class Simulation {
     return ran;
   }
 
+  /**
+   * End conditions, checked after each year in this order (the first met
+   * ends the run): total extinction, last civ standing, dominance, year limit.
+   */
   checkEnd() {
     const p = this.params;
-    if (p.endCondition === 'ticks' && this.tickCount >= p.endTicks) this.end(`Reached year ${p.endTicks}`);
+    const ends = p.endConditions;
+    const civs = this.civCount;
+    let alive = 0;
+    let last = -1;
+    // Integer test of hexes ÷ land ≥ share, so no rounding decides who dominates.
+    const pct = Math.round(p.dominanceShare * 100);
+    let dominant = -1;
+    for (let c = 0; c < civs; c++) {
+      if (this.civPop[c] > 0) { alive++; last = c; }
+      if (this.landHexes > 0 && this.civHexes[c] * 100 >= pct * this.landHexes) this.dominanceStreak[c]++;
+      else this.dominanceStreak[c] = 0;
+      // Several civs can only qualify together at shares of 50% or less: most hexes, then the lower civ.
+      if (this.dominanceStreak[c] >= p.dominanceYears && (dominant < 0 || this.civHexes[c] > this.civHexes[dominant])) dominant = c;
+    }
+    if (this.sandbox) return;
+    if (alive === 0) this.end('extinction', null, 'Every civ died out');
+    else if (ends.includes('lastCiv') && civs >= 2 && alive === 1) this.end('lastCiv', last, `Civ ${last + 1} is the last civ standing`);
+    else if (ends.includes('dominance') && dominant >= 0) {
+      this.end('dominance', dominant, `Civ ${dominant + 1} held ${pct}% of the land for ${p.dominanceYears} years`);
+    } else if (ends.includes('years') && this.tickCount >= p.endTicks) this.end('years', null, `Reached year ${p.endTicks}`);
   }
 
-  end(reason) {
+  end(kind, winner, reason) {
     this.finished = true;
+    this.endKind = kind;
+    this.winner = winner;
     this.endReason = reason;
+  }
+
+  /** "End now": stop the run here, with no winner. */
+  endNow() {
+    if (!this.finished) this.end('player', null, 'Ended by the player');
+  }
+
+  /** "Keep watching": carry on after the end as a sandbox that never ends. */
+  keepWatching() {
+    this.sandbox = true;
+    this.finished = false;
+    this.endKind = null;
+    this.winner = null;
+    this.endReason = null;
   }
 
   stats() {
@@ -139,12 +191,36 @@ export class Simulation {
       terrainCounts: this.terrainCounts.slice(),
       finished: this.finished,
       endReason: this.endReason,
+      endKind: this.endKind,
+      winner: this.winner,
+      sandbox: this.sandbox,
     };
   }
 
   /** Recorded per-civ history: plain data and typed arrays (see CivStats.historyData). */
   history() {
     return this.civStats.historyData();
+  }
+
+  /**
+   * Everything the end screen shows, from stats and records kept during the
+   * run (plain data plus the history's typed arrays), so it costs one pass
+   * over the living at most.
+   */
+  report() {
+    const civs = this.civStats.summary();
+    const deaths = { oldAge: 0, starvation: 0 };
+    for (const c of civs) { deaths.oldAge += c.deaths.oldAge; deaths.starvation += c.deaths.starvation; }
+    return {
+      ...this.stats(),
+      winnerName: this.winner === null ? null : `Civ ${this.winner + 1}`,
+      endConditions: this.params.endConditions.slice(),
+      landHexes: this.landHexes,
+      deaths,
+      famine: { ...FAMINE },
+      history: this.history(),
+      records: this.records.data(this.people, this.tickCount),
+    };
   }
 
   /** Plain description of hex (col, row) with its people per civ, or null if it is off the map. */

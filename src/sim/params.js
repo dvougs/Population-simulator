@@ -4,7 +4,13 @@
 
 import { randomSeedString } from './rng.js';
 
-export const END_CONDITIONS = ['none', 'ticks'];
+/**
+ * End conditions a run can have, in the order they are checked. None ticked
+ * is Sandbox (no end). Total extinction always ends the run and is not a setting.
+ */
+export const END_CONDITIONS = ['lastCiv', 'dominance', 'years'];
+/** Year limits offered on the setup screen (any other value in range is "custom"). */
+export const YEAR_LIMIT_CHOICES = Object.freeze([1000, 2500, 5000, 10000]);
 /** Lowland terrain weights, in the order they appear on the map-generation screen. */
 export const LOWLAND_KEYS = ['plains', 'forest', 'desert', 'tundra'];
 export const MAP_KEYS = ['seed', 'size', 'water', 'mountains', 'rivers', ...LOWLAND_KEYS];
@@ -20,6 +26,8 @@ export const LIMITS = Object.freeze({
   desert: { min: 0, max: 1 },
   tundra: { min: 0, max: 1 },
   endTicks: { min: 10, max: 100000 },
+  dominanceShare: { min: 0.25, max: 1 },
+  dominanceYears: { min: 10, max: 10000 },
   civCount: { min: 1, max: 8 },
   startPop: { min: 2, max: 200 },
   seedLength: 64,
@@ -39,24 +47,30 @@ export const DEFAULT_PARAMS = Object.freeze({
   // Game settings: civilisations placed at the start and people in each.
   civCount: 3,
   startPop: 20,
-  endCondition: 'none',
-  endTicks: 1000,
+  // End conditions ticked (none = sandbox) and their numbers.
+  endConditions: Object.freeze([]),
+  endTicks: 2500,
+  dominanceShare: 0.6,
+  dominanceYears: 300,
 });
 
+/** The end settings every preset starts from (sandbox); presets override some. */
+const END_DEFAULTS = { endConditions: [], endTicks: 2500, dominanceShare: 0.6, dominanceYears: 300 };
+
 export const PRESETS = {
-  default: { label: 'Small world', params: {} },
+  default: { label: 'Small world', params: { ...END_DEFAULTS } },
   continent: { label: 'Continent', params: {
     seed: 'continent', size: 30, water: 0.2, mountains: 0.12, rivers: 6, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
-    civCount: 4, startPop: 30 } },
+    civCount: 4, startPop: 30, ...END_DEFAULTS, endConditions: ['dominance', 'years'], endTicks: 5000 } },
   archipelago: { label: 'Archipelago', params: {
     seed: 'islands', size: 30, water: 0.6, mountains: 0.08, rivers: 2, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
-    civCount: 5, startPop: 20 } },
+    civCount: 5, startPop: 20, ...END_DEFAULTS, endConditions: ['lastCiv', 'years'], endTicks: 10000 } },
   highlands: { label: 'Highlands', params: {
     seed: 'peaks', size: 20, water: 0.15, mountains: 0.3, rivers: 5, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
-    civCount: 3, startPop: 20 } },
+    civCount: 3, startPop: 20, ...END_DEFAULTS, endConditions: ['years'] } },
   large: { label: 'Large world', params: {
     seed: 'vast', size: 50, water: 0.3, mountains: 0.12, rivers: 12, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
-    civCount: 6, startPop: 40 } },
+    civCount: 6, startPop: 40, ...END_DEFAULTS, endConditions: ['lastCiv', 'dominance'] } },
 };
 
 export function presetParams(key) {
@@ -82,9 +96,20 @@ export function normalizeParams(input = {}) {
   for (const k of LOWLAND_KEYS) p[k] = Math.round(range(input[k], k, d[k]) * 100) / 100;
   p.civCount = Math.round(range(input.civCount, 'civCount', d.civCount));
   p.startPop = Math.round(range(input.startPop, 'startPop', d.startPop));
-  p.endCondition = END_CONDITIONS.includes(input.endCondition) ? input.endCondition : d.endCondition;
+  p.endConditions = normalizeEnds(input);
   p.endTicks = Math.round(range(input.endTicks, 'endTicks', d.endTicks));
+  p.dominanceShare = Math.round(range(input.dominanceShare, 'dominanceShare', d.dominanceShare) * 100) / 100;
+  p.dominanceYears = Math.round(range(input.dominanceYears, 'dominanceYears', d.dominanceYears));
   return p;
+}
+
+/**
+ * Known end conditions, each once, in END_CONDITIONS order. The old single
+ * choice (endCondition 'ticks') still reads as a year limit.
+ */
+function normalizeEnds(input) {
+  const ticked = Array.isArray(input.endConditions) ? input.endConditions : [];
+  return END_CONDITIONS.filter((k) => ticked.includes(k) || (k === 'years' && input.endCondition === 'ticks'));
 }
 
 /** Just the parameters that decide the map. */
@@ -92,6 +117,8 @@ export function mapParams(params) {
   const p = normalizeParams(params);
   return Object.fromEntries(MAP_KEYS.map((k) => [k, p[k]]));
 }
+
+const DOMINANCE_YEAR_CHOICES = [100, 200, 300, 500];
 
 /** Random but sensible map and civs. Uses Math.random (UI only); the sim itself stays seeded. */
 export function randomParams(random = Math.random) {
@@ -108,6 +135,9 @@ export function randomParams(random = Math.random) {
     tundra: random() * 0.3,
     civCount: 2 + Math.floor(random() * 5),
     startPop: 10 + Math.floor(random() * 41),
-    endCondition: 'none',
+    endConditions: END_CONDITIONS.filter(() => random() < 0.5),
+    endTicks: YEAR_LIMIT_CHOICES[Math.floor(random() * YEAR_LIMIT_CHOICES.length)],
+    dominanceShare: 0.5 + random() * 0.3,
+    dominanceYears: DOMINANCE_YEAR_CHOICES[Math.floor(random() * DOMINANCE_YEAR_CHOICES.length)],
   });
 }

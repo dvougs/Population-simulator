@@ -1,5 +1,5 @@
 // Phase 1 browser tests (T-009): map generation, setup, the hex map, time controls and layout.
-// Expected values come from RULES.md. The sim now has people, but only the HUD text, the inspector and the setup fields are checked here; people on the map and the end screen are not covered.
+// Expected values come from RULES.md. The sim has people, but only the HUD text, the inspector, the setup fields and the year-limit end screen are checked here; people on the map are not covered.
 
 import { test, expect, devices } from '@playwright/test';
 
@@ -43,7 +43,8 @@ async function startGame(page, { endTicks } = {}) {
   await page.locator('#btn-continue').click();
   await expect(page.locator('#setup')).toBeVisible();
   if (endTicks) {
-    await page.locator('#f-end').selectOption('ticks');
+    await page.locator('#f-end-year').check();
+    await page.locator('#f-end-years').selectOption('custom');
     await page.locator('#f-end-ticks').fill(String(endTicks));
   }
   await page.locator('#btn-start').click();
@@ -57,10 +58,24 @@ async function tapMap(page, x, y) {
   else await page.mouse.click(box.x + x, box.y + y);
 }
 
+/** Wait for a tap-to-zoom flight to land (a tap on a zoomed-out map flies the camera in). */
+async function landed(page) {
+  await expect.poll(() => page.evaluate(() => window.popsim.flying()), { intervals: [50, 100, 250] }).toBe(false);
+}
+
+/** Close the card (if open) and fit the map again, so positions read at the fitted zoom hold. */
+async function backToFit(page) {
+  if (await page.locator('#inspector').isVisible()) await page.locator('#inspector button[aria-label="Close hex details"]').click();
+  await page.locator('#btn-fit').click();
+  await expect(page.locator('#inspector')).toBeHidden();
+}
+
 /** Pause the sim so the test reads stable values. */
 async function pause(page) {
   if (await page.evaluate(() => !window.popsim.loop.paused)) await page.locator('#btn-play').click();
   await expect.poll(() => page.evaluate(() => window.popsim.loop.paused)).toBe(true);
+  // Pausing adds the End now button, which makes the controls taller; fit again so positions read after this hold.
+  await page.locator('#btn-fit').click();
 }
 
 /** For each terrain (and one river hex), a hex whose centre is on screen and not covered by HUD/sheet. */
@@ -286,13 +301,26 @@ test.describe('setup screen', () => {
     await expect(page.locator('#f-civs')).toHaveAttribute('max', '8');
     await expect(page.locator('#f-start-pop')).toHaveAttribute('min', '2');
     await expect(page.locator('#f-start-pop')).toHaveAttribute('max', '200');
-    await expect(page.locator('#f-end')).toHaveValue('none');
+    // RULES.md "Game settings": End conditions default to none ticked (Sandbox); year limit 2500.
+    // This screen was reached with the Highlands preset, whose end condition is Year limit 2500.
+    await expect(page.locator('#f-end-sandbox')).not.toBeChecked();
+    await expect(page.locator('#f-end-year')).toBeChecked();
+    for (const id of ['f-end-last', 'f-end-dominance']) await expect(page.locator(`#${id}`)).not.toBeChecked();
     await expect(page.locator('#f-end-ticks')).toBeHidden();
-    await page.locator('#f-end').selectOption('ticks');
+    await page.locator('#f-end-year').uncheck();
+    await expect(page.locator('#f-end-sandbox')).toBeChecked();
+    await expect(page.locator('#f-end-years')).toBeHidden();
+    await page.locator('#f-end-year').check();
+    await expect(page.locator('#f-end-years')).toBeVisible();
+    await expect(page.locator('#f-end-years')).toHaveValue('2500');
+    await page.locator('#f-end-years').selectOption('custom');
     await expect(page.locator('#f-end-ticks')).toBeVisible();
-    await expect(page.locator('#f-end-ticks')).toHaveValue('1000');
+    await expect(page.locator('#f-end-ticks')).toHaveValue('2500');
     await expect(page.locator('#f-end-ticks')).toHaveAttribute('min', '10');
     await expect(page.locator('#f-end-ticks')).toHaveAttribute('max', '100000');
+    await page.locator('#f-end-dominance').check();
+    await expect(page.locator('#f-dom-share')).toBeVisible();
+    await expect(page.locator('#f-dom-years')).toHaveValue('300');
     await shot(page, testInfo, 'setup');
     await page.locator('#btn-change-map').click();
     await expect(page.locator('#mapgen')).toBeVisible();
@@ -386,23 +414,23 @@ test.describe('game', () => {
     expect(notFull).toEqual([]);
   });
 
-  test('a year limit of 10 stops at year 10 with a toast', async ({ page }, testInfo) => {
+  test('a year limit of 10 stops at year 10 and opens the end screen', async ({ page }, testInfo) => {
     await startGame(page, { endTicks: 10 });
     await expect.poll(() => page.evaluate(() => window.popsim.host.finished), { timeout: 10_000 }).toBe(true);
     expect(await year(page)).toBe(10);
-    await expect(page.locator('#hud-year')).toHaveText('Year 10 (ended)');
-    await expect(page.locator('#toast')).toBeVisible();
-    await expect(page.locator('#toast')).toHaveText('Reached year 10');
-    await expect(page.locator('#btn-play')).toHaveAttribute('aria-label', 'Play');
+    await expect(page.locator('#end')).toBeVisible();
+    await expect(page.locator('#end-reason')).toHaveText('Reached year 10');
+    await expect(page.locator('#end-winner')).toContainText('No winner');
     await shot(page, testInfo, 'year-limit');
-    await page.waitForTimeout(300);
-    expect(await year(page)).toBe(10);
-    await page.locator('#btn-step').click();
-    await page.waitForTimeout(200);
-    expect(await year(page)).toBe(10);
+    await page.locator('#btn-keep-watching').click();
+    await expect(page.locator('#game')).toBeVisible();
+    // Keep watching carries on as a sandbox: no end applies any more.
+    await expect.poll(() => year(page)).toBeGreaterThan(10);
+    expect(await page.evaluate(() => window.popsim.host.finished)).toBe(false);
   });
 
   test('tapping hexes shows RULES.md terrain values', async ({ page }, testInfo) => {
+    test.setTimeout(90_000); // each tap now flies the camera in and back out again
     for (const preset of ['default', 'continent']) {
       if (preset !== 'default') {
         await page.locator('#btn-setup').click();
@@ -418,11 +446,12 @@ test.describe('game', () => {
         await tapMap(page, s.x, s.y);
         await expect.poll(() => page.evaluate(() => window.popsim.selected())).toBe(s.row * PRESETS[preset].size + s.col);
         await expectInspectorMatchesRules(page, s);
+        // A tap on the zoomed-out map flies the camera in; the card then finds its corner.
+        await landed(page);
         if (key === 'river' || key === 'forest') await shot(page, testInfo, `inspector-${preset}-${key}`);
-        // The card never covers the tapped hex, and tapping it again closes the card (BUG-1).
+        // The card never covers the tapped hex.
         expect(await hexCovered(page, s.col, s.row), `card covers hex (${s.col}, ${s.row})`).toBe(false);
-        await tapMap(page, s.x, s.y);
-        await expect(page.locator('#inspector')).toBeHidden();
+        await backToFit(page);
       }
       if (preset === 'default') expect(samples.river, 'default map should show a river hex').toBeTruthy();
     }
@@ -434,16 +463,19 @@ test.describe('game', () => {
     await pause(page);
     const samples = await visibleSampleHexes(page);
     const land = Object.values(samples)[0];
-    await tapMap(page, land.x, land.y);
-    await expect(page.locator('#inspector')).toBeVisible();
     // RULES.md: every edge hex is deep water.
     expect(await page.evaluate(() => window.popsim.terrainAt(0, 0))).toBe('deepWater');
     const water = Object.values(await visibleSampleHexes(page, { water: true }))[0];
     expect(water, 'a visible water hex').toBeTruthy();
+    await tapMap(page, land.x, land.y);
+    await expect(page.locator('#inspector')).toBeVisible();
+    await landed(page);
+    await page.locator('#btn-fit').click();
     await tapMap(page, water.x, water.y);
     await expect(page.locator('#inspector')).toBeHidden();
     await tapMap(page, land.x, land.y);
     await expect(page.locator('#inspector')).toBeVisible();
+    await landed(page);
     await page.locator('#inspector button[aria-label="Close hex details"]').click();
     await expect(page.locator('#inspector')).toBeHidden();
     expect(await page.evaluate(() => window.popsim.selected())).toBe(-1);
@@ -490,7 +522,8 @@ test.describe('game', () => {
     if (!testInfo.project.use.hasTouch) await client.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
     const box = await page.locator('#map').boundingBox();
     const cx = Math.round(box.x + box.width / 2);
-    const cy = Math.round(box.y + Math.min(box.height / 2, 200));
+    // Paused, the controls (with End now) reach up in landscape, so use a point well clear of the sheet.
+    const cy = Math.round(box.y + Math.min(box.height * 0.3, 200));
     const touch = (type, pts) => client.send('Input.dispatchTouchEvent', {
       type, touchPoints: pts.map(([x, y], id) => ({ x, y, id, radiusX: 2, radiusY: 2, force: 1 })),
     });
@@ -558,7 +591,11 @@ test.describe('game', () => {
 });
 
 test.describe('inspector placement', () => {
-  /** Select a visible land hex and return it with the card's rect, trying hexes until accept() likes one. */
+  /**
+   * Tap a visible land hex (the camera flies in, see RULES.md "Tap a hex") and return it with its position and
+   * the card's rectangle once the flight has landed, trying hexes until accept() likes one. Positions are
+   * re-read after the flight; between tries the camera is fitted again.
+   */
   async function selectHex(page, accept) {
     const samples = Object.values(await visibleSampleHexes(page));
     const all = await page.evaluate(() => {
@@ -569,16 +606,19 @@ test.describe('inspector placement', () => {
       }
       return out;
     });
+    let tries = 0;
     for (const { col, row } of [...samples, ...all]) {
       const p = await page.evaluate(([c, r]) => window.popsim.hexToScreen(c, r), [col, row]);
       if (!(await pointOnMap(page, p.x, p.y))) continue;
+      if (++tries > 12) break;
       await tapMap(page, p.x, p.y);
       await expect(page.locator('#inspector')).toBeVisible();
+      await landed(page);
+      const at = await page.evaluate(([c, r]) => window.popsim.hexToScreen(c, r), [col, row]);
       const card = await cardRect(page);
-      const extra = await accept({ col, row, ...p }, card);
-      if (extra) return { col, row, ...p, card, ...extra };
-      await page.locator('#inspector button[aria-label="Close hex details"]').click();
-      await expect(page.locator('#inspector')).toBeHidden();
+      const extra = await accept({ col, row, ...at }, card);
+      if (extra) return { col, row, ...at, card, ...extra };
+      await backToFit(page);
     }
     return null;
   }
@@ -605,29 +645,36 @@ test.describe('inspector placement', () => {
     expect(await cardRect(page)).not.toEqual(sel.card);
     expect(await hexCovered(page, sel.col, sel.row)).toBe(false);
     await shot(page, testInfo, 'inspector-after-pan');
-    await tapMap(page, moved.x, moved.y);
+    // Zoomed in, a tap at the hex could land on a person, so close the card with its button.
+    await page.locator('#inspector button[aria-label="Close hex details"]').click();
     await expect(page.locator('#inspector')).toBeHidden();
   });
 
   test('zooming the selected hex under the card moves the card to another corner', async ({ page }, testInfo) => {
     await startGame(page);
     await pause(page);
-    // Wheel zoom by k keeps the anchor A fixed: P' = A + (P − A)·k. With k = 2, anchoring at
-    // A = 2P − C lands the hex P on the card centre C. Fit allows zooming to 2× the fitted scale.
-    const k = 2;
+    // The tap flew the camera in, centring the hex. Wheel zoom by k keeps the anchor A fixed: P' = A + (P − A)·k.
+    // Zooming out (k < 1) with A = P + (C − P) ÷ (1 − k) lands the hex P on the card centre C; take the
+    // gentlest k whose anchor is still inside the canvas and whose zoom the camera allows.
     const sel = await selectHex(page, async (p, card) => {
       const c = { x: (card.left + card.right) / 2, y: (card.top + card.bottom) / 2 };
-      const a = { x: k * p.x - (k - 1) * c.x, y: k * p.y - (k - 1) * c.y };
-      return (await pointOnMap(page, a.x, a.y)) ? { anchor: a } : null;
+      const cam = await camera(page);
+      const box = await page.locator('#map').boundingBox();
+      for (const k of [0.6, 0.5, 0.4, 0.3, 0.25]) {
+        if (cam.scale * k < cam.minScale * 1.01) continue;
+        const a = { x: p.x + (c.x - p.x) / (1 - k), y: p.y + (c.y - p.y) / (1 - k) };
+        if (a.x > 1 && a.y > 1 && a.x < box.width - 1 && a.y < box.height - 1) return { anchor: a, k };
+      }
+      return null;
     });
-    test.skip(!sel, 'no hex where the zoom anchor falls on the open map at this viewport');
+    test.skip(!sel, 'no hex where the zoom anchor falls inside the map at this viewport');
     const scale0 = (await camera(page)).scale;
     // One wheel event with an exact delta (emulated phones rescale page.mouse.wheel deltas).
     await page.locator('#map').evaluate((el, { x, y, deltaY }) => {
       const r = el.getBoundingClientRect();
       el.dispatchEvent(new WheelEvent('wheel', { clientX: r.left + x, clientY: r.top + y, deltaY, bubbles: true, cancelable: true }));
-    }, { ...sel.anchor, deltaY: -Math.log(k) / 0.0015 });
-    await expect.poll(async () => (await camera(page)).scale).toBeGreaterThan(scale0 * 1.9);
+    }, { ...sel.anchor, deltaY: -Math.log(sel.k) / 0.0015 });
+    await expect.poll(async () => (await camera(page)).scale).toBeLessThan(scale0 * 0.65);
     await expect(page.locator('#inspector')).toBeVisible();
     const moved = await page.evaluate(([c, r]) => window.popsim.hexToScreen(c, r), [sel.col, sel.row]);
     expect(moved.x).toBeGreaterThan(sel.card.left);
@@ -637,7 +684,7 @@ test.describe('inspector placement', () => {
     expect(await cardRect(page)).not.toEqual(sel.card);
     expect(await hexCovered(page, sel.col, sel.row)).toBe(false);
     await shot(page, testInfo, 'inspector-after-zoom');
-    await tapMap(page, moved.x, moved.y);
+    await page.locator('#inspector button[aria-label="Close hex details"]').click();
     await expect(page.locator('#inspector')).toBeHidden();
   });
 });
@@ -708,14 +755,17 @@ test.describe('layout', () => {
         // PixiJS parks an off-screen accessibility button at (-1000, -1000) on touch devices.
         if (r.right <= 0 || r.bottom <= 0) continue;
         const id = el.id || el.getAttribute('aria-label') || el.textContent.trim();
-        if (el.type !== 'range' && (r.width < 44 || r.height < 44)) out.push(`${id}: ${Math.round(r.width)}×${Math.round(r.height)}`);
+        // A checkbox is tapped through its label, which fills the row and is at least 44px tall.
+        const t = el.type === 'checkbox' ? document.querySelector(`label[for="${el.id}"]`).getBoundingClientRect() : r;
+        if (el.type !== 'range' && (t.width < 44 || t.height < 44)) out.push(`${id}: ${Math.round(t.width)}×${Math.round(t.height)}`);
         if (el.matches('input, select') && parseFloat(getComputedStyle(el).fontSize) < 16) out.push(`${id}: font ${getComputedStyle(el).fontSize}`);
       }
       return out;
     });
     const problems = { mapgen: await check() };
     await page.locator('#btn-continue').click();
-    await page.locator('#f-end').selectOption('ticks');
+    await page.locator('#f-end-year').check();
+    await page.locator('#f-end-years').selectOption('custom');
     problems.setup = await check();
     await page.locator('#btn-start').click();
     await expect(page.locator('#game')).toBeVisible();

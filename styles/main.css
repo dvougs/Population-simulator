@@ -66,6 +66,8 @@ input[type="range"] { width: 100%; height: var(--tap); accent-color: var(--accen
 .civ-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .civ-list li { display: flex; align-items: center; gap: 10px; }
 .civ-list select { flex: 1 1 auto; }
+.row.check > input { width: 24px; height: 24px; margin: 0 0 0 4px; accent-color: var(--accent); flex: 0 0 auto; }
+.row.check > label { flex: 1 1 auto; min-height: var(--tap); display: flex; align-items: center; color: var(--text); cursor: pointer; }
 .civ-desc { margin: 8px 0 0; font-size: 0.85rem; color: var(--text-dim); }
 
 /* ---------- Map-generation screen ---------- */
@@ -88,6 +90,41 @@ input[type="range"] { width: 100%; height: var(--tap); accent-color: var(--accen
   background: linear-gradient(to top, var(--bg) 70%, transparent); }
 .start-bar .inner { max-width: 720px; margin: 0 auto; display: flex; gap: 10px; }
 .start-bar .primary { flex: 1; min-height: 52px; font-size: 1.05rem; }
+
+/* ---------- End screen ---------- */
+.end-body { max-width: 720px; margin: 0 auto; display: grid; gap: 14px; padding-bottom: calc(24px + var(--safe-bottom)); }
+.card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 12px 14px 14px; min-width: 0; }
+.card h2 { margin: 0 0 8px; font-weight: 650; color: var(--text-dim); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.card dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; }
+.card dt { color: var(--text-dim); }
+.card dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; min-width: 0; overflow-wrap: anywhere; }
+.card .muted { margin: 0; color: var(--text-dim); font-size: 0.9rem; }
+.end-header { text-align: center; }
+.end-header p { margin: 4px 0; }
+.end-winner { font-size: 1.3rem; font-weight: 700; }
+.end-reason { color: var(--text); }
+.end-years { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.end-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.end-actions .btn { min-height: 48px; }
+.civ-chip { display: inline-flex; align-items: center; gap: 6px; }
+.end-civs, .end-log { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.end-civs li { padding: 8px 10px; border-radius: 10px; background: var(--surface-2); }
+.end-civs li.dead { opacity: 0.6; }
+.end-civ-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; font-weight: 650; }
+.end-civ-head .num { font-variant-numeric: tabular-nums; }
+.chart-wrap { position: relative; padding-top: 16px; }
+.chart { display: block; width: 100%; height: 160px; background: #0b0e13; border-radius: 10px; }
+.chart .grid { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.chart-max { position: absolute; top: 0; left: 2px; font-size: 0.75rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.chart-x { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-dim); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: 0.85rem; }
+.death-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--surface-2); margin-bottom: 8px; }
+.death-bar .old-age { background: #8aa4c8; }
+.death-bar .starvation { background: var(--danger); }
+.end-log { gap: 4px; }
+.end-log li { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 10px; background: var(--surface-2); font-size: 0.9rem; }
+.end-log .log-year { min-width: 5.5em; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+@media (min-width: 560px) { .end-actions { grid-template-columns: repeat(4, 1fr); } }
 
 /* ---------- Game screen ---------- */
 .game { background: #0b0e13; }
@@ -147,6 +184,7 @@ input[type="range"] { width: 100%; height: var(--tap); accent-color: var(--accen
 /* Wraps the speed buttons onto their own line on screens too narrow for one row (under ~330px). */
 .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-bottom: 6px; }
 .ctl { padding: 0; font-size: 1rem; }
+.ctl.end-now { padding: 0 12px; font-size: 0.9rem; border-color: var(--danger); color: var(--danger); }
 .play { min-width: var(--tap); background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 700; }
 .segmented { flex: 1 1 calc(5 * var(--tap)); display: flex; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; min-width: 0; }
 .segmented button { flex: 1; min-height: var(--tap); min-width: var(--tap); border: 0; background: var(--surface-2); cursor: pointer; padding: 0 4px; font-variant-numeric: tabular-nums; touch-action: manipulation; }

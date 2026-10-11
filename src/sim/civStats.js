@@ -21,6 +21,8 @@ export class CivStats {
     this.deathsStarvation = new Int32Array(civs);
     this.lifespanSum = new Float64Array(civs);
     this.peakPop = new Int32Array(civs);
+    /** First year the peak population was reached. */
+    this.peakPopYear = new Int32Array(civs);
     this.peakHexes = new Int32Array(civs);
     this.oldestAge = new Int32Array(civs);
     this.extinctYear = new Int32Array(civs).fill(-1);
@@ -54,7 +56,7 @@ export class CivStats {
       if (this.pop[k] > 0 && pop[k] === 0) this.extinctYear[k] = year;
       this.pop[k] = pop[k];
       this.hexes[k] = hexes[k];
-      if (pop[k] > this.peakPop[k]) this.peakPop[k] = pop[k];
+      if (pop[k] > this.peakPop[k]) { this.peakPop[k] = pop[k]; this.peakPopYear[k] = year; }
       if (hexes[k] > this.peakHexes[k]) this.peakHexes[k] = hexes[k];
       if (oldest[k] > this.oldestAge[k]) this.oldestAge[k] = oldest[k];
       this.pending[k * F] = pop[k];
@@ -104,6 +106,7 @@ export class CivStats {
         avgLifespan: deaths > 0 ? Math.round((this.lifespanSum[k] / deaths) * 10) / 10 : null,
         oldestAge: this.oldestAge[k],
         peakPop: this.peakPop[k],
+        peakPopYear: this.peakPopYear[k],
         peakHexes: this.peakHexes[k],
         extinctYear: this.extinctYear[k] >= 0 ? this.extinctYear[k] : null,
       });
