@@ -28,8 +28,8 @@ Otherwise (a scheduled run): stop now, without changing or pushing anything, if 
 Work on a local `main` that matches `origin/main` (`git checkout main && git reset --hard origin/main` only if there are no local commits; otherwise `git pull --ff-only`).
 
 For each answered question, each decided proposal and each request:
-- Work out its priority (P1, P2 or P3). Use the one the owner gave: a "Priority:" line on a question or proposal, or a `[P#]` at the start of a request. If there is none, read their words: "required", "must", "next build" or the like is P1; "low prio", "nice to have", "when there is time" is P3; anything else is P2.
-- Add tasks to project/TASKS.md: next free ID (T-###), a short title, an owner (game-dev or unit-tester), priority (the entry's), status todo, source (the question or request ID, or the phase), and acceptance criteria someone can check. TASKS.md keeps a Priority column after Owner; add it if it is missing, with P2 for older tasks unless their source carries a priority. Phase tasks with no owner input are P2. A task a P1 task cannot ship without becomes P1 too. A task that changes a game rule says "update RULES.md" in its criteria, and gets a matching unit-tester task.
+- Work out its priority (P1, P2 or P3). Use the one on the entry: a "Priority:" line on a question or proposal, or a `[P#]` at the start of a request; a suggested priority the owner left unchanged counts as theirs. If there is none, read their words: "required", "must", "next build" or the like is P1; "low prio", "nice to have", "when there is time" is P3; anything else is P2. Never wait for the owner to confirm a priority.
+- Add tasks to project/TASKS.md: next free ID (T-###), a short title, an owner (game-dev or unit-tester), priority (the entry's), status todo, source (the question or request ID, or the phase), and acceptance criteria someone can check. TASKS.md keeps a Priority column after Owner, filled for every task; add it if it is missing, with P2 for older tasks unless their source carries a priority. Phase tasks with no owner input are P2. A task a P1 task cannot ship without becomes P1 too. A task that changes a game rule says "update RULES.md" in its criteria, and gets a matching unit-tester task.
 - Requests have no ID until you give them one: R-### in order.
 - A task still owned by functional-tester (an agent the studio no longer has): give it to unit-tester, with its criteria narrowed to keeping the existing e2e specs in step with the change so CI's e2e job passes. No new browser coverage.
 - A proposal is handled like an answered question. "yes": tasks for the agents that own the work (game-dev, plus a unit-tester task when it changes a rule), with "update RULES.md" in the criteria when it changes a rule or number. "changes": the same, with the user's changes applied; if they are unclear, ask a question instead and leave the proposal under "Proposals". "no" and "later": no tasks.
@@ -85,7 +85,7 @@ Run this on every full cycle, after the tests, even when nothing was built. Prop
 - Evidence: <what the run or the code showed: seeds, years, numbers, file:line>
 - Effort: <S | M | L>
 - Phone performance risk: <low | medium | high>: <why>
-- Priority: <P1 | P2 | P3> (suggested; the owner sets it when deciding)
+- Priority: <P1 | P2 | P3> (suggested; stands unless the owner changes it)
 - Decision:
 ```
 
@@ -104,7 +104,7 @@ Ask only about decisions that belong to the user (design, scope, trade-offs) or 
   2. <option>: <consequence>
   3. <option>: <consequence>   (optional)
 - Recommendation: <option number and why>
-- Priority: <P1 | P2 | P3> (suggested; the owner sets it when answering)
+- Priority: <P1 | P2 | P3> (suggested; stands unless the owner changes it)
 - Answer:
 ```
 
@@ -116,7 +116,7 @@ Run this after every agent has finished (build, fix rounds, design review, quest
 
 1. Bookkeeping, on local `main`:
    - project/TASKS.md: final status of every task touched.
-   - project/QUESTIONS.md: new questions and proposals; answered and decided entries moved.
+   - project/QUESTIONS.md: new questions and proposals; answered and decided entries moved. Every open question, proposal and request shows a priority: give any entry without one a suggested "Priority:" line (or `[P#]` on a request), using the wording rule in step 3.
    - project/PROGRESS.md: update the status block at the top (phase, "Last full cycle: <YYYY-MM-DD HH:MM> UTC", what is live on GitHub Pages, open release candidate, blockers), then add a cycle-log entry under "Cycle log", newest first: what was decided, built, tested, opened, merged, blocked.
 2. Review every Markdown file in the repo (`git ls-files '*.md'`: RULES.md, CLAUDE.md, README.md, everything in project/, the agents and skills under .claude/, any others) against the code on the cycle branch (or `origin/main` if there is none), and update each so it reflects the latest state of the code, rules, questions, tasks and progress. Edit project/ files on local `main`; edit every other file on the cycle branch (with no cycle branch, leave non-project files for the next one and note the drift in the cycle log).
    - RULES.md describes intended behaviour. Where it and the code disagree: if a task or answer asked for the code's behaviour and RULES.md lagged, update RULES.md; if the code is wrong, that is a bug, so send it to game-dev and re-run the step 5 test loop, or, if you cannot tell which is intended, ask the user an Open question. Never change a rule to match buggy code.
