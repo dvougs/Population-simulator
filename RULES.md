@@ -176,19 +176,39 @@ Chosen on the setup screen, after the map.
 |---|---|---|
 | Civ count | 3 | 1 to 8 |
 | Starting population | 20 people per civ | 2 to 200 |
-| End condition | None (run forever) | None, Year limit |
-| Year limit | 1000 | 10 to 100000 |
+| End conditions | none ticked (Sandbox: no end) | any combination of Last civ standing, Dominance, Year limit; ticking none is Sandbox |
+| Dominance share | 60% of land hexes | 25% to 100%, whole percent |
+| Dominance years | 300 | 10 to 10000 |
+| Year limit | 2500 (choices 1000, 2500, 5000, 10000, or custom) | 10 to 100000 |
 
 Out-of-range values are clamped to the range; values that are not numbers fall back to the default.
 
-- Each map preset also sets the civs: Small world 3 civs of 20 people, Continent 4 of 30, Archipelago 5 of 20, Highlands 3 of 20, Large world 6 of 40.
-- Randomise on the setup screen picks 2 to 6 civs and 10 to 50 people each; it does not change the map. Randomise on the map screen does not change the civs.
+- Each map preset also sets the civs and the end conditions:
+
+| Preset | Civs | People each | End conditions |
+|---|---|---|---|
+| Small world | 3 | 20 | Sandbox |
+| Continent | 4 | 30 | Dominance (60%, 300 years), Year limit 5000 |
+| Archipelago | 5 | 20 | Last civ standing, Year limit 10000 |
+| Highlands | 3 | 20 | Year limit 2500 |
+| Large world | 6 | 40 | Last civ standing, Dominance (60%, 300 years) |
+
+  Settings a preset does not list keep their defaults (dominance 60% and 300 years, year limit 2500).
+- Randomise on the setup screen picks 2 to 6 civs and 10 to 50 people each, ticks each of Last civ standing, Dominance and Year limit with chance 50% (none ticked is Sandbox), a dominance share of 50% to 80%, dominance years of 100, 200, 300 or 500, and a year limit of 1000, 2500, 5000 or 10000; it does not change the map. Randomise on the map screen does not change the civs or the end conditions.
 
 ## End of the game
 
-- With a year limit, the game ends when that year is reached. Otherwise it runs until you leave.
-- There is no end screen yet; the end reason is shown when the game stops.
+On the setup screen you tick any combination of these end conditions. Ticking none of them is **Sandbox**: the game never ends on its own.
+
+- **Last civ standing:** the game ends in the year only one civ still has people. That civ wins. Needs at least 2 civs at the start (with 1 civ it never fires).
+- **Dominance:** the game ends when one civ has held at least the dominance share (default 60%) of the land hexes for the dominance years (default 300) in a row. Land hexes are all hexes that are not sea or lake; a civ holds a hex when at least one of its people lives there (several civs can hold the same hex). The years count from the first year the civ reaches the share and start again from 0 in any year it is below it. That civ wins. If several civs complete their years in the same year (possible only with a share of 50% or less), the one holding the most hexes that year wins, then the lower civ number.
+- **Year limit:** the game ends when the year limit is reached (1000, 2500, 5000, 10000 or a custom year). There is no score and no winner.
+- **Total extinction always ends the game,** whatever is ticked, Sandbox included: when no civ has any people left. There is no winner.
+
+The conditions are checked at the end of each year, after the statistics. The first one met ends the game; if several are met in the same year, the first in this order counts: total extinction, last civ standing, dominance, year limit.
+
+- When the game ends it pauses and the end reason is shown.
 
 ## Not in the game yet
 
-Land degrading, inherited traits and mutation, civ types, contact and war, materials and levels, boats, god powers, more end conditions and the end screen. See [project/ROADMAP.md](project/ROADMAP.md).
+Land degrading, inherited traits and mutation, civ types, contact and war, materials and levels, boats, god powers, first to Kingdom (comes with levels). See [project/ROADMAP.md](project/ROADMAP.md).

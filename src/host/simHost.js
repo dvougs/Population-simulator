@@ -41,6 +41,12 @@ export class LocalSimHost {
     return this.sim ? this.sim.tick(n) : 0;
   }
 
+  /** End the run now ("End now"); no winner. */
+  endNow() { this.sim?.endNow(); }
+
+  /** Continue a finished run as a sandbox ("Keep watching"). */
+  keepWatching() { this.sim?.keepWatching(); }
+
   get params() { return this.sim ? { ...this.sim.params } : null; }
   get finished() { return this.sim?.finished ?? false; }
   get tickCount() { return this.sim?.tickCount ?? 0; }

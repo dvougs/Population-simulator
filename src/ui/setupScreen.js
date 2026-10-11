@@ -1,10 +1,10 @@
 // Setup screen: game settings for the map chosen on the map-generation screen.
 
 import { h } from './dom.js';
-import { LIMITS, normalizeParams, randomParams } from '../sim/params.js';
+import { LIMITS, normalizeParams, randomParams, YEAR_LIMIT_CHOICES } from '../sim/params.js';
 import { slider } from './mapgenScreen.js';
 
-const END_LABELS = { none: 'Run forever', ticks: 'After a number of years' };
+const END_KEYS = ['endConditions', 'endTicks', 'dominanceShare', 'dominanceYears'];
 
 export class SetupScreen {
   constructor(form, { onStart, onChangeMap }) {
@@ -36,18 +36,7 @@ export class SetupScreen {
         h('button', { type: 'button', class: 'btn grow', id: 'btn-change-map', onclick: () => this.onChangeMap(this.getParams()) }, '← Change map')),
     );
 
-    const endTicksRow = h('div', { class: 'row', hidden: p.endCondition !== 'ticks' },
-      h('label', { for: 'f-end-ticks' }, 'Years'),
-      h('input', { id: 'f-end-ticks', type: 'number', inputmode: 'numeric', min: LIMITS.endTicks.min, max: LIMITS.endTicks.max, value: p.endTicks,
-        oninput: (e) => { p.endTicks = Number(e.target.value); } }));
-    const end = h('fieldset', { class: 'group' },
-      h('legend', {}, 'End'),
-      h('div', { class: 'row' },
-        h('label', { for: 'f-end' }, 'Ends'),
-        h('select', { id: 'f-end', class: 'grow', onchange: (e) => { p.endCondition = e.target.value; endTicksRow.hidden = e.target.value !== 'ticks'; } },
-          Object.entries(END_LABELS).map(([k, v]) => h('option', { value: k, selected: k === p.endCondition }, v)))),
-      endTicksRow,
-    );
+    const end = this.renderEnd(p);
 
     const civs = h('fieldset', { class: 'group' },
       h('legend', {}, 'Civilisations'),
@@ -57,7 +46,8 @@ export class SetupScreen {
         h('button', { type: 'button', class: 'btn grow', id: 'btn-civs-randomise',
           onclick: () => {
             const r = randomParams();
-            this.setParams({ ...this.params, civCount: r.civCount, startPop: r.startPop });
+            const ends = Object.fromEntries(END_KEYS.map((k) => [k, r[k]]));
+            this.setParams({ ...this.params, civCount: r.civCount, startPop: r.startPop, ...ends });
           } }, '🎲 Randomise')),
       h('p', { class: 'civ-desc' }, 'Each civ starts with its people together on one fertile hex, spread apart from the others.'),
     );
@@ -67,5 +57,70 @@ export class SetupScreen {
       e.preventDefault();
       this.onStart(this.getParams());
     };
+  }
+
+  /** End conditions: Sandbox or any mix of Last civ standing, Dominance and Year limit. */
+  renderEnd(p) {
+    const ticked = (k) => p.endConditions.includes(k);
+    const checks = {};
+    const sync = () => {
+      checks.sandbox.checked = p.endConditions.length === 0;
+      domRows.forEach((r) => { r.hidden = !ticked('dominance'); });
+      yearRow.hidden = !ticked('years');
+      customRow.hidden = !ticked('years') || !custom;
+    };
+    const setTicked = (k, on) => {
+      const rest = p.endConditions.filter((x) => x !== k);
+      p.endConditions = normalizeParams({ endConditions: on ? [...rest, k] : rest }).endConditions;
+      sync();
+    };
+    const check = (id, key, label) => {
+      checks[key] = h('input', { id, type: 'checkbox', checked: key === 'sandbox' ? p.endConditions.length === 0 : ticked(key),
+        onchange: (e) => {
+          if (key !== 'sandbox') setTicked(key, e.target.checked);
+          // Sandbox means nothing else is ticked; it cannot be unticked on its own.
+          else { if (e.target.checked) p.endConditions = []; sync(); }
+          for (const k of ['lastCiv', 'dominance', 'years']) checks[k].checked = ticked(k);
+        } });
+      return h('div', { class: 'row check' }, checks[key], h('label', { for: id }, label));
+    };
+
+    const domRows = [
+      slider('f-dom-share', 'Share of land', Math.round(p.dominanceShare * 100), LIMITS.dominanceShare.min * 100, LIMITS.dominanceShare.max * 100, 1,
+        (v) => `${v}%`, (v) => { p.dominanceShare = v / 100; }),
+      h('div', { class: 'row' },
+        h('label', { for: 'f-dom-years' }, 'For years'),
+        h('input', { id: 'f-dom-years', type: 'number', inputmode: 'numeric', min: LIMITS.dominanceYears.min, max: LIMITS.dominanceYears.max,
+          value: p.dominanceYears, oninput: (e) => { p.dominanceYears = Number(e.target.value); } })),
+    ];
+    let custom = !YEAR_LIMIT_CHOICES.includes(p.endTicks);
+    const customInput = h('input', { id: 'f-end-ticks', type: 'number', inputmode: 'numeric', min: LIMITS.endTicks.min, max: LIMITS.endTicks.max,
+      value: p.endTicks, oninput: (e) => { p.endTicks = Number(e.target.value); } });
+    const customRow = h('div', { class: 'row' }, h('label', { for: 'f-end-ticks' }, 'Custom year'), customInput);
+    const yearRow = h('div', { class: 'row' },
+      h('label', { for: 'f-end-years' }, 'Ends in year'),
+      h('select', { id: 'f-end-years', class: 'grow',
+        onchange: (e) => {
+          custom = e.target.value === 'custom';
+          if (custom) customInput.value = String(p.endTicks);
+          else p.endTicks = Number(e.target.value);
+          sync();
+        } },
+      YEAR_LIMIT_CHOICES.map((y) => h('option', { value: y, selected: !custom && y === p.endTicks }, y.toLocaleString('en-US'))),
+      h('option', { value: 'custom', selected: custom }, 'Custom')));
+
+    const group = h('fieldset', { class: 'group', id: 'end-conditions' },
+      h('legend', {}, 'End'),
+      check('f-end-sandbox', 'sandbox', 'Sandbox (no end)'),
+      check('f-end-last', 'lastCiv', 'Last civ standing'),
+      check('f-end-dominance', 'dominance', 'Dominance'),
+      ...domRows,
+      check('f-end-year', 'years', 'Year limit'),
+      yearRow,
+      customRow,
+      h('p', { class: 'civ-desc' }, 'The first condition met ends the run. The run always ends if every civ dies out.'),
+    );
+    sync();
+    return group;
   }
 }

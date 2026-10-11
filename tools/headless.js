@@ -4,6 +4,8 @@
 //   node tools/headless.js [--seed s] [--ticks n] [--size n] [--water f] [--mountains f]
 //                          [--rivers n] [--plains f] [--forest f] [--desert f] [--tundra f]
 //                          [--civs n] [--start-pop n] [--preset name] [--every n] [--min-tps n] [--json]
+//                          [--end lastCiv,dominance,years|sandbox] [--end-years n]
+//                          [--dominance-share f] [--dominance-years n]
 //
 // Prints the map summary, per-civ population every --every years (with the state
 // hash), per-civ totals (births, deaths by cause, lifespans, extinction year),
@@ -34,6 +36,10 @@ if (args.seed) params.seed = String(args.seed);
 for (const key of ['size', 'water', 'mountains', 'rivers', 'plains', 'forest', 'desert', 'tundra']) if (args[key] !== undefined) params[key] = Number(args[key]);
 if (args.civs !== undefined) params.civCount = Number(args.civs);
 if (args['start-pop'] !== undefined) params.startPop = Number(args['start-pop']);
+if (args.end !== undefined) params.endConditions = String(args.end).split(',');
+if (args['end-years'] !== undefined) params.endTicks = Number(args['end-years']);
+if (args['dominance-share'] !== undefined) params.dominanceShare = Number(args['dominance-share']);
+if (args['dominance-years'] !== undefined) params.dominanceYears = Number(args['dominance-years']);
 const ticks = Number(args.ticks ?? 1000);
 const every = Number(args.every ?? 0);
 
@@ -93,6 +99,9 @@ const result = {
   riverHexes: rivers,
   finished: stats.finished,
   endReason: stats.endReason,
+  endKind: stats.endKind,
+  winner: stats.winner === null ? null : civNamesOf(stats.winner),
+  endConditions: p.endConditions,
   civCount: p.civCount,
   startPop: p.startPop,
   population: stats.totalPop,
@@ -104,6 +113,8 @@ const result = {
   samples,
   history: historyJson(sim.history(), civNames),
 };
+
+function civNamesOf(k) { return `Civ ${k + 1}`; }
 
 /** Recorded history as plain arrays: one entry per row (one row per year unless the run outgrew the history). */
 function historyJson(hist, names) {
@@ -135,7 +146,8 @@ if (args.json) {
   console.log(result.extinctions.length
     ? `  extinctions: ${result.extinctions.map((e) => `${e.civ} in year ${e.year}`).join(', ')}`
     : '  extinctions: none');
-  if (stats.finished) console.log(`  ended: ${stats.endReason}`);
+  console.log(`  end conditions: ${p.endConditions.length ? p.endConditions.join(', ') : 'sandbox'}`);
+  if (stats.finished) console.log(`  ended: ${stats.endReason}; winner: ${result.winner ?? 'none'}`);
   console.log(`map ${result.mapHash}  hash ${result.hash}  generated in ${result.generateMs} ms  ${result.ticksPerSecond} ticks/s`);
 }
 
