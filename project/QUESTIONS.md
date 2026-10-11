@@ -4,9 +4,82 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
 
 ## Open
 
+### Q-009: Should a civ keep gathering when a few of its people go hungry?
+- Date: 2026-10-11
+- Why it matters: Levels need materials, and a civ gathers only while its food is "secure" (Q-008 option 1: nobody in the civ went hungry last year). Once a civ fills its land, someone in it goes hungry almost every year, so it stops gathering for good. In headless runs no civ got past L3, so Kingdom and the First to Kingdom ending are out of reach.
+- Evidence: seeds review-20261011f-1 to -3 at b52df73, default setup, 400 years: the largest civ on each seed (1,570, 1,035 and 956 people) is "food not secure" at year 400. On seed review-20261011e-1 over 3,000 years, Civ 1 reached L3 in year 477 and stayed there for 2,500 years with about 1,770 people, unable to gather the copper it needed.
+- Options:
+  1. Secure when at most 5% of the civ's people went hungry last year (the 1.2 food per person rule stays): big civs keep gathering, and levels 4 and 5 become reachable. The director checks with headless runs that Kingdom takes about 1,750 years or more.
+  2. Judge each hex instead of the whole civ: a hex where nobody went hungry last year may send its 20% to gather. Crowded hexes stop, the rest of the civ carries on.
+  3. Keep the rule as it is: levels 4 and 5 stay very rare.
+- Recommendation: 1. It is the smallest change, keeps "food first" in spirit, and makes your 1.0 level ladder reachable.
+- Priority: P1 (suggested; stands unless the owner changes it)
+- Answer:
+
+### Q-010: The hunger and crowding fight triggers almost never fire. Change them?
+- Date: 2026-10-11
+- Why it matters: The rules (and How to play) say civs fight when a shared hex is short of food or crowded, but the one-time fight certifier found these two triggers start almost no fights. Fights come from Aggressive civs, revenge and 3-to-1 numbers instead, so "scarcity leads to fights" from your design is mostly not happening.
+- Evidence: certifier runs at b52df73, default setup: of 23,349 shared hex-years, the hex was short of food in 1,606 (7%) and at capacity in 35 (0.15%). Of 12,506 fights, about 23 came from hunger alone and about 10 from crowding. The check runs after food regrows (src/sim/contact.js), when hexes look full of food. Someone in the hex had gone hungry that year in 39% of shared hex-years.
+- Options:
+  1. Hunger trigger fires when someone in the hex went hungry this year (instead of food below need after regrowth); crowding when the hex holds at least 80% of its food capacity. Scarcity becomes a real cause of war; more fights overall, which the director checks for extinctions with headless runs.
+  2. Only the hunger change from option 1; crowding stays as it is.
+  3. Keep them as they are and reword RULES.md and How to play to say these triggers are rare.
+- Recommendation: 1. It matches your design ("scarcity plus aggressive people leads to fights") and the director re-runs the certifier's seed sets before release.
+- Priority: P2 (suggested; stands unless the owner changes it)
+- Answer:
+
 ## Proposals
 
 Ideas the director draws from headless simulation runs and the code. At most 6 wait here at a time.
+
+### P-010: Show fights on the map
+- Date: 2026-10-11
+- Category: visuals
+- What: Fights now happen hundreds of times a game, but the map shows none of them; you only see a hex's numbers change. When a hex has a fight, flash it briefly in the winner's colour with a small crossed-swords mark for about a second (on the yearly clock), and draw a short arrow from the hex to where the losers fled. Zoomed in, the people who died fade out.
+- Evidence: seeds review-20261011f-1 to -3 at b52df73, default setup, 400 years: 529, 721 and 773 fights, and 1,107, 1,397 and 1,342 war deaths. Nothing under src/render reads fights (`grep fight src/render` finds nothing); fights show only in the hex card, the sheet and the end screen.
+- Effort: S
+- Phone performance risk: low: one small overlay redrawn once a year from the per-hex fight winner the sim already keeps (`sim.fightWinner`). No per-person work.
+- Priority: P2 (suggested; stands unless the owner changes it)
+- Decision:
+
+### P-011: Group fights into wars in the history log
+- Date: 2026-10-11
+- Category: UI
+- What: The end screen's history log is now almost all single fights, so first contacts, milestones, famines and extinctions get lost in it. Group the fights between two civs into one "war" line: from the first year to the last (a war ends after 10 years without a fight between them), with fights, wins on each side and war deaths. Single fights stay in the hex card and the stats.
+- Evidence: seeds review-20261011f-1 to -3 at b52df73, 400 years: fights are 529 of 544, 721 of 734 and 773 of 785 history events. The log keeps at most 2,048 events (src/sim/records.js), so long games fill it with fights within a few hundred years, and later famines and fights are then dropped.
+- Effort: S
+- Phone performance risk: low: one open war per pair of civs, updated once a year; a shorter log to draw.
+- Priority: P2 (suggested; stands unless the owner changes it)
+- Decision:
+
+## Requests
+
+## Answered
+
+### R-012: "Currently no people at all die because of war. I don't think fight ever starts in the game. Fix that, by implementing some more comprehensive fight mechanics and triggers and, at the end of the process, create an one time agent to certify and approve the mechanics. If something is disapproved, fix it in the same build and have the said agent reverify it." (owner, 2026-10-11 13:31 UTC; reading: fighting (T-023, Q-007 option 1) is not built yet, so no war deaths exist. Build it with more comprehensive triggers than Q-007 alone, then a one-time reviewer agent certifies the mechanics, for example with headless runs that show fights and war deaths happen. Anything it rejects is fixed in the same build and re-verified by that agent before the release candidate opens.)
+- Date: 2026-10-11
+- Priority: P1
+- Moved: 2026-10-11, task T-023 (P1; wider triggers, war deaths in headless and the certifier step in its criteria), T-030
+
+### R-013: Show each civ's level, its materials and how they are used, and what modifiers each level and material changes (owner, 2026-10-11 13:31 UTC; reading: in the game UI, for example the inspector, live report and end screen, once T-024 and T-025 exist.)
+- Date: 2026-10-11
+- Priority: P2
+- Moved: 2026-10-11, task T-041 (P2, after T-024 and T-025)
+
+### R-014: "At the start of the game, there is no homepage, as i have explicitly requested. I need it in the next build, WITH THE DETAILS I EXPLICITLY REQUESTED." (owner, 2026-10-11 13:31 UTC; reading: T-028 (R-005) is top priority for the next release candidate, built in full: New game and the rules guide in human-readable, compelling language following RULES.md, looking fabulous, with in-game screens explaining how the game works.)
+- Date: 2026-10-11
+- Priority: P1
+- Moved: 2026-10-11, task T-028 (P1, required in the next build, in full)
+
+### R-015: On the setup screen, pick each civ's type, with clear explanations of the differences between the types (owner, 2026-10-11 13:31 UTC; reading: extends T-022 with a plain-language explanation of each type on the setup screen.)
+- Date: 2026-10-11
+- Priority: P2
+- Moved: 2026-10-11, task T-022 (P1 via R-016; a plain explanation of each type on the setup screen)
+
+### R-016: Priority changes (owner, 2026-10-11 13:51 UTC: "Traits and mutation is p1 / Fighting with triggers p1 / Materials and gathering p1"). Reading: T-021 (traits and mutation), T-023 with R-012 (fighting with more comprehensive triggers and the certifier agent), T-024 (material deposits) and T-025 (gathering, stockpiles and levels) become P1, alongside T-028 (home page). T-022 (civ types) becomes P1 too, because fighting cannot ship without it, and so do the unit tests these need (T-030, T-036).
+- Date: 2026-10-11
+- Priority: P1
+- Moved: 2026-10-11, tasks T-021, T-022, T-023, T-024, T-025, T-028, T-030, T-036 set to P1
 
 ### P-008: Fill the end screen's history log with events that actually happen
 - Date: 2026-10-11
@@ -17,6 +90,7 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Phone performance risk: low: a few counters per civ checked once a year, written to the existing capped event log.
 - Priority: P2 (suggested; stands unless the owner changes it)
 - Decision: Yes (reading: yes as proposed, including lowering the famine threshold in RULES.md from 2% to 1% of the civ's people in one year)
+- Moved: 2026-10-11, tasks T-038, T-039 (P2)
 
 ### P-009: Draw people by age and hunger, and let births and deaths show
 - Date: 2026-10-11
@@ -27,17 +101,7 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Phone performance risk: low: a scale and alpha per sprite set in the existing loop over visible people; no new textures or allocation.
 - Priority: P3 (suggested; stands unless the owner changes it)
 - Decision: Yeah, with low prio. (reading: yes, built after the home page, fighting, civ types and levels)
-
-## Requests
-
-- [P1] R-016: Priority changes (owner, 2026-10-11 13:51 UTC: "Traits and mutation is p1 / Fighting with triggers p1 / Materials and gathering p1"). Reading: T-021 (traits and mutation), T-023 with R-012 (fighting with more comprehensive triggers and the certifier agent), T-024 (material deposits) and T-025 (gathering, stockpiles and levels) become P1, alongside T-028 (home page). T-022 (civ types) becomes P1 too, because fighting cannot ship without it, and so do the unit tests these need (T-030, T-036).
-
-- [P1] R-012: "Currently no people at all die because of war. I don't think fight ever starts in the game. Fix that, by implementing some more comprehensive fight mechanics and triggers and, at the end of the process, create an one time agent to certify and approve the mechanics. If something is disapproved, fix it in the same build and have the said agent reverify it." (owner, 2026-10-11 13:31 UTC; reading: fighting (T-023, Q-007 option 1) is not built yet, so no war deaths exist. Build it with more comprehensive triggers than Q-007 alone, then a one-time reviewer agent certifies the mechanics, for example with headless runs that show fights and war deaths happen. Anything it rejects is fixed in the same build and re-verified by that agent before the release candidate opens.)
-- [P2] R-013: Show each civ's level, its materials and how they are used, and what modifiers each level and material changes (owner, 2026-10-11 13:31 UTC; reading: in the game UI, for example the inspector, live report and end screen, once T-024 and T-025 exist.)
-- [P1] R-014: "At the start of the game, there is no homepage, as i have explicitly requested. I need it in the next build, WITH THE DETAILS I EXPLICITLY REQUESTED." (owner, 2026-10-11 13:31 UTC; reading: T-028 (R-005) is top priority for the next release candidate, built in full: New game and the rules guide in human-readable, compelling language following RULES.md, looking fabulous, with in-game screens explaining how the game works.)
-- [P2] R-015: On the setup screen, pick each civ's type, with clear explanations of the differences between the types (owner, 2026-10-11 13:31 UTC; reading: extends T-022 with a plain-language explanation of each type on the setup screen.)
-
-## Answered
+- Moved: 2026-10-11, task T-040 (P3, after the home page, fighting, civ types and levels)
 
 ### Q-006: What numbers should the 8 traits use?
 - Date: 2026-10-11
