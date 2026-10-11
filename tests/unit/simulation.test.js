@@ -12,7 +12,9 @@ test('a new simulation starts at year 0 with the generated map', () => {
   assert.equal(sim.finished, false);
   assert.equal(sim.endReason, null);
   assert.equal(sim.mapHash(), hashMap(generateMap({ seed: 'start' })));
-  assert.deepEqual(sim.mapParams, { seed: 'start', size: 10, water: 0.25, mountains: 0.12, rivers: 2 });
+  assert.deepEqual(sim.mapParams, {
+    seed: 'start', size: 10, water: 0.25, mountains: 0.12, rivers: 2, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
+  });
 });
 
 test('one tick is one year; tick(n) runs n years when there is no end condition', () => {

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateMap, hashMap, countTerrain, createMap, GEN } from '../../src/sim/mapgen.js';
-import { presetParams, PRESETS, normalizeParams } from '../../src/sim/params.js';
+import { presetParams, PRESETS, normalizeParams, MAP_KEYS, LOWLAND_KEYS } from '../../src/sim/params.js';
 import {
   DEEP_WATER, COAST, PLAINS, FOREST, HILLS, MOUNTAIN, DESERT, TUNDRA, TERRAIN_COUNT,
   FOOD_CAPACITY, RIVER_FOOD_BONUS,
@@ -14,6 +14,12 @@ const CASES = [
   { seed: 'dry', size: 10, water: 0, mountains: 0, rivers: 0 },
   { seed: 'wet', size: 17, water: 0.7, mountains: 0.4, rivers: 20 },
   { seed: 'mid', size: 23, water: 0.45, mountains: 0.2, rivers: 8 },
+  // Lowland weights: uneven, all zero, one only, cold-heavy (rounding can ask for more than is left).
+  { seed: 'woods', size: 25, water: 0.3, plains: 0.1, forest: 0.9, desert: 0.05, tundra: 0 },
+  { seed: 'bare', size: 18, water: 0.2, plains: 0, forest: 0, desert: 0, tundra: 0 },
+  { seed: 'sand', size: 21, water: 0.4, plains: 0, forest: 0, desert: 1, tundra: 0 },
+  { seed: 'cold', size: 14, water: 0.37, plains: 0, forest: 0.33, desert: 0.33, tundra: 0.34 },
+  { seed: 'odd', size: 37, water: 0.55, plains: 0.07, forest: 0.13, desert: 0.29, tundra: 0.71 },
 ];
 const maps = CASES.map((p) => ({ p: normalizeParams(p), map: generateMap(p) }));
 
@@ -56,7 +62,9 @@ test('map is size × size and keeps its normalised map params', () => {
     assert.equal(map.cols, p.size);
     assert.equal(map.rows, p.size);
     assert.equal(map.count, p.size * p.size);
-    assert.deepEqual(map.params, { seed: p.seed, size: p.size, water: p.water, mountains: p.mountains, rivers: p.rivers });
+    const expected = {};
+    for (const k of MAP_KEYS) expected[k] = p[k];
+    assert.deepEqual(map.params, expected);
     for (let i = 0; i < map.count; i++) assert.ok(map.terrain[i] < TERRAIN_COUNT);
   }
 });
@@ -75,12 +83,16 @@ test('same settings give the same map (same hash); different seed gives a differ
   // Each map setting matters.
   const base = { seed: 'vary', size: 20, water: 0.3, mountains: 0.12, rivers: 4 };
   const h = hashMap(generateMap(base));
-  for (const change of [{ size: 21 }, { water: 0.31 }, { mountains: 0.2 }, { rivers: 1 }]) {
+  for (const change of [
+    { size: 21 }, { water: 0.31 }, { mountains: 0.2 }, { rivers: 1 },
+    { plains: 0.6 }, { forest: 0.5 }, { desert: 0.3 }, { tundra: 0.3 },
+  ]) {
     assert.notEqual(hashMap(generateMap({ ...base, ...change })), h, JSON.stringify(change));
   }
 });
 
-test('the map depends only on the five map settings', () => {
+test('the map depends only on the nine map settings', () => {
+  assert.deepEqual(MAP_KEYS, ['seed', 'size', 'water', 'mountains', 'rivers', 'plains', 'forest', 'desert', 'tundra']);
   const a = generateMap({ seed: 'only', size: 15, endCondition: 'ticks', endTicks: 20 });
   const b = generateMap({ seed: 'only', size: 15 });
   assert.equal(hashMap(a), hashMap(b));
@@ -96,25 +108,42 @@ test('every edge hex is ocean (deep water, not lake)', () => {
   }
 });
 
-test('water = every edge hex + round(water × inner hexes)', () => {
+// RULES.md "Water": total deep water = round(water × size²), never less than the edge ring.
+const ring = (n) => 4 * n - 4;
+const waterTotal = (n, w) => Math.max(ring(n), Math.round(w * n * n));
+
+test('water = max(edge ring, round(water × size²)), edge ring always sea', () => {
   for (const { p, map } of maps) {
-    const n = p.size;
-    const inner = (n - 2) * (n - 2);
-    const expected = 4 * n - 4 + Math.round(p.water * inner);
-    assert.equal(countTerrain(map)[DEEP_WATER], expected, `${p.seed} water ${p.water}`);
+    assert.equal(countTerrain(map)[DEEP_WATER], waterTotal(p.size, p.water), `${p.seed} water ${p.water}`);
   }
-  // Boundaries: 0% leaves only the ocean ring; 70% is the most.
-  const dry = generateMap({ seed: 'b', size: 10, water: 0 });
-  assert.equal(countTerrain(dry)[DEEP_WATER], 36);
-  const wet = generateMap({ seed: 'b', size: 10, water: 0.7 });
-  assert.equal(countTerrain(wet)[DEEP_WATER], 36 + Math.round(0.7 * 64));
+  for (const n of [10, 11, 16, 25, 34, 50]) {
+    for (const w of [0, 0.05, 0.12, 0.25, 0.33, 0.36, 0.37, 0.5, 0.69, 0.7]) {
+      const map = generateMap({ seed: `w${n}`, size: n, water: w, rivers: 0 });
+      assert.equal(countTerrain(map)[DEEP_WATER], waterTotal(n, w), `size ${n} water ${w}`);
+      for (let i = 0; i < map.count; i++) if (isEdge(i, n)) assert.equal(map.terrain[i], DEEP_WATER);
+    }
+  }
+});
+
+test('a water share at or below the edge ring gives exactly the ring', () => {
+  // 10 × 10: the ring is 36 hexes, so up to 36% (and the 25% default) gives only the ring.
+  for (const w of [0, 0.01, 0.25, 0.35, 0.36]) {
+    assert.equal(countTerrain(generateMap({ seed: 'b', size: 10, water: w }))[DEEP_WATER], 36, `water ${w}`);
+  }
+  assert.equal(countTerrain(generateMap({ seed: 'b', size: 10 }))[DEEP_WATER], 36, 'default');
+  assert.equal(countTerrain(generateMap({ seed: 'b', size: 10, water: 0.37 }))[DEEP_WATER], 37);
+  assert.equal(countTerrain(generateMap({ seed: 'b', size: 10, water: 0.7 }))[DEEP_WATER], 70);
+  // 50 × 50: the ring is 196 of 2500 hexes (7.84%).
+  assert.equal(countTerrain(generateMap({ seed: 'b', size: 50, water: 0.07 }))[DEEP_WATER], 196);
+  assert.equal(countTerrain(generateMap({ seed: 'b', size: 50, water: 0.08 }))[DEEP_WATER], 200);
+  assert.equal(countTerrain(generateMap({ seed: 'b', size: 50, water: 0.7 }))[DEEP_WATER], 1750);
 });
 
 test('mountains = round(mountains × land); hills = round(15% × land)', () => {
   assert.equal(GEN.hillsShare, 0.15);
   for (const { p, map } of maps) {
     const n = p.size;
-    const land = (n - 2) * (n - 2) - Math.round(p.water * (n - 2) * (n - 2));
+    const land = n * n - waterTotal(n, p.water);
     const c = countTerrain(map);
     assert.equal(c[MOUNTAIN], Math.round(p.mountains * land), `${p.seed} mountains`);
     assert.equal(c[HILLS], Math.round(0.15 * land), `${p.seed} hills`);
@@ -164,21 +193,73 @@ test('coast = land other than hills/mountains next to the sea; not next to a lak
   }
 });
 
-test('climate split: tundra 15%, desert 15%, forest 30% of inland lowland, rest plains', () => {
-  assert.equal(GEN.tundraShare, 0.15);
-  assert.equal(GEN.desertShare, 0.15);
-  assert.equal(GEN.forestShare, 0.3);
+// RULES.md "Climate": with L lowland hexes and S the sum of the four weights in whole
+// percents, tundra, desert and forest each get round(weight × L ÷ S) in that order (capped
+// at what is left); plains get the rest; all four at 0 gives all plains.
+function lowlandSplit(p, L) {
+  const pc = (k) => Math.round(p[k] * 100);
+  const S = LOWLAND_KEYS.reduce((a, k) => a + pc(k), 0);
+  const want = (k) => (S > 0 ? Math.round((pc(k) * L) / S) : 0);
+  const tundra = Math.min(want('tundra'), L);
+  const desert = Math.min(want('desert'), L - tundra);
+  const forest = Math.min(want('forest'), L - tundra - desert);
+  return { tundra, desert, forest, plains: L - tundra - desert - forest };
+}
+
+test('climate split: tundra, desert, forest = round(weight × L ÷ S) of inland lowland, rest plains', () => {
   for (const { p, map } of maps) {
     const c = countTerrain(map);
-    const lowland = c[PLAINS] + c[FOREST] + c[DESERT] + c[TUNDRA];
-    const tundra = Math.round(0.15 * lowland);
-    const desert = Math.round(0.15 * lowland);
-    const forest = Math.round(0.3 * lowland);
-    assert.equal(c[TUNDRA], tundra, `${p.seed} tundra`);
-    assert.equal(c[DESERT], desert, `${p.seed} desert`);
-    assert.equal(c[FOREST], forest, `${p.seed} forest`);
-    assert.equal(c[PLAINS], lowland - tundra - desert - forest, `${p.seed} plains`);
+    const L = c[PLAINS] + c[FOREST] + c[DESERT] + c[TUNDRA];
+    assert.ok(L > 0, `${p.seed} has lowland`);
+    const e = lowlandSplit(p, L);
+    assert.equal(c[TUNDRA], e.tundra, `${p.seed} tundra`);
+    assert.equal(c[DESERT], e.desert, `${p.seed} desert`);
+    assert.equal(c[FOREST], e.forest, `${p.seed} forest`);
+    assert.equal(c[PLAINS], e.plains, `${p.seed} plains`);
   }
+});
+
+test('climate split holds over many seeds, sizes and weights', () => {
+  const weights = [
+    [0.4, 0.3, 0.15, 0.15], [1, 1, 1, 1], [0, 1, 0, 0], [0, 0, 0, 1], [0.01, 0, 0, 0],
+    [0, 0.01, 0.01, 0.01], [0.2, 0.5, 0.3, 0.3], [0.6, 0.1, 0, 0.3], [0.33, 0.33, 0.33, 0],
+  ];
+  let k = 0;
+  for (const size of [10, 13, 20, 31, 44]) {
+    for (const [plains, forest, desert, tundra] of weights) {
+      const p = normalizeParams({ seed: `split${k++}`, size, water: 0.3, rivers: 0, plains, forest, desert, tundra });
+      const c = countTerrain(generateMap(p));
+      const L = c[PLAINS] + c[FOREST] + c[DESERT] + c[TUNDRA];
+      const e = lowlandSplit(p, L);
+      assert.deepEqual(
+        [c[TUNDRA], c[DESERT], c[FOREST], c[PLAINS]], [e.tundra, e.desert, e.forest, e.plains],
+        `size ${size} weights ${[plains, forest, desert, tundra]} L ${L}`,
+      );
+    }
+  }
+});
+
+test('default weights give 40% plains, 30% forest, 15% desert, 15% tundra', () => {
+  const c = countTerrain(generateMap({ seed: 'defaults', size: 40, water: 0.3 }));
+  const L = c[PLAINS] + c[FOREST] + c[DESERT] + c[TUNDRA];
+  assert.equal(c[TUNDRA], Math.round(0.15 * L));
+  assert.equal(c[DESERT], Math.round(0.15 * L));
+  assert.equal(c[FOREST], Math.round(0.3 * L));
+  assert.equal(c[PLAINS], L - c[TUNDRA] - c[DESERT] - c[FOREST]);
+});
+
+test('all four lowland weights at 0% give all plains', () => {
+  for (const size of [10, 25, 50]) {
+    const c = countTerrain(generateMap({ seed: 'zero', size, plains: 0, forest: 0, desert: 0, tundra: 0 }));
+    assert.ok(c[PLAINS] > 0, `size ${size}`);
+    assert.equal(c[FOREST] + c[DESERT] + c[TUNDRA], 0, `size ${size}`);
+  }
+});
+
+test('lowland weights scale together: doubling all four gives the same map', () => {
+  const a = generateMap({ seed: 'scale', size: 22, plains: 0.2, forest: 0.15, desert: 0.1, tundra: 0.05 });
+  const b = generateMap({ seed: 'scale', size: 22, plains: 0.4, forest: 0.3, desert: 0.2, tundra: 0.1 });
+  assert.deepEqual(a.terrain, b.terrain);
 });
 
 test('tundra lies towards the top and bottom rows (cold), on average', () => {

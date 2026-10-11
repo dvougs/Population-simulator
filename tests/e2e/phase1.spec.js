@@ -16,13 +16,14 @@ const TERRAIN = {
 };
 const RIVER_BONUS = 30;
 
-// RULES.md "Map settings" presets.
+// RULES.md "Map settings" presets; every preset uses the default lowland weights.
+const LOWLAND = { plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15 };
 const PRESETS = {
-  default: { seed: 'pangaea', size: 10, water: 0.25, mountains: 0.12, rivers: 2 },
-  continent: { seed: 'continent', size: 30, water: 0.2, mountains: 0.12, rivers: 6 },
-  archipelago: { seed: 'islands', size: 30, water: 0.6, mountains: 0.08, rivers: 2 },
-  highlands: { seed: 'peaks', size: 20, water: 0.15, mountains: 0.3, rivers: 5 },
-  large: { seed: 'vast', size: 50, water: 0.3, mountains: 0.12, rivers: 12 },
+  default: { seed: 'pangaea', size: 10, water: 0.25, mountains: 0.12, rivers: 2, ...LOWLAND },
+  continent: { seed: 'continent', size: 30, water: 0.2, mountains: 0.12, rivers: 6, ...LOWLAND },
+  archipelago: { seed: 'islands', size: 30, water: 0.6, mountains: 0.08, rivers: 2, ...LOWLAND },
+  highlands: { seed: 'peaks', size: 20, water: 0.15, mountains: 0.3, rivers: 5, ...LOWLAND },
+  large: { seed: 'vast', size: 50, water: 0.3, mountains: 0.12, rivers: 12, ...LOWLAND },
 };
 
 const shot = (page, testInfo, name) =>

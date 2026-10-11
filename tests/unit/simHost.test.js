@@ -30,7 +30,9 @@ test('preview returns plain map data without starting a game', () => {
   assert.ok(m.riverTo instanceof Int32Array && m.riverTo.length === 196);
   assert.equal(m.terrainCounts.reduce((a, b) => a + b, 0), 196);
   assert.match(m.hash, /^[0-9a-f]{8}$/);
-  assert.deepEqual(m.params, { seed: 'prev', size: 14, water: 0.3, mountains: 0.12, rivers: 2 });
+  assert.deepEqual(m.params, {
+    seed: 'prev', size: 14, water: 0.3, mountains: 0.12, rivers: 2, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
+  });
   cloneable(m);
 });
 
