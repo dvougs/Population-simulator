@@ -15,6 +15,7 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Evidence: Headless runs of seeds review-20261011d-1 to -3 on claude/cycle-20261011-1006 at 71fa0e5, default setup, 400 years: "0 events" and "worst famine none" on all three seeds, although the civs had 43 to 125 starvation deaths each over the run (seed -1: 110, 116, 125), spread thinly over the years. src/sim/records.js:13 sets a famine at 2% of the civ's people and at least 5 deaths in one year; src/sim/records.js:16 logs only famines and extinctions.
 - Effort: S
 - Phone performance risk: low: a few counters per civ checked once a year, written to the existing capped event log.
+- Priority: P2 (suggested; stands unless the owner changes it)
 - Decision: Yes (reading: yes as proposed, including lowering the famine threshold in RULES.md from 2% to 1% of the civ's people in one year)
 
 ### P-009: Draw people by age and hunger, and let births and deaths show
@@ -24,14 +25,15 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Evidence: src/render/peopleLayer.js:363 gives every person sprite one fixed size and src/render/peopleLayer.js:369-371 only changes its civ tint; age and hunger are never read when drawing. Seeds review-20261011d-1 to -3 at 71fa0e5, default setup: about 4 to 6 births and 3 to 5 deaths per civ every year by year 400 (seed -1, Civ 1: 1,915 births and 1,459 deaths in 400 years), all invisible except as sprites appearing and disappearing.
 - Effort: S
 - Phone performance risk: low: a scale and alpha per sprite set in the existing loop over visible people; no new textures or allocation.
+- Priority: P3 (suggested; stands unless the owner changes it)
 - Decision: Yeah, with low prio. (reading: yes, built after the home page, fighting, civ types and levels)
 
 ## Requests
 
-- R-012: "Currently no people at all die because of war. I don't think fight ever starts in the game. Fix that, by implementing some more comprehensive fight mechanics and triggers and, at the end of the process, create an one time agent to certify and approve the mechanics. If something is disapproved, fix it in the same build and have the said agent reverify it." (owner, 2026-10-11 13:31 UTC; reading: fighting (T-023, Q-007 option 1) is not built yet, so no war deaths exist. Build it with more comprehensive triggers than Q-007 alone, then a one-time reviewer agent certifies the mechanics, for example with headless runs that show fights and war deaths happen. Anything it rejects is fixed in the same build and re-verified by that agent before the release candidate opens.)
-- R-013: Show each civ's level, its materials and how they are used, and what modifiers each level and material changes (owner, 2026-10-11 13:31 UTC; reading: in the game UI, for example the inspector, live report and end screen, once T-024 and T-025 exist.)
-- R-014: "At the start of the game, there is no homepage, as i have explicitly requested. I need it in the next build, WITH THE DETAILS I EXPLICITLY REQUESTED." (owner, 2026-10-11 13:31 UTC; reading: T-028 (R-005) is top priority for the next release candidate, built in full: New game and the rules guide in human-readable, compelling language following RULES.md, looking fabulous, with in-game screens explaining how the game works.)
-- R-015: On the setup screen, pick each civ's type, with clear explanations of the differences between the types (owner, 2026-10-11 13:31 UTC; reading: extends T-022 with a plain-language explanation of each type on the setup screen.)
+- [P2] R-012: "Currently no people at all die because of war. I don't think fight ever starts in the game. Fix that, by implementing some more comprehensive fight mechanics and triggers and, at the end of the process, create an one time agent to certify and approve the mechanics. If something is disapproved, fix it in the same build and have the said agent reverify it." (owner, 2026-10-11 13:31 UTC; reading: fighting (T-023, Q-007 option 1) is not built yet, so no war deaths exist. Build it with more comprehensive triggers than Q-007 alone, then a one-time reviewer agent certifies the mechanics, for example with headless runs that show fights and war deaths happen. Anything it rejects is fixed in the same build and re-verified by that agent before the release candidate opens.)
+- [P2] R-013: Show each civ's level, its materials and how they are used, and what modifiers each level and material changes (owner, 2026-10-11 13:31 UTC; reading: in the game UI, for example the inspector, live report and end screen, once T-024 and T-025 exist.)
+- [P1] R-014: "At the start of the game, there is no homepage, as i have explicitly requested. I need it in the next build, WITH THE DETAILS I EXPLICITLY REQUESTED." (owner, 2026-10-11 13:31 UTC; reading: T-028 (R-005) is top priority for the next release candidate, built in full: New game and the rules guide in human-readable, compelling language following RULES.md, looking fabulous, with in-game screens explaining how the game works.)
+- [P2] R-015: On the setup screen, pick each civ's type, with clear explanations of the differences between the types (owner, 2026-10-11 13:31 UTC; reading: extends T-022 with a plain-language explanation of each type on the setup screen.)
 
 ## Answered
 
