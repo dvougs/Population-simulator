@@ -280,8 +280,16 @@ Recorded at the end of every year, for each civ: people alive, hexes held (hexes
   - *Oldest alive at the end:* the oldest living person when the game ends (on a tie, the lowest id).
   - *Longest family line:* the highest generation anyone reached, with the first person born into it and the founder at the head of their line.
   - *Most descendants:* the founder with the most people born into their line (children, grandchildren and so on, alive or dead). It is always a founder, because a parent counts every descendant of their child plus the child. On a tie, the lower founder id. None if nobody was born.
-  - *Worst famine:* the famine with the most starvation deaths (on a tie, the one that ended first). A **famine year** for a civ is a year in which its starvation deaths are at least 2% of its people at the start of that year, and at least 5. Famine years of the same civ in a row make one famine, from its first to its last year. A famine still going on when the game ends counts up to the last year.
-- **History log:** the key events with their year, kept for the whole run: each famine (civ, first and last year, starvation deaths), each fight (year, hex, attacker, the civ attacked, the hex holder, winner, and war deaths on both sides together) and each extinction (civ, year). At most 2048 events are kept; once full, later famines and fights are left out (and counted) but extinctions are always kept.
+  - *Worst famine:* the famine with the most starvation deaths (on a tie, the one that ended first). A **famine year** for a civ is a year in which its starvation deaths are at least 1% of its people at the start of that year, and at least 5. Famine years of the same civ in a row make one famine, from its first to its last year. A famine still going on when the game ends counts up to the last year.
+- **History log:** the key events with their year, kept for the whole run. Checked once a year, at the end of the year:
+  - each famine (civ, first and last year, starvation deaths);
+  - each fight (year, hex, attacker, the civ attacked, the hex holder, winner, and war deaths on both sides together);
+  - **first contact:** the first year two civs have people in the same hex, once per pair, with that hex (the lowest-index one if they share several);
+  - **milestones:** the first year each civ has at least 100, 500 and 1,000 people, once each;
+  - **peak:** once a civ has had fewer people than its peak for 50 years in a row, its peak (the most people it ever had, from year 0, and the first year it had them) and its first year below that peak. One entry per civ: if it later sets a higher peak and again stays below it for 50 years, the entry moves to the new peak;
+  - **most hexes:** the most hexes each civ ever held and the first year it held that many (added when the log is shown, so it covers the whole game);
+  - each extinction (civ, year).
+  Famines and fights are logged while the log holds fewer than 2048 events minus one per civ; after that, later famines and fights are left out (and counted). First contacts, milestones, peaks, most hexes and extinctions are always kept.
 - While the game runs, the statistics sheet shows each civ's emblem, name and type, people and hexes held; the top bar shows the total population, how many civs are still alive, and each civ's emblem with its people alive. Tapping a hex shows its people per civ (see "How civs and people look").
 
 ## How civs and people look
@@ -405,7 +413,7 @@ A scrollable screen that opens when the game ends. Everything on it comes from t
   - *People:* the oldest person ever (id, civ, age, and the year they died or "alive") and the oldest person alive at the end (see "Records" under "Statistics").
   - *Deaths by cause:* deaths by old age, by starvation and in war over the whole run, all civs together, with their share of all deaths.
   - *Records:* longest family line, the person with the most descendants, and the worst famine (see "Statistics").
-  - *History:* the history log, oldest first (by first year; on the same year famines, then fights, then extinctions, then by civ number (the attacker's for a fight)). A fight reads "Civ A attacked Civ B at (column, row); Civ W won; N killed".
+  - *History:* the history log, oldest first (by first year; on the same year famines, then first contacts, fights, milestones, peaks, most hexes, extinctions, then by civ number (the attacker's for a fight, the lower one for a first contact)). A fight reads "Civ A attacked Civ B at (column, row); Civ W won; N killed"; a first contact "Civ A met Civ B at (column, row)"; a milestone "Civ A passed 100 people"; a peak "Civ A peaked at N people; fewer from year Y"; most hexes "Civ A held its most hexes: N".
 
 ## Not in the game yet
 

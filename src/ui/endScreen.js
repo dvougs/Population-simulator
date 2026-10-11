@@ -183,13 +183,17 @@ function historyCard(r) {
   const { events, eventsDropped } = r.records;
   const text = (e) => {
     if (e.type === 'extinction') return `${civName(e.civ)} died out`;
+    if (e.type === 'contact') return `${civName(e.civ)} met ${civName(e.other)} at (${e.col}, ${e.row})`;
+    if (e.type === 'milestone') return `${civName(e.civ)} passed ${formatNumber(e.people)} people`;
+    if (e.type === 'peak') return `${civName(e.civ)} peaked at ${formatNumber(e.people)} people; fewer from year ${e.declineYear}`;
+    if (e.type === 'mostHexes') return `${civName(e.civ)} held its most hexes: ${formatNumber(e.hexes)}`;
     if (e.type === 'fight') {
       return `${civName(e.attacker)} attacked ${civName(e.defender)} at (${e.col}, ${e.row}); ${civName(e.winner)} won; ${formatNumber(e.deaths)} killed`;
     }
     return `Famine in ${civName(e.civ)}${e.ongoing ? ' (still going)' : ''}: ${formatNumber(e.deaths)} starved${e.endYear > e.year ? ` by year ${e.endYear}` : ''}`;
   };
   return card('end-history', 'History',
-    events.length === 0 ? h('p', { class: 'muted' }, 'No famines, fights or extinctions.')
+    events.length === 0 ? h('p', { class: 'muted' }, 'Nothing to report.')
       : h('ol', { class: 'end-log' }, events.map((e) => h('li', { 'data-type': e.type, 'data-civ': e.civ },
         h('span', { class: 'log-year' }, `Year ${e.year}`), emblem(e.civ, 12), h('span', {}, text(e))))),
     eventsDropped > 0 ? h('p', { class: 'muted' }, `${formatNumber(eventsDropped)} later famines and fights not listed.`) : null);
