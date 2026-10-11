@@ -108,7 +108,7 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
   - Isolationist needs 20% fewer years but 25% more materials.
   - Falling back: if population stays below the current level's minimum for 100 years, the civ drops one level and keeps its stockpile.
   - All numbers are starting values. Tune them from the headless sims, and ask the owner before changing any requirement by more than half.
-  - (reading: this replaces the RULES.md Terrain table's "Materials" column (forest 30 wood, hills 20 stone, others 0). In RULES.md a river is not a terrain but runs through a land hex; "river" chances are read as applying to river hexes in addition to their terrain's own chances, which the director should confirm with the owner if it matters.)
+  - (reading: this replaces the RULES.md Terrain table's "Materials" column (forest 30 wood, hills 20 stone, others 0). In RULES.md a river is not a terrain but runs through a land hex; "river" chances are read as applying to river hexes in addition to their terrain's own chances. Owner confirmed 2026-10-11 07:35 UTC: "that's right", so a river hex rolls both its terrain's chances and the river chances.)
 
 ## Answered
 
