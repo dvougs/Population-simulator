@@ -5,7 +5,7 @@
 - Phase: 1 live; Phase 1 follow-ups (lowland sliders, whole-map water, water tide) in a release candidate. Phase 2 (people) tasks T-013 to T-017 seeded, not started.
 - Last full cycle: 2026-10-11 00:06 UTC
 - Live on GitHub Pages: Phase 1 (hex map, map-generation screen, PixiJS renderer), merged in PR #10. https://dvougs.github.io/Population-simulator/
-- Open release candidate: "Release candidate: lowland terrain sliders, whole-map water, water tide" on claude/cycle-20261011-0006 (T-010, T-011, T-012).
+- Open release candidate: #13 "Release candidate: lowland terrain sliders, whole-map water, water tide" https://github.com/dvougs/Population-simulator/pull/13 (T-010, T-011, T-012).
 - Blockers: none. Open questions Q-003 (what 1.0 contains), Q-004 (traits and mutation), Q-005 (civ and people visuals); proposals P-003 (water slider dead zone, UI) and P-004 (height shading, visuals).
 
 ## Cycle log
@@ -20,6 +20,7 @@
 - RULES.md checked against src/sim/params.js and mapgen.js: values match. Ownership clean (game-dev: src/, RULES.md, tools/; unit-tester: tests/ only).
 - Design review on the cycle branch at 442a0e6, seeds review-20261011-1/-2/-3, default setup, 400 years: map hashes 50773508, e1a10cb7, d4e4cb6b; final hashes b0c5be86, 830611cc, c007228d; deep water 36 on every seed (edge ring only); land 64 (coast 17/16/21, plains 12/11/9, forest 9/9/8, hills 10, mountain 8, desert 4/5/4, tundra 4/5/4); 8, 9, 7 river hexes. Population, causes of death, levels and extinctions cannot be reported: no people until Phase 2; T-016 adds them to tools/headless.js. Proposals P-003 (UI) and P-004 (visuals).
 - Mid-cycle the owner pushed to main: unit-tester now runs only in cycles that change game logic (CLAUDE.md, director-cycle skill, unit-tester agent), and request R-002 (plan Phase 2 as "version 1.0" with civs). R-002 became questions Q-003 (1.0 scope), Q-004 (traits and mutation) and Q-005 (civ visuals); T-013 to T-017 will be extended once they are answered.
+- Opened PR #13. Email sent to the owner (questions, proposals, release candidate).
 - Docs pass: README.md updated for the new sliders and the tide on the cycle branch. CLAUDE.md still says headless prints per-civ results; true once T-016 lands, left as is.
 
 ### 2026-10-10 23:06: Phase 1 release candidate
