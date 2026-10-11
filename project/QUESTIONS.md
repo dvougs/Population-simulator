@@ -50,20 +50,9 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Effort: S
 - Phone performance risk: low: one open war per pair of civs, updated once a year; a shorter log to draw.
 - Priority: P2 (suggested; stands unless the owner changes it)
-- Decision: yes, as part of the shorter History in the request below (reading: the war grouping is built, but only the 3 deadliest wars are listed in History).
+- Decision: superseded (owner, 2026-10-11 17:54 UTC: the end screen's History, War section and scrolling rework is being built outside the director cycle, in a separate pull request from a project thread; no task for the director).
 
 ## Requests
-
-- [P2] Rethink the end screen's History section: it "has WAY too many details" (owner, 2026-10-11 16:38 UTC; agreed 16:42 UTC to the shape below; on two 500-year headless runs History had about 1,400 and 1,600 lines, 98% single fights). Make it a short chronicle of turning points, at most about 12 lines, oldest first:
-  1. No fights or wars in History: they move to the new War section below.
-  2. Only famines that killed at least 10% of the civ, at most 3.
-  3. Keep first contacts, the 100/500/1,000 people milestones and extinctions.
-  4. Add level-ups ("Civ 2 became a Town").
-  5. Drop the peak and most-hexes lines (the Civs card already shows them).
-  The full raw log goes away (no "show everything" toggle). This supersedes P-011's separate log change and narrows P-008. RULES.md "Records" and "End screen" change to match; How to play's pictures that read the first contact and first three fights from the log need checking.
-  - Follow-up (owner, 2026-10-11 17:52 UTC): "I want the end screen to have a consolidated war section, with summary of kills for each side, throughout the years. i don't want to see every individual small conflict with 1, 2, 5, or 10 deaths. doesn't matter in the large scheme of things. the scrolling at the end screen is way too big. no sense at all." Reading:
-    - A new **War** card on the end screen: one row per pair of civs that ever fought, summed over the whole game: years at war (first to last fight), fights, fights won by each side, and kills by each side (how many of the other civ's people each one killed). No individual fights anywhere on the end screen. This needs war deaths recorded per killing side, not only both sides together. Pairs that never fought are not listed; "No wars" if none.
-    - The whole end screen must scroll far less: on a phone, the header, buttons, Civs and War should be readable without long scrolling, with the remaining cards (charts, stockpiles, traits, people, deaths, records, history) made compact or collapsed by default so the page is short. The director picks the exact layout.
 
 ## Answered
 
