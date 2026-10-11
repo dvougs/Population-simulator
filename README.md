@@ -6,20 +6,20 @@ A browser game where civilisations grow, age, starve and spread across a generat
 
 **New here?** [How to play](https://dvougs.github.io/Population-simulator/#how): the rules in plain words, with pictures drawn by the game itself.
 
-## What's in it (Phase 2 in progress: people)
+## What's in it (version 1.0 in progress)
 
 - A home page with a small world living behind it: start a new game or read How to play, which explains the map, people, migration, civs, traits, civ types, fighting, materials, levels and the end of the game, illustrated by the game's own drawings of a real world.
 - A map-generation screen with a live preview: seed, size (10 × 10 up to 50 × 50 hexes), water, mountains, rivers, and plains, forest, desert and tundra shares, with presets and randomise. Every map is reproducible from its seed.
-- A hex world with ocean on every edge, coasts, plains, forest, hills, mountain ranges, desert, tundra, lakes, and rivers that run downhill. Each terrain has its own food capacity, movement cost, defence bonus and materials.
+- A hex world with ocean on every edge, coasts, plains, forest, hills, mountain ranges, desert, tundra, lakes, and rivers that run downhill. Each terrain has its own food capacity, movement cost and defence bonus, and hexes hold deposits of nine materials.
 - Drawn with PixiJS, with a gentle tide on the sea, lakes and rivers (static if your device asks for reduced motion): drag to pan, pinch or wheel to zoom, fit to screen, tap a hex to inspect it.
 - Pause, single step and speeds from 1× to Max, and End now while paused.
-- End conditions on the setup screen, in any combination: last civ standing, dominance (one civ holding a share of the land for a run of years), a year limit, or sandbox. The end screen shows the winner, each civ's peak, a population chart, deaths by cause, records (oldest person, longest family line, most descendants, worst famine) and a history log, with Keep watching, Same settings again, New map and Back to setup.
+- End conditions on the setup screen, in any combination: last civ standing, first to Kingdom, dominance (one civ holding a share of the land for a run of years), a year limit, or sandbox. The end screen shows the winner, each civ's peak, a population chart, deaths by cause, records (oldest person, longest family line, most descendants, worst famine) and a history log, with Keep watching, Same settings again, New map and Back to setup.
 - Civilisations of individual people: choose how many civs and how many people each on the setup screen. Every year people age, eat from their hex, have children, grow old, starve when food runs short, and migrate from hungry or crowded hexes towards spare food within a year's walk. Food regrows each year.
 - Each civ has its own colour and shape emblem. Held hexes are tinted in their civs' colours, each civ's territory has a bold outline, and zoomed out every hex with people shows its largest civ's emblem, a head count and a ring split by each civ's share. Tap a hex to fly in to its people: each person is a tiny emblem that idles inside its hex and glides to a new hex when they migrate. Migrants prefer hexes their own civ already holds.
 - A live population count and hexes held per civ, a tapped hex lists its people, and tapping a person shows their age, health, hunger, civ, parent and living children.
 - Hexes are shaded by height, so ridges, valleys and deep water show on the map.
 - Eight inherited traits with mutation, five civ types, fights and switching civ where civs meet, nine materials to gather, and five levels from Foragers to Kingdom (see [RULES.md](RULES.md)).
-- Add to Home Screen for a full-screen app.
+- Add to Home Screen for a full-screen app. Nothing is saved between sessions.
 
 ## Run it locally
 
