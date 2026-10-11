@@ -5,7 +5,7 @@
 - Phase: version 1.0 nearly complete. Live: Phase 2 people, end conditions, end screen, civ territory and tap-to-zoom (PRs #15, #16). In the release candidate (cycle 2026-10-11 14:07): home page and How to play, 8 traits with mutation, 5 civ types on the setup screen, contact and fighting (certified), material deposits, gathering and levels 1 to 5 with First to Kingdom, level and material panels, a fuller history log, nothing saved between sessions.
 - Last full cycle: 2026-10-11 14:07 UTC
 - Live on GitHub Pages: Phase 1 and its follow-ups, Phase 2 people, end conditions and end screen, civ tint and territory outlines, tap to zoom (PRs #10, #13 to #16). https://dvougs.github.io/Population-simulator/
-- Open release candidate: "Release candidate: home page, traits, civ types, fighting, materials and levels" from claude/cycle-20261011-1407 (see the cycle log for the number).
+- Open release candidate: #18 "Release candidate: home page, traits, civ types, fighting, materials and levels" https://github.com/dvougs/Population-simulator/pull/18
 - Ready next: T-032 (desktop live report column, P2), T-040 (people drawn by age and hunger, P3, after the 1.0 features).
 - Blockers: none. Waiting on the owner: Q-009 (levels stall because big civs never count as food-secure, P1), Q-010 (hunger and crowding fight triggers almost never fire, P2), P-010 (show fights on the map), P-011 (group fights into wars in the history log).
 
@@ -30,6 +30,7 @@
   - War deaths 1,107, 1,397 and 1,342; fights 529, 721 and 773 (fights are 97% to 98% of history events).
   - Levels: every civ that reached L2 did so between years 150 and 294; none reached L3 by year 400 (L3 needs 300 years at L2). The largest civ on each seed is "food not secure" at year 400; a 3,000-year run stalled at L3 for 2,500 years.
   - Questions: Q-009 (food security rule, P1), Q-010 (fight triggers, P2). Proposals: P-010 (show fights on the map, visuals) and P-011 (group fights into wars, UI).
+- Opened PR #18.
 
 ### 2026-10-11 10:06: end conditions and end screen, civ territory on the map, tap to zoom
 
