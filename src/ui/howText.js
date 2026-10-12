@@ -247,7 +247,7 @@ export function howText() {
         title: 'One tick, one day',
         paras: [
           `Time moves a day at a time, in years of ${DAYS_PER_YEAR} days: spring, summer, autumn and winter. At 1× your world lives ${BASE_TPS} days `
-            + `every second, a year in ${num(DAYS_PER_YEAR / BASE_TPS)} seconds; speed up to ${orList(speeds.slice(1))}, `
+            + `every second, a season in ${num(DAYS_PER_YEAR / 4 / BASE_TPS)} seconds and a year in ${num(DAYS_PER_YEAR / BASE_TPS / 60)} minutes; speed up to ${orList(speeds.slice(1))}, `
             + `pause whenever you like, or step a month (${STEP_DAYS} days) to see what happens. Each year runs the same steps:`,
         ],
         steps: [

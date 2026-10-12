@@ -2,7 +2,7 @@
 
 import { LocalSimHost } from './host/simHost.js';
 import { Loop, BASE_TPS, SPEEDS } from './loop.js';
-import { DAYS_PER_YEAR, SEASON_NAMES, seasonOf } from './sim/calendar.js';
+import { DAYS_PER_YEAR, SEASON_DAYS, SEASON_NAMES, seasonOf } from './sim/calendar.js';
 import { seasonLook } from './render3d/seasons.js';
 import { daylight } from './render3d/dayNight.js';
 import { Camera, FLY_MS, flightAt } from './render/camera.js';
@@ -407,7 +407,7 @@ async function resumeGame() {
 function updatePanels() {
   const stats = host.stats();
   if (!stats) return;
-  ui.year.textContent = `${stats.season ? `${stats.season}, year` : 'Year'} ${stats.tick}${stats.finished ? ' (ended)' : ''}`;
+  ui.year.textContent = `${stats.season ? `${stats.season} day ${(stats.day % SEASON_DAYS) + 1}, year` : 'Year'} ${stats.tick}${stats.finished ? ' (ended)' : ''}`;
   const alive = stats.civs.filter((c) => c.pop > 0).length;
   ui.pop.textContent = `${formatNumber(stats.totalPop)} people · ${alive} of ${stats.civs.length} civs · ${map.cols} × ${map.rows} hexes`;
   renderCivStats(ui.civStats, stats);

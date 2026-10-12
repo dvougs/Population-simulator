@@ -1,13 +1,13 @@
 // Fixed-timestep driver. The sim advances in whole ticks (days) at BASE_TPS ×
 // speed, independent of frame rate; rendering happens at most once per animation frame.
 
-/** Days a second at 1×: a 360-day year takes 3 seconds. */
-export const BASE_TPS = 120;
+/** Days a second at 1×: slow enough to watch each day go by; a season takes 45 seconds, a year 3 minutes. */
+export const BASE_TPS = 2;
 export const SPEEDS = [
   { label: '1×', mult: 1 },
-  { label: '3×', mult: 3 },
-  { label: '10×', mult: 10 },
-  { label: '30×', mult: 30 },
+  { label: '5×', mult: 5 },
+  { label: '20×', mult: 20 },
+  { label: '100×', mult: 100 },
   { label: 'Max', mult: Infinity },
 ];
 /** Days one press of Step advances: a month. */

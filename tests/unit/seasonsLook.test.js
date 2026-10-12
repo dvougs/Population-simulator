@@ -35,11 +35,12 @@ test('the seasons fade out when years fly by, so they never flicker', () => {
   assert.equal(seasonAmount(Infinity), 0);
   assert.equal(FULL_BELOW_YPS, 0.5);
   assert.equal(NONE_ABOVE_YPS, 2);
-  // 1× is a year in 3 s: full; 3× is one a second: partly; 10× and up: none.
-  assert.equal(seasonAmount(1 / 3), 1);
-  const three = seasonAmount(1);
-  assert.ok(three > 0 && three < 1);
-  assert.equal(seasonAmount(10 / 3), 0);
+  // 1× to 20× (a year in 3 minutes to 9 s): full; 100× (a year in 1.8 s): nearly full; faster: none.
+  assert.equal(seasonAmount(40 / 360), 1);
+  const hundred = seasonAmount(200 / 360);
+  assert.ok(hundred > 0.95 && hundred < 1);
+  assert.ok(seasonAmount(1) > 0 && seasonAmount(1) < 1);
+  assert.equal(seasonAmount(10), 0);
   assert.equal(seasonLook(315, 0.5).snow, 0.5);
 });
 
