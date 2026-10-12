@@ -69,7 +69,7 @@ export function drawStarts(canvas, map, t, starts, chosen, selected = -1) {
   if (!t) return;
   const ctx = canvas.getContext('2d');
   ctx.setTransform(t.s, 0, 0, t.s, t.ox, t.oy);
-  // At least 7 CSS px, so a 100 × 100 map still shows them.
+  // At least 7 CSS px, so a 50 × 50 map still shows them.
   const r = Math.max(HEX_SIZE * 0.85, (7 * t.dpr) / t.s);
   starts.forEach((h, c) => {
     if (h < 0) return;

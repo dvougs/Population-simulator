@@ -9,7 +9,7 @@
 // Zoomed out the icon sits in the hex's upper-right corner, clear of the head
 // count; zoomed in it stands larger in the hex centre. Either way it is drawn
 // over the people, since a crowded hex would bury it. On a far zoom it is kept
-// a few screen pixels across, so wonders stay findable on a 100 × 100 map.
+// a few screen pixels across, so wonders stay findable on a 50 × 50 map.
 //
 // Cheap by design: SimHost.buildings() is compared by a small signature, and
 // only icons whose look changed (status, owner, a progress step) are redrawn.

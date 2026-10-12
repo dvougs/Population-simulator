@@ -194,9 +194,9 @@ test('startHexes gives the starts a new game uses, chosen or not', () => {
   for (let i = 0; i < sim.people.high; i++) if (sim.people.alive[i] && sim.people.civ[i] === 0) assert.equal(sim.people.hex[i], land);
 });
 
-test('a 100 x 100 map runs', () => {
+test('a 50 x 50 map (the largest) runs, and bigger sizes are capped to it', () => {
   const sim = new Simulation({ seed: 'huge', size: 100, civCount: 8 });
-  assert.equal(sim.map.count, 10000);
+  assert.equal(sim.map.count, 2500);
   sim.tick(5);
   assert.equal(sim.tickCount, 5);
   assert.ok(sim.stats().totalPop > 0);

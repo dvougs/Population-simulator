@@ -10,6 +10,7 @@ import { createFlags } from './flags.js';
 import { peopleShown, PEOPLE_ZOOM_PX, PEOPLE_FLY_PX } from './render/peopleLayer.js';
 import { hexAtWorld, hexCentre, worldBounds, HEX_SIZE } from './render/layout.js';
 import { attachGestures } from './input/gestures.js';
+import { attachKeys } from './input/keys.js';
 import { HomeScreen } from './ui/homeScreen.js';
 import { HowScreen } from './ui/howScreen.js';
 import { MapgenScreen } from './ui/mapgenScreen.js';
@@ -462,6 +463,16 @@ attachGestures(ui.canvas, {
       return;
     }
     select(hex.index);
+  },
+});
+
+// Arrow keys pan and + / − zoom about the open map's middle, like a drag and a pinch.
+attachKeys(window, {
+  active: () => screen === 'game' && !!map,
+  onPan: (dx, dy) => { flight = null; camera.pan(dx, dy); userMovedCamera = true; dirty = true; placeInspector(); },
+  onZoom: (f) => {
+    const c = mapCentre();
+    flight = null; camera.zoomAt(f, c.x, c.y); userMovedCamera = true; dirty = true; placeInspector();
   },
 });
 

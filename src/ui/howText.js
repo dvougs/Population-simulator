@@ -390,7 +390,7 @@ export function howText() {
         kicker: 'Playing',
         title: 'At your fingertips',
         points: [
-          'Drag to pan, pinch or scroll to zoom, and ⤢ fits the whole map again.',
+          'Drag to pan, pinch or scroll to zoom, and ⤢ fits the whole map again. On a keyboard, the arrow keys move the map and + and − zoom.',
           'Zoom in to see each settlement drawn by its size, its buildings, and carts on the routes between them.',
           'Tap a hex to fly in and see its terrain, food, deposits, people, its settlement (store, buildings and routes) and any building or wonder there. Tap a person for their age, health, family and traits.',
           'Swipe up the bottom sheet for each civ\'s people, hexes, level, buildings, wonders and capital store, and a guide to every level and settlement.',

@@ -22,7 +22,7 @@ export const MAP_KEYS = ['seed', 'size', 'water', 'mountains', 'rivers', ...LOWL
 
 /** Valid ranges, shared by validation, the setup screens and RULES.md. */
 export const LIMITS = Object.freeze({
-  size: { min: 10, max: 100 },
+  size: { min: 10, max: 50 },
   water: { min: 0, max: 0.7 },
   mountains: { min: 0, max: 0.4 },
   rivers: { min: 0, max: 20 },
