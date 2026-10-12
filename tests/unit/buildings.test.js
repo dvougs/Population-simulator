@@ -51,12 +51,31 @@ function mk(types, { size = 10, terrain = () => PLAINS } = {}) {
     w.cnt[h * civs + c] += n;
     return w;
   };
-  w.give = (c, mats) => { for (const [id, v] of Object.entries(mats)) lv.stock[c * MATERIAL_COUNT + MATERIAL_IDS.indexOf(id)] += v; return w; };
-  w.set = (c, id, v) => { lv.stock[c * MATERIAL_COUNT + MATERIAL_IDS.indexOf(id)] = v; return w; };
-  w.stock = (c, id) => lv.stock[c * MATERIAL_COUNT + MATERIAL_IDS.indexOf(id)];
-  w.stockList = (c) => Array.from(lv.stock.subarray(c * MATERIAL_COUNT, (c + 1) * MATERIAL_COUNT));
+  // Levels, era buildings and wonders are paid from each civ's capital store (RULES.md "Settlements"), so materials
+  // given here are queued and put into the capital's store once the settlements know where it is.
+  const ops = [];
+  const slot = (c, id) => {
+    const h = lv.settlements.capital[c];
+    return h < 0 ? -1 : h * MATERIAL_COUNT + MATERIAL_IDS.indexOf(id);
+  };
+  w.flush = () => {
+    if (ops.length === 0) return w;
+    lv.settlements.update(w.cnt, w.fw, lv.level, w.year);
+    for (const [kind, c, id, v] of ops) {
+      const i = slot(c, id);
+      if (i < 0) continue;
+      lv.settlements.store[i] = kind === 'set' ? v : lv.settlements.store[i] + v;
+    }
+    ops.length = 0;
+    return w;
+  };
+  w.give = (c, mats) => { for (const [id, v] of Object.entries(mats)) ops.push(['give', c, id, v]); return w; };
+  w.set = (c, id, v) => { ops.push(['set', c, id, v]); return w; };
+  w.stock = (c, id) => { w.flush(); const i = slot(c, id); return i < 0 ? 0 : lv.settlements.store[i]; };
+  w.stockList = (c) => MATERIAL_IDS.map((id) => w.stock(c, id));
   w.step = (n = 1) => {
     for (let k = 0; k < n; k++) {
+      w.flush();
       w.year++;
       lv.hungry.fill(0);
       lv.year(people, map, w.year, w.cnt, w.fw, (c, f, t, y) => w.ev.push(['level', c, f, t, y]), null, w.hostile, w.beats,
@@ -215,31 +234,45 @@ test('RULES.md "Era buildings": Isolationist civs pay the same for a building (n
 
 // ---- starting ---------------------------------------------------------------------------------------------------
 
-test('RULES.md "Starting": the building starts in the first year the stockpile holds the cost; the materials are taken at once', () => {
+test('RULES.md "Starting": the building starts in the first year the capital store holds its cost on top of the next level\'s; the materials are taken at once', () => {
+  // Era 1 building 40 wood, 30 stone, 15 clay on top of the level 1 to 2 cost 80 wood, 30 stone, 30 clay.
   const w = mk(['expansionist']).put(45, 0, 10);
-  w.give(0, { wood: 40, stone: 29.99, clay: 15 }).step();
+  w.give(0, { wood: 120, stone: 59.99, clay: 45 }).step();
   assert.equal(w.bd.state[0], NONE, 'a hundredth of stone short');
-  assert.deepEqual(w.stockList(0), M({ wood: 40, stone: 29.99, clay: 15 }), 'nothing taken');
-  w.set(0, 'stone', 30).set(0, 'wood', 41.5).step();
+  assert.deepEqual(w.stockList(0), M({ wood: 120, stone: 59.99, clay: 45 }), 'nothing taken');
+  w.set(0, 'stone', 60).set(0, 'wood', 121.5).step();
   assert.equal(w.bd.state[0], BUILDING);
   assert.equal(w.bd.hex[0], 45);
   assert.equal(w.bd.work[0], 0, 'work begins the next year');
-  near(w.stock(0, 'wood'), 1.5); near(w.stock(0, 'stone'), 0, 1e-9); near(w.stock(0, 'clay'), 0);
-  // Not started twice: more materials stay in the stockpile while it is being built.
-  w.give(0, { wood: 100, stone: 100, clay: 100 }).step();
-  near(w.stock(0, 'wood'), 101.5);
+  near(w.stock(0, 'wood'), 81.5); near(w.stock(0, 'stone'), 30, 1e-9); near(w.stock(0, 'clay'), 30);
+  // Not started twice: more materials stay in the store while it is being built.
+  w.give(0, { wood: 50, stone: 50, clay: 50 }).step();
+  near(w.stock(0, 'wood'), 131.5);
   assert.equal(w.bd.work[0], 1);
 });
 
-test('RULES.md "Starting": a civ at level 2 builds its era 2 building, at the era 2 cost', () => {
+test('RULES.md "Starting": the building never takes what the next level needs (one short of the sum waits)', () => {
+  const w = mk(['expansionist']).put(45, 0, 10);
+  // Exactly the building's cost: the level's 80 wood would be missing afterwards.
+  w.give(0, { wood: 40, stone: 30, clay: 15 }).step();
+  assert.equal(w.bd.state[0], NONE);
+  // The level's cost alone is not enough either.
+  const v = mk(['expansionist']).put(45, 0, 10);
+  v.give(0, { wood: 80, stone: 30, clay: 30 }).step();
+  assert.equal(v.bd.state[0], NONE);
+  assert.deepEqual(v.stockList(0), M({ wood: 80, stone: 30, clay: 30 }));
+});
+
+test('RULES.md "Starting": a civ at level 2 builds its era 2 building, at the era 2 cost, on top of its 2 to 3 level cost', () => {
   const w = mk(['expansionist']).put(45, 0, 12);
   w.lv.level[0] = 2;
-  w.give(0, { wood: 100, stone: 80, clay: 50, copper: 14.9 }).step();
+  // Era 2 building 100 wood, 80 stone, 50 clay, 15 copper + level 3 cost 200 wood, 150 stone, 100 clay, 30 copper.
+  w.give(0, { wood: 300, stone: 230, clay: 150, copper: 44.9 }).step();
   assert.equal(w.bd.state[1], NONE);
   assert.equal(w.bd.state[0], NONE, 'the era 1 building is not built after the civ has moved on');
-  w.set(0, 'copper', 15).step();
+  w.set(0, 'copper', 45).step();
   assert.equal(w.bd.state[1], BUILDING);
-  assert.deepEqual(w.stockList(0).map((v) => Math.round(v * 1000) / 1000), M({}));
+  assert.deepEqual(w.stockList(0).map((v) => Math.round(v * 1000) / 1000), M({ wood: 200, stone: 150, clay: 100, copper: 30 }));
 });
 
 test('RULES.md "Starting": a Kingdom builds nothing, and a civ with nobody builds nothing', () => {
@@ -250,7 +283,7 @@ test('RULES.md "Starting": a Kingdom builds nothing, and a civ with nobody build
   const n = mk(['expansionist', 'aggressive']).put(45, 0, 10);
   n.give(1, { wood: 100, stone: 100, clay: 100 }).step();
   assert.equal(n.bd.state[ERAS], NONE);
-  assert.equal(n.stock(1, 'wood'), 100);
+  assert.equal(n.lv.settlements.capital[1], -1, 'no people, no capital, nowhere to keep a store');
 });
 
 // ---- the hex ----------------------------------------------------------------------------------------------------
@@ -334,7 +367,7 @@ test('RULES.md "The hex": one building or wonder per hex, so the next era\'s bui
   const w = mk(['expansionist']).put(45, 0, 30).put(88, 0, 12);
   w.lv.level[0] = 2;
   w.stand(0, 1, 45);
-  w.give(0, { wood: 100, stone: 80, clay: 50, copper: 15 }).step();
+  w.give(0, { wood: 300, stone: 230, clay: 150, copper: 45 }).step();
   assert.equal(w.bd.state[1], BUILDING);
   assert.equal(w.bd.hex[1], 88, '45 holds the era 1 building');
   assert.ok(w.bd.occupied(45) && w.bd.occupied(88) && !w.bd.occupied(46));
@@ -343,7 +376,7 @@ test('RULES.md "The hex": one building or wonder per hex, so the next era\'s bui
 test('RULES.md "The hex": deep water hexes are never chosen', () => {
   const w = mk(['expansionist']);
   w.map.terrain[45] = DEEP_WATER;
-  w.put(45, 0, 50).put(88, 0, 10).give(0, { wood: 100, stone: 100, clay: 100 }).step();
+  w.put(45, 0, 50).put(88, 0, 10).give(0, { wood: 120, stone: 60, clay: 45 }).step();
   assert.equal(w.bd.hex[0], 88);
 });
 
@@ -351,7 +384,7 @@ test('RULES.md "The hex": deep water hexes are never chosen', () => {
 
 test('RULES.md "Work": a year counts when the hex held the people the work needs (10 yes, 9 no); after 30 years it stands', () => {
   const w = mk(['expansionist']).put(45, 0, 10);
-  w.give(0, { wood: 40, stone: 30, clay: 15 }).step(); // year 1: starts
+  w.give(0, { wood: 120, stone: 60, clay: 45 }).step(); // year 1: starts
   w.step(3); // years 2 to 4
   assert.equal(w.bd.work[0], 3);
   w.put(45, 0, 9).step(5);
@@ -414,25 +447,25 @@ test('RULES.md "Lost": nobody left in the hex destroys a standing building, its 
   assert.equal(w.bd.state[0], NONE);
 });
 
-test('RULES.md "Lost": a destroyed current-era building is rebuilt at full cost before the civ can climb again', () => {
+test('RULES.md "Lost": a destroyed current-era building is rebuilt at full cost, and the civ keeps its level', () => {
   const w = mk(['expansionist']);
   for (let k = 0; k < 15; k++) w.put(11 + k, 0, 10);
   w.stand(0, 1, 40); // nobody lives there
-  w.lv.yearsAt[0] = 500;
-  w.give(0, { wood: 80, stone: 30, clay: 30 });
+  w.give(0, { wood: 120, stone: 60, clay: 45 });
   w.step();
-  assert.equal(w.lv.level[0], 1, 'the building is gone');
+  assert.equal(w.lv.level[0], 1, 'the years at the level have not run');
   assert.equal(w.bd.destroyed[0], 1);
   assert.deepEqual(w.events('destroyed'), [['destroyed', 0, 1, 1, -1]]);
-  assert.equal(w.bd.state[0], BUILDING, 'started again as soon as the stockpile held the full cost');
-  assert.deepEqual(w.stockList(0), M({ wood: 40, stone: 0, clay: 15 }), 'the full cost 40 wood, 30 stone, 15 clay was taken');
-  w.give(0, { wood: 40, stone: 30, clay: 15 }).step();
-  assert.equal(w.lv.level[0], 1, 'a building being built does not unlock the level');
+  assert.equal(w.bd.state[0], BUILDING, 'started again as soon as the store held the full cost on top of the level');
+  assert.deepEqual(w.stockList(0), M({ wood: 80, stone: 30, clay: 30 }), 'the full cost 40 wood, 30 stone, 15 clay was taken');
 });
 
 test('RULES.md "Lost": work in progress is lost with its materials when the hex empties', () => {
-  const w = mk(['expansionist']).put(45, 0, 10).put(88, 0, 10);
-  w.give(0, { wood: 40, stone: 30, clay: 15 }).step();
+  // Civ 0's capital is 88 (11 people, a camp that plans nothing); the building goes to 45 (10 people with six own neighbours: 22 beats 11).
+  const w = mk(['expansionist']).put(45, 0, 10).put(88, 0, 11);
+  for (let d = 0; d < 6; d++) w.put(nb(w, 45, d), 0, 1);
+  w.give(0, { wood: 120, stone: 60, clay: 45 }).step();
+  assert.equal(w.bd.hex[0], 45);
   w.step(10);
   assert.equal(w.bd.work[0], 10);
   w.put(45, 0, 0).step();
@@ -440,7 +473,7 @@ test('RULES.md "Lost": work in progress is lost with its materials when the hex 
   assert.equal(w.bd.work[0], 0);
   assert.equal(w.bd.destroyed[0], 0, 'unfinished work is not a destroyed building');
   assert.deepEqual(w.events('destroyed'), []);
-  assert.deepEqual(w.stockList(0), M({}), 'no refund');
+  assert.deepEqual(w.stockList(0), M({ wood: 80, stone: 30, clay: 30 }), 'no refund: only the level\'s materials are left');
 });
 
 // ---- levelling --------------------------------------------------------------------------------------------------
@@ -452,52 +485,45 @@ function readyForLevel2(types = ['expansionist']) {
   return w;
 }
 
-test('RULES.md "Buildings first": a civ that meets every level requirement still waits for its era building', () => {
+test('RULES.md "Levelling up": a civ that meets every requirement levels up without its era building', () => {
   const w = readyForLevel2();
   w.give(0, { wood: 80, stone: 30, clay: 30 }).step();
-  assert.equal(w.lv.level[0], 1, 'no building');
+  assert.equal(w.lv.level[0], 2, 'no building, and the level comes');
+  assert.equal(w.bd.state[0], NONE);
   const b = readyForLevel2();
   b.bd.state[0] = BUILDING; b.bd.hex[0] = 11; b.bd.work[0] = 29;
   b.give(0, { wood: 80, stone: 30, clay: 30 });
   b.bd.aCheck[0] = 1e9;
-  b.put(11, 0, 9).put(12, 0, 11).step(); // 9 people: the last year of work does not count
-  assert.equal(b.lv.level[0], 1, 'being built is not standing');
-  assert.equal(b.bd.work[0], 29);
-  b.put(11, 0, 10).put(12, 0, 10).step();
-  assert.equal(b.bd.state[0], STANDING);
-  assert.equal(b.lv.level[0], 2, 'the year it stands, the level follows');
-  assert.deepEqual(b.stockList(0).map((v) => Math.round(v * 100) / 100), M({}), 'only the level\'s materials were left');
+  b.step();
+  assert.equal(b.lv.level[0], 2, 'a building still being built does not hold the level back');
+  assert.deepEqual(b.stockList(0).map((v) => Math.round(v * 100) / 100), M({}), 'only the level\'s materials were spent');
 });
 
-test('RULES.md "Buildings first": the building and the level are paid separately (building cost is not part of the level cost)', () => {
+test('RULES.md "Levelling up": the building and the level are paid separately (building cost is not part of the level cost)', () => {
   const w = readyForLevel2();
-  w.give(0, { wood: 120, stone: 60, clay: 45 }).step();
-  assert.equal(w.bd.state[0], BUILDING, 'building started');
-  assert.deepEqual(w.stockList(0), M({ wood: 80, stone: 30, clay: 30 }));
-  assert.equal(w.lv.level[0], 1);
+  // The building waits for 120 wood, 60 stone and 45 clay on top; the level takes its 80, 30, 30 and goes ahead.
+  w.give(0, { wood: 119, stone: 60, clay: 45 }).step();
+  assert.equal(w.bd.state[0], NONE, 'a wood short: the building does not start');
+  assert.equal(w.lv.level[0], 2);
+  assert.deepEqual(w.stockList(0), M({ wood: 39, stone: 30, clay: 15 }));
+  const v = readyForLevel2();
+  v.give(0, { wood: 120, stone: 60, clay: 45 }).step();
+  assert.equal(v.bd.state[0], BUILDING, 'building started');
+  assert.equal(v.lv.level[0], 2, 'and the level paid');
+  assert.deepEqual(v.stockList(0), M({}));
 });
 
-test('RULES.md "Levelling up": levels 2, 3 and 4 also need their own era building, Kingdom needs the era 4 one', () => {
+test('RULES.md "Levelling up": levels 2, 3, 4 and Kingdom do not wait for the era building', () => {
   for (const level of [1, 2, 3, 4]) {
-    const make = () => {
-      const w = mk(['aggressive']).put(45, 0, 20);
-      w.lv.level[0] = level;
-      w.lv.minHex.fill(0); w.lv.minPeople.fill(0);
-      for (let m = 0; m < MATERIAL_COUNT; m++) w.lv.stock[m] = w.lv.levelCost(0, level, m);
-      w.lv.yearsAt[0] = 5000;
-      return w;
-    };
-    assert.equal(make().step().lv.level[0], level, `level ${level} without the era ${level} building`);
-    const v = make();
-    v.stand(0, level, 45);
-    v.bd.aCheck[level - 1] = 1e9;
-    assert.equal(v.step().lv.level[0], level + 1, `level ${level} with it`);
-    // The building of another era does not do.
-    if (level < 4) {
-      const o = make();
-      o.stand(0, level + 1, 45);
-      assert.equal(o.step().lv.level[0], level, `level ${level} with the next era's building`);
-    }
+    const w = mk(['aggressive']).put(45, 0, 20);
+    w.lv.level[0] = level;
+    w.lv.minHex.fill(0); w.lv.minPeople.fill(0);
+    const cost = Array.from({ length: MATERIAL_COUNT }, (_, m) => w.lv.levelCost(0, level, m));
+    w.give(0, Object.fromEntries(MATERIAL_IDS.map((id, m) => [id, cost[m]])));
+    w.lv.yearsAt[0] = 5000;
+    w.bd.aCheck[level - 1] = 1e9;
+    assert.equal(w.step().lv.level[0], level + 1, `level ${level} with no era ${level} building`);
+    assert.ok(w.bd.state.every((s) => s === NONE));
   }
 });
 
@@ -648,7 +674,9 @@ test('RULES.md "Committed": a committed civ does not level up until it has start
   assert.equal(w.lv.level[0], 1);
   assert.equal(w.bd.aHex[0], -1);
   // The wonder\'s materials arrive on top of the level\'s: it starts, in another hex, and the level follows.
-  w.give(0, { wood: 160, stone: 120, clay: 80 }).step();
+  // A camp's capital store holds 1.1 × 160 = 176 of a material; stock above that loses 20% of the excess a year, so
+  // 80 + 176 wood becomes 176 + 0.8 × 80 = 240 in step 1: the wonder's 160 and the level's 80.
+  w.give(0, { wood: 176, stone: 120, clay: 80 }).step();
   assert.equal(w.bd.aHex[0], 13, 'the lowest free hex: 11 holds the building');
   assert.equal(w.bd.aWork[0], 0);
   assert.equal(w.lv.level[0], 2);
@@ -976,7 +1004,8 @@ test('RULES.md "Gathering": Observatory +30% and Caravanserai +30% on uncommon a
   iso.stand(0, 4, 55);
   iso.step();
   near(iso.stock(0, 'wood'), 0.5 * 6 * 1.3, 1e-6); // 20% × 30 = 6 gatherers
-  // Level 2 -> 3 wants wood (common) and copper (uncommon): each gets half the 10 gatherers; Caravanserai +30% on copper only.
+  // Level 2 -> 3 wants wood (common) and copper (uncommon): each gets half the 10 gatherers; by hand 0.5 a gatherer of
+  // wood and 0.25 of copper; Caravanserai +30% on copper only.
   const run = (caravanserai) => {
     const w = mk(['nomadic']);
     w.lv.level[0] = 2;
@@ -989,12 +1018,12 @@ test('RULES.md "Gathering": Observatory +30% and Caravanserai +30% on uncommon a
   };
   const [wood, copper] = run(true);
   near(wood, 0.5 * 10 / 2, 1e-6);
-  near(copper, 0.5 * 10 * 1.3 / 2, 1e-6);
+  near(copper, 0.25 * 10 * 1.3 / 2, 1e-6);
   const [wood0, copper0] = run(false);
-  near(wood0, 2.5, 1e-6); near(copper0, 2.5, 1e-6);
+  near(wood0, 2.5, 1e-6); near(copper0, 1.25, 1e-6);
 });
 
-test('RULES.md "Gathering": the next spend is the era\'s building, then the wonder (only if committed and not started), then the level', () => {
+test('RULES.md "Gathering": the next spend is the wonder (only if committed and not started), then the level, then the era\'s building', () => {
   const w = mk(['expansionist']);
   w.put(45, 0, 20);
   const lv = w.lv;
@@ -1006,8 +1035,8 @@ test('RULES.md "Gathering": the next spend is the era\'s building, then the wond
   const target = (c = 0) => Array.from(lv.target.subarray(c * MATERIAL_COUNT, (c + 1) * MATERIAL_COUNT));
   const later = (c = 0) => Array.from(lv.later.subarray(c * MATERIAL_COUNT, (c + 1) * MATERIAL_COUNT));
   lv.targets(0);
-  assert.deepEqual(target(), bcost(1), 'building first');
-  assert.deepEqual(later(), sum(bcost(1), lcost(1), rest));
+  assert.deepEqual(target(), lcost(1), 'the level first; the building is optional and comes after');
+  assert.deepEqual(later(), sum(lcost(1), bcost(1), rest));
   w.bd.state[0] = BUILDING; w.bd.hex[0] = 45; lv.targets(0);
   assert.deepEqual(target(), lcost(1), 'being built: the level');
   assert.deepEqual(later(), sum(lcost(1), rest));
@@ -1018,9 +1047,9 @@ test('RULES.md "Gathering": the next spend is the era\'s building, then the wond
   assert.deepEqual(later(), sum(Array.from(WONDERS[0].materials), lcost(1), rest));
   w.bd.aHex[0] = 13; lv.targets(0);
   assert.deepEqual(target(), lcost(1), 'started: the level');
-  // At level 2 the target is the era 2 building; a Kingdom wants nothing.
+  // At level 2 the target is the 2 to 3 level; a Kingdom wants nothing.
   w.bd.attempt[0] = NONE; w.bd.aHex[0] = -1; lv.level[0] = 2; lv.targets(0);
-  assert.deepEqual(target(), bcost(2));
+  assert.deepEqual(target(), lcost(2));
   lv.level[0] = 5; lv.targets(0);
   assert.deepEqual(target(), new Array(MATERIAL_COUNT).fill(0));
 });
@@ -1131,12 +1160,14 @@ test('RULES.md "Levelling up": a cost bonus (Guild Hall 15%) lowers every materi
   assert.equal(reduce(0, 85), 0);
   assert.equal(reduce(100, 100), 100);
   assert.equal(reduce(1, 85), 1);
-  // Applied: the building starts at the reduced cost; the level is bought for it too.
+  // Applied: the building starts at the reduced cost, on top of the reduced cost of the level (68, 26, 26).
   const a = mk(['cooperative']).put(45, 0, 10).put(46, 0, 10);
   a.stand(0, 3, 45);
-  a.give(0, { wood: 34, stone: 26, clay: 13 }).step();
+  a.give(0, { wood: 34 + 68 - 1, stone: 26 + 26, clay: 13 + 26 }).step();
+  assert.equal(a.bd.state[0], NONE, 'a wood short');
+  a.give(0, { wood: 1 }).step();
   assert.equal(a.bd.state[0], BUILDING);
-  assert.deepEqual(a.stockList(0), M({}));
+  assert.deepEqual(a.stockList(0), M({ wood: 68, stone: 26, clay: 26 }));
 });
 
 test('"Fights": strength bonus multiplies each side\'s strength by 1 + bonus; defence adds to the terrain bonus', () => {
@@ -1522,22 +1553,20 @@ test('RULES.md "Buildings and wonders" in How to play: the section\'s numbers ar
 
 // ---- a seeded run -----------------------------------------------------------------------------------------------
 
-test('a seeded run: civs build, buildings are deterministic, levels wait for them, hash is the same twice', () => {
+test('a seeded run: civs build, buildings are deterministic, hash is the same twice', () => {
   const run = () => {
     const sim = new Simulation({ seed: 'build-run', size: 14, civCount: 3, startPop: 60, civTypes: ['cooperative', 'expansionist', 'nomadic'] });
     const bd = sim.levels.buildings;
     const log = [];
     for (let y = 0; y < 500; y++) {
       sim.tick();
-      for (let c = 0; c < 3; c++) {
-        // A level above 1 only after the earlier era's building was standing at some point.
-        if (sim.levels.level[c] > 1) assert.ok(bd.state[c * ERAS] === STANDING || bd.destroyed[c * ERAS] > 0, `civ ${c} year ${y} level ${sim.levels.level[c]}`);
-      }
     }
     for (let c = 0; c < 3; c++) log.push([...bd.state.subarray(c * ERAS, (c + 1) * ERAS)], [...bd.work.subarray(c * ERAS, (c + 1) * ERAS)]);
     return { hash: sim.hash(), log, list: sim.buildings(), levels: [...sim.levels.level] };
   };
   const a = run();
   assert.deepEqual(run(), a);
-  assert.ok(a.log.some((s) => s.some((v) => v > 0)), 'someone started or finished a building');
+  // Era buildings are optional now and come after the level in the spending order, so this run may build none of them;
+  // the settlements around it do build (see settlements.test.js).
+  assert.ok(a.levels.some((l) => l > 1), 'someone levelled up without an era building');
 });

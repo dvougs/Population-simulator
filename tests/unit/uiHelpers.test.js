@@ -57,7 +57,9 @@ test('How to play text: has the sections in the RULES.md order and every number 
     '1 to 8 civilisations', '2 to 200 people (20 by default)', 'at least 3 steps',
     'up to ±3%', '0% to 10%',
     'above 0.5', 'above 0.4', '3 to 1', 'above 0.45', 'last 20 years', 'loses 20% of its people', 'the winner loses 5%, rounded down', 'about 1% a year',
-    'There are 9 materials', 'at most 20% of its people went hungry', 'sends 20% of its adults', 'Each brings in 0.5 a year (0.125 of an exotic)', 'at most 10 a deposit a year (2.5 for exotics)',
+    'There are 9 materials', 'at most 20% of the people there went hungry last year', "20% of a hex's adults gather its deposits",
+    'only 0.5 a year (0.0625 of an exotic)', 'at most 10 a deposit a year (1.25 for exotics)',
+    'camp from 1, village from 12, town from 30, city from 60, metropolis from 100 and megapolis from 160 people', 'a town needs level 2, a megapolis level 5', 'shrinks after 20 years',
     '100 years in a row falls back',
     'at least 60% of the land for 300 years', '1000, 2500, 5000 or 10000 years',
   ]) assert.ok(text.includes(must), `missing "${must}"`);
