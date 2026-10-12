@@ -77,6 +77,7 @@ export function renderInspector(el, hex, onClose, opts = {}) {
       h('header', {},
         h('h3', { id: 'inspector-title' }, hex.name, h('small', {}, ` (${hex.col}, ${hex.row})`)),
         h('button', { type: 'button', class: 'btn ghost', 'aria-label': 'Close hex details', onclick: onClose }, '✕')),
+      h('button', { type: 'button', class: 'btn primary small enter-hex', hidden: true }, 'Step inside'),
       h('div', { class: 'settlement-card' }),
       h('div', { class: 'building-cards' }),
       dl(rows),
@@ -92,6 +93,10 @@ export function renderInspector(el, hex, onClose, opts = {}) {
       h('ul', { class: 'people-list', 'aria-label': 'People in this hex' }),
     );
   }
+  // Step inside: the 3D map only (opts.onEnter).
+  const enter = el.querySelector('.enter-hex');
+  enter.hidden = !opts.onEnter;
+  enter.onclick = opts.onEnter ?? null;
   fillSettlement(el.querySelector('.settlement-card'), hex.settlement);
   fillBuildingCards(el.querySelector('.building-cards'), hex.buildings ?? []);
   const open = el.dataset.list === 'open';

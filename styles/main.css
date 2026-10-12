@@ -518,6 +518,20 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 6px 
 .map3d { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
 .map3d[hidden] { display: none; }
 #map.over-3d { opacity: 0; }
+/* Inside a hex: its world covers the map, the bars and the sheet until the player leaves. */
+.hex-view { position: absolute; inset: 0; z-index: 10; background: #0a1328; opacity: 0; transition: opacity 0.5s var(--ease); }
+.hex-view.shown { opacity: 1; }
+.hex-view canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.hex-view-bar { position: absolute; left: 0; right: 0; top: 0; display: flex; align-items: center; gap: 10px;
+  padding: calc(8px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right)) 8px calc(10px + env(safe-area-inset-left));
+  background: linear-gradient(rgba(5, 10, 20, 0.7), rgba(5, 10, 20, 0)); color: #fff; pointer-events: none; }
+.hex-view-bar > * { pointer-events: auto; }
+.hex-view-title { display: flex; flex-direction: column; min-width: 0; flex: 1; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); }
+.hex-view-title strong { font-size: 18px; }
+.hex-view-title span { font-size: 14px; opacity: 0.85; }
+.hex-view-time { font-size: 14px; padding: 6px 10px; border-radius: 999px; background: rgba(5, 10, 20, 0.55); text-transform: capitalize; }
+.enter-hex { width: 100%; margin-top: 8px; }
+.enter-hex[hidden] { display: none; }
 
 .hud { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 10px; pointer-events: none;
   padding: calc(8px + var(--safe-top)) calc(10px + var(--safe-right)) 8px calc(10px + var(--safe-left)); }

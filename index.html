@@ -111,6 +111,14 @@
 
   <section id="game" class="screen game" hidden>
     <canvas id="map3d" class="map3d" aria-hidden="true" hidden></canvas>
+    <div id="hex-view" class="hex-view" hidden>
+      <canvas id="hex-canvas" aria-label="Inside the hex. Drag to turn, pinch or scroll to zoom."></canvas>
+      <header class="hex-view-bar">
+        <button id="btn-hex-leave" class="btn hud-btn" type="button" aria-label="Back to the map">&#8592;</button>
+        <div class="hex-view-title"><strong id="hex-view-name"></strong><span id="hex-view-info"></span></div>
+        <span id="hex-view-time" class="hex-view-time"></span>
+      </header>
+    </div>
     <canvas id="map" aria-label="Hex map. Pinch or scroll to zoom, drag to pan, tap a hex to inspect it."></canvas>
 
     <header class="hud">
