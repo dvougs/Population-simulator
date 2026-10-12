@@ -10,7 +10,7 @@ import { generateMap } from '../../src/sim/mapgen.js';
 import { normalizeParams } from '../../src/sim/params.js';
 import { indexToAxial, distance } from '../../src/sim/hex.js';
 import { PLAINS, COAST, DEEP_WATER } from '../../src/sim/terrain.js';
-import { WOOD } from '../../src/sim/materials.js';
+import { WOOD, MATERIAL_COUNT } from '../../src/sim/materials.js';
 import { makeMap, scratch } from './helpers.js';
 
 const C = 55;
@@ -149,9 +149,17 @@ test('RULES.md "Where civs expand": threats and who beats them, as the Simulatio
   // Wanted materials: the first three for level 2, none past Kingdom.
   assert.equal(r.want[0], 0b111);
   assert.equal(r.want[2], 0);
-  sim.levels.stock[0] = 80;
+  // All of a civ's stores together count, not just its capital's.
+  const st = sim.levels.settlements;
+  st.holder[7] = 0;
+  st.store[7 * MATERIAL_COUNT] = 79.99;
+  st.totals(sim.levels.held);
   sim.expansionPriorities();
-  assert.equal(r.want[0], 0b110, 'a material the stockpile covers is no longer wanted');
+  assert.equal(r.want[0], 0b111, 'a hundredth short of the 80 wood: still wanted');
+  st.store[7 * MATERIAL_COUNT] = 80;
+  st.totals(sim.levels.held);
+  sim.expansionPriorities();
+  assert.equal(r.want[0], 0b110, 'a material its stores cover is no longer wanted');
 });
 
 test('RULES.md "Start hexes": chosen starts are used when land and not taken; the rest keep 3 steps from them', () => {

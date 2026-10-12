@@ -77,6 +77,7 @@ export function renderInspector(el, hex, onClose, opts = {}) {
       h('header', {},
         h('h3', { id: 'inspector-title' }, hex.name, h('small', {}, ` (${hex.col}, ${hex.row})`)),
         h('button', { type: 'button', class: 'btn ghost', 'aria-label': 'Close hex details', onclick: onClose }, '✕')),
+      h('div', { class: 'settlement-card' }),
       h('div', { class: 'building-cards' }),
       dl(rows),
       h('button', {
@@ -91,6 +92,7 @@ export function renderInspector(el, hex, onClose, opts = {}) {
       h('ul', { class: 'people-list', 'aria-label': 'People in this hex' }),
     );
   }
+  fillSettlement(el.querySelector('.settlement-card'), hex.settlement);
   fillBuildingCards(el.querySelector('.building-cards'), hex.buildings ?? []);
   const open = el.dataset.list === 'open';
   const toggle = el.querySelector('.people-toggle');
@@ -101,6 +103,44 @@ export function renderInspector(el, hex, onClose, opts = {}) {
   const list = el.querySelector('.people-list');
   list.hidden = !open || !hex.people;
   if (open && opts.people) fillPeopleList(el, list, opts.people);
+}
+
+const whole = (v) => formatNumber(Math.floor(v + 1e-9));
+
+/** Routes in plain words: "from 3 hexes: 12 food, 5 materials". */
+function routeText(list, dir) {
+  if (!list.length) return null;
+  let food = 0;
+  let mat = 0;
+  const hexes = new Set();
+  for (const r of list) { food += r.food; mat += r.materials; hexes.add(r.hex); }
+  const goods = [food >= 0.5 ? `${whole(food)} food` : null, mat >= 0.5 ? `${whole(mat)} materials` : null].filter(Boolean).join(', ') || 'a little';
+  return `${dir} ${hexes.size} ${hexes.size === 1 ? 'hex' : 'hexes'}: ${goods}`;
+}
+
+/** The settlement in the hex (RULES.md "Settlements"): tier, people and housing, store, its buildings and routes. */
+function fillSettlement(box, st) {
+  if (!box) return;
+  if (!st) { box.hidden = true; box.dataset.key = ''; return; }
+  const store = Object.entries(st.store).map(([id, v]) => `${materialName(id).toLowerCase()} ${whole(v)}`).join(', ');
+  const own = st.buildings.map((b) => (b.status === 'standing' ? b.name
+    : b.status === 'building' ? `${b.name} (building ${b.years > 0 ? Math.floor((b.work / b.years) * 100) : 0}%)`
+      : `${b.name} (planned, needs ${Object.entries(b.cost).map(([id, v]) => `${v} ${materialName(id).toLowerCase()}`).join(', ')})`));
+  const routes = [routeText(st.routesIn, 'In from'), routeText(st.routesOut, 'Out to')].filter(Boolean).join('. ');
+  const rows = [
+    ['People', `${formatNumber(st.people)} of ${formatNumber(st.housing)} houses`],
+    ['Store', `${store || 'empty'} (holds ${formatNumber(st.storeCap)} of each)`],
+    ['Buildings', `${own.length ? own.join(', ') : 'none yet'} (${st.buildings.filter((b) => b.status === 'standing').length} of ${st.slots} slots)`],
+    ['Routes', routes || 'none this year'],
+  ];
+  const key = `${st.name}|${st.tier}|${st.holder}|${st.capital}|${rows.map((r) => r[1]).join('|')}`;
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  box.hidden = false;
+  box.dataset.tier = String(st.tier);
+  box.replaceChildren(
+    h('h4', {}, emblem(st.holder, 14), st.name, h('span', { class: 'tag' }, st.tierName), st.capital ? h('span', { class: 'tag wonder-tag' }, 'Capital') : null),
+    h('dl', { class: 'building-facts' }, rows.flatMap(([k, v]) => [h('dt', {}, k), h('dd', { 'data-field': `settlement-${k.toLowerCase()}` }, v)])));
 }
 
 /** The civ type whose era building has this id (BUILDINGS), or null. */

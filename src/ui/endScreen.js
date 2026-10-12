@@ -13,6 +13,7 @@ import { MATERIAL_IDS, MATERIAL_NAMES } from '../sim/materials.js';
 import { LEVEL_NAMES, MAX_LEVEL } from '../sim/levels.js';
 import { amount } from './levelsPanel.js';
 import { WONDERS } from '../sim/buildings.js';
+import { TIER_NAMES } from '../sim/settlements.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 /** Chart points per civ at most; longer histories are sampled evenly (the last row always kept). */
@@ -40,6 +41,7 @@ export function renderEndScreen(el, report, actions) {
     warCard(report),
     chartCard(report, true),
     levelChartCard(report),
+    citiesCard(report),
     stockpileCard(report),
     traitsCard(report),
     peopleCard(report),
@@ -223,13 +225,25 @@ function levelChartCard(r) {
       h('span', {}, ` ${(c.reached ?? []).map((y, k) => (y !== null && k > 0 ? `${LEVEL_NAMES[k]} in year ${y}` : null)).filter(Boolean).join(', ') || 'stayed Foragers'}`)))));
 }
 
-/** Each civ's stockpile at the end (materials it never had are left out). */
+/** The biggest settlements of the run (RULES.md "End screen"): the highest size each reached, with its people then. */
+function citiesCard(r) {
+  const list = r.cities ?? [];
+  if (list.length === 0) return fold('end-cities', 'Greatest cities', false, h('p', { class: 'muted' }, 'No settlement grew past a village.'));
+  return fold('end-cities', 'Greatest cities', false,
+    h('ol', { class: 'end-cities' }, list.map((t) => h('li', { 'data-hex': t.hex, 'data-tier': t.tier },
+      t.holder >= 0 ? emblem(t.holder, 12) : null,
+      h('strong', {}, t.name),
+      h('span', {}, ` at (${t.col}, ${t.row}): ${t.tierName} in year ${t.year}, ${formatNumber(t.people)} people`
+        + (t.tierNow < 0 ? '; now in ruins' : t.tierNow < t.tier ? `; a ${TIER_NAMES[t.tierNow].toLowerCase()} at the end` : ''))))));
+}
+
+/** Each civ's capital store at the end (materials it never had are left out). */
 function stockpileCard(r) {
   const civs = r.civs.filter((c) => c.stockpile);
   const mats = MATERIAL_IDS.filter((id) => civs.some((c) => c.stockpile[id] > 0));
-  if (civs.length === 0 || mats.length === 0) return fold('end-stockpiles', 'Stockpiles at the end', false, h('p', { class: 'muted' }, 'Nobody gathered anything.'));
-  return fold('end-stockpiles', 'Stockpiles at the end', false,
-    h('p', { class: 'muted' }, 'Materials gathered and not yet spent on levelling up.'),
+  if (civs.length === 0 || mats.length === 0) return fold('end-stockpiles', 'Capital stores at the end', false, h('p', { class: 'muted' }, 'Nobody gathered anything.'));
+  return fold('end-stockpiles', 'Capital stores at the end', false,
+    h('p', { class: 'muted' }, 'Materials in each capital\'s store, not yet spent on levels, buildings or wonders.'),
     h('div', { class: 'table-wrap' },
       h('table', { class: 'end-traits end-stock' },
         h('thead', {}, h('tr', {}, h('th', { scope: 'col' }, 'Material'), civs.map((c) => h('th', { scope: 'col', 'data-civ': c.id }, civLabel(c.id))))),
@@ -309,6 +323,8 @@ export function eventText(e) {
   if (e.type === 'milestone') return `${civName(e.civ)} passed ${formatNumber(e.people)} people`;
   if (e.type === 'level') return `${civName(e.civ)} reached level ${e.level}, ${LEVEL_NAMES[e.level - 1]}`;
   if (e.type === 'wonder') return `${civName(e.civ)} finished the ${wonderName(e.era)}`;
+  if (e.type === 'city') return `${e.name ?? 'A settlement'} became ${civName(e.civ)}'s first ${TIER_NAMES[e.tier]?.toLowerCase() ?? 'city'}`;
+  if (e.type === 'cityTaken') return `${civName(e.civ)} took ${e.name ?? 'a city'} from ${civName(e.other)}`;
   if (e.type === 'captured') {
     return e.other === null || e.other === undefined
       ? `${civName(e.civ)} took over the abandoned ${wonderName(e.era)}`

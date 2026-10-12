@@ -12,7 +12,7 @@
 // hash), per-civ totals (type, births, deaths by cause including war, fights fought
 // and won, civ switches in and out, lifespans, extinction year and cause),
 // each civ's average traits, each civ's level (with the year it reached each level), food security
-// and stockpile, each civ's era buildings and wonder chase, who holds each wonder, the end-screen records, wars per pair of civs and the history chronicle's events by kind, the end conditions and how the run ended,
+// and capital store, its settlements by size, the greatest cities, each civ's era buildings and wonder chase, who holds each wonder, the end-screen records, wars per pair of civs and the history chronicle's events by kind, the end conditions and how the run ended,
 // the map hash, the final state hash and ticks per second. --json prints the
 // same plus the recorded year-by-year history per civ.
 // --min-tps makes it exit non-zero if throughput is below the floor (used in CI).
@@ -23,6 +23,7 @@ import { TERRAIN_NAMES } from '../src/sim/terrain.js';
 import { MATERIAL_IDS } from '../src/sim/materials.js';
 import { LEVEL_NAMES } from '../src/sim/levels.js';
 import { WONDERS } from '../src/sim/buildings.js';
+import { TIER_NAMES, SETTLEMENT_BUILDINGS } from '../src/sim/settlements.js';
 
 function parseArgs(argv) {
   const args = {};
@@ -124,11 +125,25 @@ const result = {
   fights: stats.civs.reduce((s, c) => s + c.fights, 0) / 2,
   samples,
   wonders: wondersJson(sim.buildings()),
+  settlements: settlementsJson(sim.levels.settlements),
+  cities: sim.report().cities,
   records: sim.report().records,
   history: historyJson(sim.history(), civNames),
 };
 
 function civNamesOf(k) { return `Civ ${k + 1}`; }
+
+/** Settlements per civ by size, buildings standing by kind, and this year's routes. */
+function settlementsJson(st) {
+  const byCiv = Array.from({ length: st.civs }, () => Object.fromEntries(TIER_NAMES.map((t) => [t, 0])));
+  const built = {};
+  for (let h = 0; h < st.n; h++) {
+    if (st.tier[h] < 0) continue;
+    byCiv[st.holder[h]][TIER_NAMES[st.tier[h]]]++;
+    SETTLEMENT_BUILDINGS.forEach((b, k) => { if (st.built[h] & (1 << k)) built[b.id] = (built[b.id] ?? 0) + 1; });
+  }
+  return { byCiv, built, routes: st.routes };
+}
 
 /** Each era's wonder: who finished it and when, who holds it now, and how often it changed hands. */
 function wondersJson(list) {
@@ -194,7 +209,10 @@ if (args.json) {
     const stock = MATERIAL_IDS.map((id) => `${id} ${amt(c.stockpile[id])}`).join(', ');
     const next = c.next ? `; next ${LEVEL_NAMES[c.next.level - 1]}: ${c.yearsAtLevel}/${c.next.years} years, ${c.pop}/${c.next.pop} people, `
       + `${c.hexes}/${c.next.hexes} hexes` : '';
-    console.log(`  ${c.name} level ${c.level} ${c.levelName} (reached ${reached}); food ${c.foodSecure ? 'secure' : 'not secure'}${next}; stockpile ${stock}`);
+    const capital = c.capital ? ` in ${c.capital.name} (${c.capital.tierName})` : '';
+    console.log(`  ${c.name} level ${c.level} ${c.levelName} (reached ${reached}); food ${c.foodSecure ? 'secure' : 'not secure'}${next}; capital store${capital} ${stock}`);
+    const towns = Object.entries(result.settlements.byCiv[c.id] ?? {}).filter(([, v]) => v > 0).map(([t, v]) => `${v} ${t.toLowerCase()}`);
+    if (towns.length) console.log(`    settlements: ${towns.join(', ')}; civic progress +${Math.round((c.progressBonus ?? 0) * 100)}%`);
   }
   const bStatus = (bd) => (bd.status === 'building' ? `building ${bd.work}/${bd.years}` : bd.status === 'none' ? 'not built' : bd.status)
     + (bd.destroyed ? ` (lost ${bd.destroyed}×)` : '');
@@ -207,6 +225,8 @@ if (args.json) {
     console.log(`  ${c.name} buildings: ${eras}${chase.length ? `; wonders: ${chase.join(', ')}` : ''}${wait}`);
     if (c.buildings.bonusText.length) console.log(`    bonuses: ${c.buildings.bonusText.join('; ')}`);
   }
+  console.log(`  settlement buildings: ${Object.entries(result.settlements.built).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}; routes this year ${result.settlements.routes}`);
+  console.log(`  greatest cities: ${result.cities.map((t) => `${t.name} ${t.tierName} ${t.people} (year ${t.year})`).join(', ') || 'none'}`);
   console.log('  wonders:');
   for (const w of result.wonders) {
     const by = w.building.length ? `; building: ${w.building.map((b) => `${b.civ} ${b.work}/${b.years}`).join(', ')}` : '';

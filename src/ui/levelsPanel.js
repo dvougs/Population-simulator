@@ -1,7 +1,8 @@
-// Levels in the live report: each civ's level, stockpile and progress towards
-// its next level, and a guide to what every level and material does. The guide
-// is written from the numbers in levels.js and materials.js, so it follows
-// RULES.md ("Gathering and levels") without copying numbers by hand.
+// Levels in the live report: each civ's level, capital store and progress
+// towards its next level, and a guide to what every level, material and
+// settlement does. The guide is written from the numbers in levels.js,
+// settlements.js and materials.js, so it follows RULES.md ("Gathering and
+// levels", "Settlements") without copying numbers by hand.
 
 import { h, formatNumber } from './dom.js';
 import { emblem } from './inspector.js';
@@ -11,6 +12,9 @@ import {
 } from '../sim/levels.js';
 import { DEEP_WATER } from '../sim/terrain.js';
 import { BUILDING_COST, WONDERS, WONDER_RULES, ERAS, materialText, effectText } from '../sim/buildings.js';
+import {
+  TIERS, TIER_NAMES, HAND, SETTLE, SETTLEMENT_BUILDINGS, MAX_PROGRESS_BONUS, settlementEffectText,
+} from '../sim/settlements.js';
 
 const materialName = (id) => MATERIAL_NAMES[MATERIAL_IDS.indexOf(id)] ?? id;
 /** Stockpile amounts, rounded down to one decimal so 79.96 never reads as 80. */
@@ -27,14 +31,14 @@ function progress(label, have, need, text) {
     h('span', { class: 'p-num' }, text ?? `${formatNumber(have)} / ${formatNumber(need)}`));
 }
 
-/** Per civ: level, food security, progress to the next level and the stockpile. */
+/** Per civ: level, food security, progress to the next level and its capital's store. */
 export function renderLevels(el, stats) {
   if (!el) return;
   el.replaceChildren(...stats.civs.map((c, k) => {
     const head = h('div', { class: 'level-head' },
       emblem(k),
       h('span', { class: 'name' }, `${c.name} · Level ${c.level} ${c.levelName}`),
-      c.pop > 0 ? h('span', { class: c.foodSecure ? 'tag ok' : 'tag' }, c.foodSecure ? 'Gathering' : 'Food not secure') : null);
+      c.pop > 0 ? h('span', { class: c.foodSecure ? 'tag ok' : 'tag' }, c.foodSecure ? 'Well fed' : 'Many hungry') : null);
     const parts = [head];
     if (c.pop === 0) parts.push(h('p', { class: 'muted' }, 'Died out.'));
     else if (c.next) {
@@ -47,13 +51,8 @@ export function renderLevels(el, stats) {
           .map((id) => progress(materialName(id), c.stockpile[id], n.materials[id], `${amount(c.stockpile[id])} / ${formatNumber(n.materials[id])}`)),
       ];
       const era = c.buildings?.eras[c.level - 1];
-      if (era && n.building) {
-        const b = era.building;
-        rows.unshift(progress(n.building, b.status === 'standing' ? 1 : b.work, b.status === 'standing' ? 1 : b.years,
-          b.status === 'standing' ? 'standing' : b.status === 'building' ? `building ${share(b.work, b.years)}` : 'not started'));
-      }
       parts.push(h('p', { class: 'level-next' }, `Next: Level ${n.level} ${n.levelName}`
-        + (n.building && !n.buildingStanding ? `, once the ${n.building} stands` : '')), h('ul', { class: 'progress' }, rows));
+        + (c.progressBonus > 0 ? ` (years count ${pct(c.progressBonus)} faster)` : '')), h('ul', { class: 'progress' }, rows));
       if (n.waitingForWonder && era) {
         parts.push(h('p', { class: 'muted wonder-wait' }, `Waiting for the ${era.wonder.name}: it will not level up until it starts building it `
           + `(it gives up after ${WONDER_RULES.giveUpYears} years, or if it becomes unsafe).`));
@@ -64,9 +63,17 @@ export function renderLevels(el, stats) {
         `Below ${formatNumber(c.minPop)} people for ${c.yearsBelowMinimum} of ${LEVEL_EFFECTS.fallBackYears} years: then it falls back a level.`));
     }
     if (c.buildings) parts.push(buildingsBlock(c));
-    const held = MATERIAL_IDS.filter((id) => c.stockpile[id] > 0);
-    parts.push(h('p', { class: 'stock' }, h('span', { class: 'p-label' }, 'Stockpile: '),
-      held.length ? held.map((id) => `${materialName(id)} ${amount(c.stockpile[id])}`).join(', ') : 'empty'));
+    if (c.pop > 0) {
+      const inStore = MATERIAL_IDS.filter((id) => c.stockpile[id] > 0);
+      const where = c.capital ? `Capital store, ${c.capital.name} (${c.capital.tierName}): ` : 'Capital store: ';
+      parts.push(h('p', { class: 'stock' }, h('span', { class: 'p-label' }, where),
+        inStore.length ? inStore.map((id) => `${materialName(id)} ${amount(c.stockpile[id])}`).join(', ') : 'empty'));
+      const all = MATERIAL_IDS.filter((id) => c.held?.[id] >= 0.05);
+      if (all.length) {
+        parts.push(h('p', { class: 'stock muted' }, h('span', { class: 'p-label' }, 'In all its settlements: '),
+          all.map((id) => `${materialName(id)} ${amount(c.held[id])}`).join(', ')));
+      }
+    }
     return h('section', { class: c.pop === 0 ? 'level-civ dead' : 'level-civ', 'data-civ': c.id }, parts);
   }));
 }
@@ -109,6 +116,8 @@ function buildingsBlock(c) {
     h('p', { class: 'b-bonus' }, h('span', { class: 'p-label' }, 'Bonuses: '), bonusText.length ? bonusText.join('; ') : 'none yet'));
 }
 
+const SITE_TEXT = { farm: ', on plains, coast or a river', water: ', next to water', capital: ', capital only', deposit: ', on its deposit' };
+
 const LEVEL_TEXT = [
   'Gathering only. Every civ starts here.',
   `Plains and river hexes feed ${pct(LEVEL_EFFECTS.farmBonus)} more.`,
@@ -144,28 +153,44 @@ export function renderLevelGuide(el, map, civs) {
   ].filter(Boolean).join(', ');
   const materials = MATERIAL_IDS.map((id, m) => {
     const tier = MATERIAL_TIER[m];
+    const works = SETTLEMENT_BUILDINGS.find((b) => b.effects.industry?.materials.includes(id));
+    const ind = works.effects.industry;
     return h('li', { 'data-material': id },
-      h('strong', {}, materialName(id)), h('span', {}, ` (${tier}): ${GATHER.yield[tier]} a gatherer a year, at most ${GATHER.cap[tier]} a deposit a year. `
-        + `Spent on ${used(m) || 'nothing'}.`));
+      h('strong', {}, materialName(id)), h('span', {}, ` (${tier}): by hand ${HAND.yield[tier]} a gatherer a year, at most ${HAND.cap[tier]} a deposit a year; `
+        + `with a ${works.name} ${ind.yield} a gatherer, at most ${ind.cap}. Spent on ${used(m) || 'nothing'}.`));
   });
   const t = TYPE_LEVEL_RULES;
   el.replaceChildren(
-    h('p', {}, `A civ gathers only while its food is secure: at most ${GATHER.secureHungryPct}% of its people went hungry last year. Then ${pct(GATHER.gatherShare)} of its adults gather the deposits in its hexes, `
-      + 'first what its next level needs. Shared hexes split the yield by headcount; the winner of a fight there takes it all. '
-      + 'The stockpile never decays and is only spent on levelling up, buildings and wonders.'),
+    h('p', {}, `A hex gathers while its food is secure: at most ${pct(SETTLE.secureHungry)} of its people went hungry there last year. Then ${pct(GATHER.gatherShare)} of its adults gather its deposits, `
+      + 'first what its civ\'s next level and its settlements\' planned buildings need. The holder of the hex keeps what is gathered in that settlement\'s store. '
+      + 'Deposits never run out, but rare materials come slowly by hand: an industry building on the deposit gathers much faster. '
+      + 'Carriers bring materials to the capital, whose store pays for levels, era buildings and wonders.'),
     h('p', {}, `Hexes needed are a share of the land per civ: ${formatNumber(land)} land hexes ÷ ${civs} ${civs === 1 ? 'civ' : 'civs'} here. `
       + 'People needed are so many per hex needed. '
-      + `A civ that stays below its level's people for ${LEVEL_EFFECTS.fallBackYears} years in a row falls back one level and keeps its stockpile.`),
+      + `A civ that stays below its level's people for ${LEVEL_EFFECTS.fallBackYears} years in a row falls back one level and keeps its stores.`),
     h('ol', { class: 'guide-levels' }, levels),
     h('h3', {}, 'Materials'),
     h('ul', { class: 'guide-materials' }, materials),
     h('h3', {}, 'Buildings and wonders'),
-    h('p', {}, 'Each civ type has its own building for every level from 1 to 4, and it must have that era\'s building standing to climb further. '
+    h('p', {}, 'Each civ type has its own building for every level from 1 to 4. It is optional: it gives its bonuses, and a civ builds it only with materials to spare beyond its next level. '
       + 'Each level also has one wonder for the whole world: the first civ to finish it takes it.'),
     h('ul', { class: 'guide-materials guide-buildings' }, Array.from({ length: ERAS }, (_, e) => h('li', { 'data-era': e + 1 },
       h('strong', {}, `${e + 1} ${LEVEL_NAMES[e]}`),
       h('span', {}, ` building: ${materialText(BUILDING_COST[e].materials)}, ${BUILDING_COST[e].years} work years. `
         + `Wonder, the ${WONDERS[e].name}: ${materialText(WONDERS[e].materials)}, ${WONDERS[e].years} work years; ${effectText(WONDERS[e].effects).join(', ')}.`)))),
+    h('h3', {}, 'Settlements'),
+    h('p', {}, 'Every lived-in hex is a settlement. It grows with its people, up to what its civ\'s level allows; '
+      + `it shrinks a tier after ${SETTLE.shrinkYears} years below ${pct(SETTLE.shrinkShare)} of its tier's people. `
+      + `Civic buildings make every year at a level count for more, up to +${pct(MAX_PROGRESS_BONUS)} in all.`),
+    h('ul', { class: 'guide-materials guide-tiers' }, TIERS.map((t, k) => h('li', { 'data-tier': k },
+      h('strong', {}, TIER_NAMES[k]),
+      h('span', {}, ` from ${formatNumber(t.people)} ${t.people === 1 ? 'person' : 'people'}, level ${t.level}: houses ${t.housing}, `
+        + `${t.slots} building ${t.slots === 1 ? 'slot' : 'slots'}, stores ${t.store} of each material`
+        + `${t.food > 0 ? `, food capacity +${pct(t.food)}` : ''}, routes ${t.reach} ${t.reach === 1 ? 'step' : 'steps'}.`)))),
+    h('ul', { class: 'guide-materials guide-settlement-buildings' }, SETTLEMENT_BUILDINGS.map((b) => h('li', { 'data-building': b.id },
+      h('strong', {}, b.name),
+      h('span', {}, ` (${TIER_NAMES[b.tier]}${b.level > 1 ? `, level ${b.level}` : ''}${SITE_TEXT[b.site] ?? ''}): `
+        + `${materialText(b.cost)}, ${b.years} work years; ${settlementEffectText(b).join(', ')}.`)))),
     h('h3', {}, 'Civ types'),
     h('p', {}, `Cooperative gathers ${t.cooperative.gatherPct - 100}% more. Nomadic needs ${t.nomadic.yearsPct - 100}% more years at each level. `
       + `Isolationist needs ${100 - t.isolationist.yearsPct}% fewer years but ${t.isolationist.materialsPct - 100}% more materials. `

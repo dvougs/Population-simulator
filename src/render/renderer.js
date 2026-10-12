@@ -37,6 +37,7 @@ import { DEEP_WATER } from '../sim/terrain.js';
 import { PeopleLayer, peopleShown } from './peopleLayer.js';
 import { TerritoryLayer } from './territoryLayer.js';
 import { BuildingLayer } from './buildingLayer.js';
+import { SettlementLayer } from './settlementLayer.js';
 
 const SOFTWARE_MAX_DPR = 1; // backing resolution cap on a software WebGL renderer (gpu.js)
 const SHIMMER_PERIOD_MS = 8000; // one full swell: slow, like a tide
@@ -61,6 +62,7 @@ export class Renderer {
     this.motionChanged = false;
     this.territory = null;
     this.buildings = null;
+    this.settlements = null;
     this.lastTerritory = -Infinity;
     this.moving = false;
     this.driftT = 0;
@@ -84,7 +86,7 @@ export class Renderer {
     if (this.motionChanged) return true;
     if (this.people?.animating(now)) return true;
     if (this.drifting) return true;
-    if (this.peopleDirty && now - this.lastDraw >= PEOPLE_FRAME_MS) return true;
+    if ((this.peopleDirty || this.pendingSettle) && now - this.lastDraw >= PEOPLE_FRAME_MS) return true;
     if (this.territory?.pending && now - this.lastTerritory >= PEOPLE_FRAME_MS) return true;
     if (!this.animating || now - this.lastShimmer < SHIMMER_FRAME_MS) return false;
     return shimmerLevel(now) !== this.shimmerLevel;
@@ -127,6 +129,9 @@ export class Renderer {
   setMap(map, types = []) {
     this.map = map;
     this.people = null;
+    // The old settlements' skyline textures go with their layer.
+    this.settlements?.destroy();
+    this.settlements = null;
     for (const child of this.world.removeChildren()) child.destroy({ children: true });
 
     const terrain = new Graphics();
@@ -150,16 +155,31 @@ export class Renderer {
     this.people = new PeopleLayer(map);
     this.territory = new TerritoryLayer(map);
     this.buildings = new BuildingLayer(map, types);
+    this.settlements = new SettlementLayer(map, types, this.app?.renderer ?? null);
+    this.pendingSettle = null;
     this.lastTerritory = -Infinity;
     this.world.addChild(terrain, this.territory.tint, rivers);
     if (this.shimmer) this.world.addChild(this.shimmer);
-    this.world.addChild(grid, this.territory.rings, this.territory.outlines, this.selection, this.people.container, this.buildings.container);
+    this.world.addChild(grid, this.territory.rings, this.territory.outlines, this.settlements.container, this.selection, this.people.container, this.buildings.container);
     this.selected = -1;
   }
 
   /** New SimHost.buildings() list; returns true if the map needs a redraw. */
   setBuildings(list) {
     return this.buildings ? this.buildings.setBuildings(list) : false;
+  }
+
+  /**
+   * New SimHost.settlements() snapshot; returns true if the map needs a redraw now. While the game
+   * runs it waits for the next redraw for new head counts (at most every PEOPLE_FRAME_MS), since
+   * routes change every year and each redraw of the whole map is costly on a software renderer;
+   * `force` takes it at once (paused, after a step).
+   */
+  setSettlements(data, now = performance.now(), force = false) {
+    if (!this.settlements || !data) return false;
+    if (!force) { this.pendingSettle = data; return false; }
+    this.pendingSettle = null;
+    return this.settlements.setSettlements(data);
   }
 
   /** New population snapshot from SimHost.population(); `now` is render time in ms. */
@@ -203,6 +223,7 @@ export class Renderer {
     if (!this.app || !this.map) return;
     this.lastDraw = now;
     this.peopleDirty = false;
+    if (this.pendingSettle) { this.settlements?.setSettlements(this.pendingSettle); this.pendingSettle = null; }
     this.updateShimmer(now);
     // The drift clock: frame time while the game runs, capped so a stalled tab does not jump.
     if (this.lastDriftNow >= 0 && this.moving && !this.reducedMotion) {
@@ -229,6 +250,7 @@ export class Renderer {
     this.world.scale.set(camera.scale);
     this.people?.update(camera, now, this.driftT);
     this.buildings?.update(this.people?.shown ?? false, camera.scale);
+    this.settlements?.update(this.people?.shown ?? false, now, this.moving && !this.reducedMotion);
     this.app.render();
   }
 

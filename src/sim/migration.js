@@ -6,7 +6,7 @@
 // does not change where anyone goes.
 
 import { DEEP_WATER, MOVE_COST } from './terrain.js';
-import { LIFE } from './life.js';
+import { LIFE, crowdLine } from './life.js';
 import { TYPE_RULES } from './civTypes.js';
 
 export const MIGRATION = Object.freeze({
@@ -297,7 +297,6 @@ export function migrate(people, map, reach, rng, pop, spare, dest, held = null, 
   }
   snapshot(people, map, pop, spare, held);
   const { alive, hex, hunger, civ } = people;
-  const cap = map.foodCap;
   const civs = rules ? rules.hungryChance.length : 0;
   if (rules) rules.gen++;
   const inside = rules?.inside ?? null;
@@ -312,9 +311,9 @@ export function migrate(people, map, reach, rng, pop, spare, dest, held = null, 
     let chance = 0;
     if (rules) {
       if (hunger[i] > 0) chance = rules.hungryChance[c];
-      else if (pop[h] > rules.crowdedShare[c] * cap[h]) chance = rules.crowdedChance[c];
+      else if (pop[h] > crowdLine(map, h, rules.crowdedShare[c])) chance = rules.crowdedChance[c];
     } else if (hunger[i] > 0) chance = MIGRATION.hungryChance;
-    else if (pop[h] > MIGRATION.crowdedShare * cap[h]) chance = MIGRATION.crowdedChance;
+    else if (pop[h] > crowdLine(map, h, MIGRATION.crowdedShare)) chance = MIGRATION.crowdedChance;
     if (chance === 0 || rng.next() >= chance) continue;
     const { offsets, targets } = rules ? rules.reach[c] : reach;
     const own = spare[h];

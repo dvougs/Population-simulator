@@ -59,6 +59,9 @@ export class Contact {
     this.seenW = new Int32Array(n);
     this.pickW = new Int32Array(n);
     this.attacker = new Int8Array(n);
+    /** Per-hex defence from settlement buildings and the civ that holds each hex (set by the Simulation; null in tests). */
+    this.hexDefence = null;
+    this.hexHolder = null;
     /** The civ attacked, and the civ that held the hex (it gets the defence bonus; it may be the attacker). */
     this.defender = new Int8Array(n);
     this.holder = new Int8Array(n);
@@ -169,7 +172,9 @@ export class Contact {
       // When both sides would start it, the newcomer is the attacker.
       if (both) att = off;
       const eff = this.eff;
-      const bonus = 1 + DEFENCE_BONUS[map.terrain[h]] + (eff ? eff.defence[def] : 0);
+      // A settlement's defence buildings (Palisade, Stone walls, Palace) help the civ that holds it.
+      const walls = this.hexDefence && this.hexHolder[h] === def ? this.hexDefence[h] : 0;
+      const bonus = 1 + DEFENCE_BONUS[map.terrain[h]] + (eff ? eff.defence[def] : 0) + walls;
       // A Kingdom fighting a civ that is not one is many times stronger.
       const kDef = this.level !== null && this.level[def] === MAX_LEVEL;
       const kOff = this.level !== null && this.level[off] === MAX_LEVEL;

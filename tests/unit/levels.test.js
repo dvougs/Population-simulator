@@ -6,6 +6,7 @@ import {
   Levels, REQUIREMENTS, GATHER, LEVEL_EFFECTS, LEVEL_NAMES, MAX_LEVEL, TYPE_LEVEL_RULES,
   levelMinimums, yearsNeeded, materialsNeeded, capacityFactor,
 } from '../../src/sim/levels.js';
+import { HAND, SETTLE } from '../../src/sim/settlements.js';
 import {
   WOOD, STONE, CLAY, COPPER, IRON, SALT, GOLD, GEMSTONES, SPICES, MATERIAL_COUNT, MATERIAL_IDS,
 } from '../../src/sim/materials.js';
@@ -54,8 +55,12 @@ test('RULES.md "Gathering": the numbers', () => {
   assert.equal(GATHER.gatherShare, 0.2);
   assert.equal(GATHER.adultAge, 16);
   assert.equal(GATHER.personBase, 0.5);
-  assert.deepEqual({ ...GATHER.yield }, { common: 0.5, uncommon: 0.5, exotic: 0.125 });
-  assert.deepEqual({ ...GATHER.cap }, { common: 10, uncommon: 10, exotic: 2.5 });
+  // By hand a gatherer yields 0.5 / 0.25 / 0.0625 and a deposit gives at most 10 / 5 / 1.25 (industry buildings: see settlements.test.js).
+  assert.equal(GATHER.yield, undefined);
+  assert.deepEqual({ ...HAND.yield }, { common: 0.5, uncommon: 0.25, exotic: 0.0625 });
+  assert.deepEqual({ ...HAND.cap }, { common: 10, uncommon: 5, exotic: 1.25 });
+  assert.equal(SETTLE.secureHungry, 0.2);
+  assert.equal(SETTLE.carryGatherCost, 0.25);
   assert.equal(LEVEL_EFFECTS.birthPerLevel, 0.005);
   assert.equal(LEVEL_EFFECTS.farmBonus, 0.25);
   assert.equal(LEVEL_EFFECTS.kingdomBonus, 0.25);
@@ -152,7 +157,11 @@ function world(types, groups, { size = 10, deposits = {}, terrain = () => PLAINS
   const levels = new Levels(map, types);
   return { map, people, levels, types, civs: types.length };
 }
-function step(w, { year = 1, fightWinner = null, hungry = null } = {}) {
+/** hungryHex: { hex: people there who went hungry last year }; hungry: per civ, as before. */
+function step(w, { year = 1, fightWinner = null, hungry = null, hungryHex = null } = {}) {
+  flush(w);
+  w.levels.hungryHex.fill(0);
+  for (const [h, n] of Object.entries(hungryHex ?? {})) w.levels.hungryHex[h] = n;
   const cnt = new Int32Array(w.map.count * w.civs);
   for (let i = 0; i < w.people.high; i++) if (w.people.alive[i]) cnt[w.people.hex[i] * w.civs + w.people.civ[i]]++;
   if (hungry) w.levels.hungry.set(hungry); else w.levels.hungry.fill(0);
@@ -167,8 +176,31 @@ function stand(w, c, era = w.levels.level[c]) {
   for (let i = 0; i < w.people.high; i++) if (w.people.alive[i] && w.people.civ[i] === c) { standBuilding(w.levels, c, era, w.people.hex[i]); return; }
   throw new Error('civ has nobody');
 }
-const stockOf = (w, c, m) => w.levels.stock[c * MATERIAL_COUNT + m];
-const setStock = (w, c, mats) => { for (const [m, v] of Object.entries(mats)) w.levels.stock[c * MATERIAL_COUNT + Number(m)] = v; };
+// Levels, era buildings and wonders are paid from the capital's store (RULES.md "Settlements"), so a civ's materials are
+// set there: setStock queues them and the next step (or stockOf) puts them into the capital's store, once the
+// settlements know where the capital is. heldOf adds up every store of the civ (what gathering works against).
+function flush(w) {
+  if (!w.pending || w.pending.length === 0) return;
+  const cnt = new Int32Array(w.map.count * w.civs);
+  for (let i = 0; i < w.people.high; i++) if (w.people.alive[i]) cnt[w.people.hex[i] * w.civs + w.people.civ[i]]++;
+  const st = w.levels.settlements;
+  st.update(cnt, new Int8Array(w.map.count).fill(-1), w.levels.level, 0);
+  for (const [c, m, v] of w.pending) {
+    const h = st.capital[c];
+    if (h >= 0) st.store[h * MATERIAL_COUNT + m] = v;
+  }
+  w.pending.length = 0;
+}
+const stockOf = (w, c, m) => {
+  flush(w);
+  const h = w.levels.settlements.capital[c];
+  return h < 0 ? 0 : w.levels.settlements.store[h * MATERIAL_COUNT + m];
+};
+const heldOf = (w, c, m) => { flush(w); return w.levels.held[c * MATERIAL_COUNT + m]; };
+const setStock = (w, c, mats) => {
+  w.pending ??= [];
+  for (const [m, v] of Object.entries(mats)) w.pending.push([c, Number(m), v]);
+};
 /** `hexes` hexes from hex 11 on with `total` people spread over them (the first ones get the extra). */
 const spread = (hexes, total, civ = 0) => Array.from({ length: hexes }, (_, k) => [11 + k, civ, Math.floor(total / hexes) + (k < total % hexes ? 1 : 0)]);
 /** 15 hexes with 10 people each: the minimum for level 2 for one civ on an all-land 10 × 10 map (15% of 100 hexes). */
@@ -486,26 +518,30 @@ test('RULES.md "Gathering": Cooperative civs gather 25% more', () => {
   near(stockOf(w, 1, WOOD), 5);
 });
 
-test('RULES.md "Gathering": a deposit gives at most 10 a year (exotic 2.5), and exotic gatherers yield 0.125', () => {
+test('RULES.md "Gathering": by hand a deposit gives at most 10 a year (uncommon 5, exotic 1.25); gatherers yield 0.5, 0.25 and 0.0625', () => {
   const w = world(['expansionist'], [adults(55, 0, 200), adults(66, 0, 100)], { deposits: { 55: [WOOD], 66: [GOLD] } });
   w.map.food.fill(1e6);
   step(w);
   assert.equal(w.levels.gatherers[55], 40);
   assert.equal(stockOf(w, 0, WOOD), 10, '40 × 0.5 = 20, capped at 10');
   assert.equal(w.levels.gatherers[66], 20);
-  assert.equal(stockOf(w, 0, GOLD), 2.5, '20 × 0.125 = 2.5 exactly the cap');
+  assert.equal(heldOf(w, 0, GOLD), 1.25, '20 × 0.0625 = 1.25 exactly the cap');
   const g = world(['expansionist'], [adults(66, 0, 40)], { deposits: { 66: [GOLD] } });
   g.map.food.fill(1e6);
   step(g);
-  near(stockOf(g, 0, GOLD), 1, 1e-9);
+  near(stockOf(g, 0, GOLD), 0.5, 1e-9); // 8 gatherers × 0.0625
   const h = world(['expansionist'], [adults(66, 0, 200)], { deposits: { 66: [GEMSTONES] } });
   h.map.food.fill(1e6);
   step(h);
-  assert.equal(stockOf(h, 0, GEMSTONES), 2.5);
+  assert.equal(stockOf(h, 0, GEMSTONES), 1.25, '40 × 0.0625 = 2.5, capped at 1.25');
   const u = world(['expansionist'], [adults(66, 0, 200)], { deposits: { 66: [COPPER] } });
   u.map.food.fill(1e6);
   step(u);
-  assert.equal(stockOf(u, 0, COPPER), 10, 'uncommon: 0.5 each, capped at 10');
+  assert.equal(stockOf(u, 0, COPPER), 5, 'uncommon: 0.25 each, 40 × 0.25 = 10 capped at 5');
+  const v = world(['expansionist'], [adults(66, 0, 40)], { deposits: { 66: [COPPER] } });
+  v.map.food.fill(1e6);
+  step(v);
+  assert.equal(stockOf(v, 0, COPPER), 2, '8 gatherers × 0.25');
 });
 
 test('RULES.md "Gathering": gatherers split equally among the deposits worked in the hex', () => {
@@ -525,8 +561,8 @@ test('RULES.md "Gathering": a civ works what its next level still needs first; o
   assert.equal(w.levels.gatherMask[55], 1 << WOOD, 'wood only: the next level needs it');
   assert.equal(w.levels.gatherMask[66], (1 << COPPER) | (1 << GOLD), 'nothing the next level needs: later levels\' materials');
   assert.equal(w.levels.gatherMask[77], 1 << SALT);
-  near(stockOf(w, 0, COPPER), 2.5, 1e-6); // 10 gatherers, split in two: 5 × 0.5
-  near(stockOf(w, 0, GOLD), 0.625, 1e-6); // 5 × 0.125
+  near(heldOf(w, 0, COPPER), 1.25, 1e-6); // 10 gatherers, split in two: 5 × 0.25
+  near(heldOf(w, 0, GOLD), 0.3125, 1e-6); // 5 × 0.0625
 });
 
 test('RULES.md "Gathering": a material whose stockpile covers the next level is no longer next; once nothing is needed, nobody gathers', () => {
@@ -571,7 +607,7 @@ test('RULES.md "Gathering": only the hexes it holds are worked, and only hexes w
   assert.ok(w.levels.gatherMask.every((v) => v === 0));
 });
 
-test('RULES.md "Gathering": food is secure while at most 20% of the civ went hungry last year', () => {
+test('RULES.md "Gathering": a hex gathers while at most 20% of the people living there went hungry last year', () => {
   const run = (mod) => {
     const w = world(['expansionist'], [adults(55, 0, 50)], { deposits: { 55: [WOOD] } });
     const opt = mod(w) ?? {};
@@ -579,62 +615,75 @@ test('RULES.md "Gathering": food is secure while at most 20% of the civ went hun
     return [w.levels.secure[0], stockOf(w, 0, WOOD)];
   };
   assert.deepEqual(run(() => {}), [1, 5], 'nobody hungry');
-  assert.deepEqual(run(() => ({ hungry: [1] })), [1, 5], 'one hungry person');
-  assert.deepEqual(run(() => ({ hungry: [10] })), [1, 5], '10 of 50 is exactly 20%');
-  assert.deepEqual(run(() => ({ hungry: [11] })), [0, 0], '11 of 50 is over 20%');
+  assert.deepEqual(run(() => ({ hungry: [1], hungryHex: { 55: 1 } })), [1, 5], 'one hungry person');
+  assert.deepEqual(run(() => ({ hungry: [10], hungryHex: { 55: 10 } })), [1, 5], '10 of 50 is exactly 20%');
+  assert.deepEqual(run(() => ({ hungry: [11], hungryHex: { 55: 11 } })), [0, 0], '11 of 50 is over 20%');
+  // The statistics sheet's flag is the civ-wide 20%; the hex's own count decides whether it gathers.
+  assert.deepEqual(run(() => ({ hungry: [0], hungryHex: { 55: 11 } })), [1, 0], 'the hex is not secure although the civ is');
+  assert.deepEqual(run(() => ({ hungry: [11], hungryHex: { 55: 0 } })), [0, 5], 'the hex is secure although the civ is not');
   // Food in the hexes and starvation no longer matter.
   assert.deepEqual(run((w) => { w.map.food[55] = 0; }), [1, 5], 'an empty larder');
-  // Only the civ's own people count: a crowd of another civ in the hex changes nothing.
+  // Everyone living in the hex counts, whatever their civ: the holder is civ 1 here (200 against 40).
   const w = world(['expansionist', 'aggressive'], [adults(55, 0, 40), adults(55, 1, 200)], { deposits: { 55: [WOOD] } });
-  step(w, { hungry: [8, 100] });
-  assert.deepEqual([...w.levels.secure], [1, 0], '8 of 40 is 20%; 100 of 200 is 50%');
+  step(w, { hungryHex: { 55: 48 } });
+  assert.ok(stockOf(w, 1, WOOD) > 0, '48 of 240 is 20%');
+  const v = world(['expansionist', 'aggressive'], [adults(55, 0, 40), adults(55, 1, 200)], { deposits: { 55: [WOOD] } });
+  step(v, { hungryHex: { 55: 49 } });
+  assert.equal(stockOf(v, 1, WOOD), 0, '49 of 240 is over 20%');
 });
 
-test('RULES.md "Shared hexes": a deposit\'s yield is split among the civs working it by their people in the hex', () => {
+test('RULES.md "Gathering": only the civ holding a hex gathers there; the others\' people in it gather nothing', () => {
   const w = world(['expansionist', 'aggressive'], [adults(55, 0, 30), adults(55, 1, 10)], { deposits: { 55: [WOOD] } });
   w.map.food[55] = 1e6;
   step(w);
-  // Gatherers 6 and 2: 4 wood in all, split 30 : 10.
+  // Civ 0 holds the hex (more people): 6 gatherers, 3 wood; civ 1's 10 people gather nothing.
   near(stockOf(w, 0, WOOD), 3, 1e-6);
-  near(stockOf(w, 1, WOOD), 1, 1e-6);
+  assert.equal(stockOf(w, 1, WOOD), 0);
   assert.equal(w.levels.gatherers[55 * 2], 6);
-  assert.equal(w.levels.gatherers[55 * 2 + 1], 2);
-  // The cap is for all civs together.
+  assert.equal(w.levels.gatherers[55 * 2 + 1], 0);
+  assert.equal(w.levels.settlements.holder[55], 0);
+  // The cap is for the one holder: 400 people's worth of gatherers still give at most 10.
   const c = world(['expansionist', 'aggressive'], [adults(55, 0, 200), adults(55, 1, 200)], { deposits: { 55: [WOOD] } });
   c.map.food[55] = 1e6;
   step(c);
-  near(stockOf(c, 0, WOOD) + stockOf(c, 1, WOOD), 10, 1e-6);
-  near(stockOf(c, 0, WOOD), 5, 1e-6);
-  // Split by all their people there, not just the gatherers: 20 children count as people.
-  const k = world(['expansionist', 'aggressive'], [adults(55, 0, 20), adults(55, 0, 20, { age: 5 }), adults(55, 1, 20)], { deposits: { 55: [WOOD] } });
+  near(stockOf(c, 0, WOOD), 10, 1e-6);
+  assert.equal(stockOf(c, 1, WOOD), 0, 'a tie in people: the lower civ number holds');
+  // Children count as people for holding the hex (20 + 20 against 25), but not as gatherers.
+  const k = world(['expansionist', 'aggressive'], [adults(55, 0, 20), adults(55, 0, 20, { age: 5 }), adults(55, 1, 25)], { deposits: { 55: [WOOD] } });
   k.map.food[55] = 1e6;
   step(k);
-  near(stockOf(k, 0, WOOD), 4 * (40 / 60), 1e-6); // 4 wood from 4 + 4 gatherers, split 40 : 20 by people
-  near(stockOf(k, 1, WOOD), 4 * (20 / 60), 1e-6);
+  near(stockOf(k, 0, WOOD), 0.5 * 4, 1e-6); // 20% of 20 adults
+  assert.equal(stockOf(k, 1, WOOD), 0);
 });
 
-test('RULES.md "Shared hexes": last year\'s fight winner takes the whole yield, whether or not it gathered', () => {
+test('RULES.md "Gathering": last year\'s fight winner takes the hex and gathers there, if it still has people in it', () => {
   const w = world(['expansionist', 'aggressive'], [adults(55, 0, 30), adults(55, 1, 10)], { deposits: { 55: [WOOD] } });
   w.map.food[55] = 1e6;
   const fw = new Int8Array(w.map.count).fill(-1);
   fw[55] = 1;
   step(w, { fightWinner: fw });
-  near(stockOf(w, 1, WOOD), 4, 1e-6);
+  near(stockOf(w, 1, WOOD), 1, 1e-6); // 2 gatherers × 0.5
   assert.equal(stockOf(w, 0, WOOD), 0);
-  assert.equal(w.levels.gathered[55 * 2 + 1], 4);
-  // A winner that is not secure (it did not gather at all) still takes the yield.
-  const v = world(['expansionist', 'aggressive'], [adults(55, 0, 30), adults(55, 1, 10)], { deposits: { 55: [WOOD] } });
+  assert.equal(w.levels.gathered[55 * 2 + 1], 1);
+  assert.equal(w.levels.settlements.holder[55], 1);
+  // A winner with nobody left there takes nothing.
+  const v = world(['expansionist', 'aggressive'], [adults(55, 0, 30), adults(60, 1, 10)], { deposits: { 55: [WOOD] } });
   v.map.food[55] = 1e6;
-  step(v, { fightWinner: fw, hungry: [0, 3] });
-  near(stockOf(v, 1, WOOD), 3, 1e-6);
-  assert.equal(v.levels.gatherers[55 * 2 + 1], 0);
-  assert.equal(stockOf(v, 0, WOOD), 0);
-  // In a hex with no fight the winner array is ignored.
-  const none = new Int8Array(v.map.count).fill(-1);
+  step(v, { fightWinner: fw });
+  assert.equal(v.levels.settlements.holder[55], 0);
+  near(stockOf(v, 0, WOOD), 3, 1e-6);
+  // The winner holds the hex but the hex is not secure (9 of 40 hungry): nobody gathers.
   const u = world(['expansionist', 'aggressive'], [adults(55, 0, 30), adults(55, 1, 10)], { deposits: { 55: [WOOD] } });
   u.map.food[55] = 1e6;
-  step(u, { fightWinner: none });
-  assert.ok(stockOf(u, 0, WOOD) > 0 && stockOf(u, 1, WOOD) > 0);
+  step(u, { fightWinner: fw, hungryHex: { 55: 9 } });
+  assert.equal(stockOf(u, 1, WOOD), 0);
+  assert.equal(stockOf(u, 0, WOOD), 0);
+  // In a hex with no fight the winner array is ignored: the bigger civ holds it.
+  const none = new Int8Array(v.map.count).fill(-1);
+  const t = world(['expansionist', 'aggressive'], [adults(55, 0, 30), adults(55, 1, 10)], { deposits: { 55: [WOOD] } });
+  t.map.food[55] = 1e6;
+  step(t, { fightWinner: none });
+  assert.ok(stockOf(t, 0, WOOD) > 0 && stockOf(t, 1, WOOD) === 0);
 });
 
 // ---- absorbing --------------------------------------------------------------------------------
@@ -805,8 +854,11 @@ const readyForKingdom = (sim, civ) => {
   sim.levels.level[civ] = 4;
   sim.levels.yearsAt[civ] = 10000;
   const need = materialsNeeded(4, sim.civTypes[civ]);
-  need.forEach((v, m) => { sim.levels.stock[civ * MATERIAL_COUNT + m] = v; });
-  // The era 4 building must stand (in a hex where the civ lives) and the wonder is not on its mind.
+  // The capital's store pays: a civ's capital is the hex of its founders until it moves.
+  const st = sim.levels.settlements;
+  const cap = st.capital[civ] >= 0 ? st.capital[civ] : sim.starts[civ];
+  need.forEach((v, m) => { st.store[cap * MATERIAL_COUNT + m] = v; });
+  // The era building is optional; standing it also keeps the wonder off the civ's mind (a committed civ waits to start it).
   let hex = -1;
   for (let i = 0; i < sim.people.high && hex < 0; i++) if (sim.people.alive[i] && sim.people.civ[i] === civ) hex = sim.people.hex[i];
   standBuilding(sim.levels, civ, 4, hex);
@@ -879,30 +931,25 @@ test('levels, stockpiles and hashes are deterministic: same params and seed give
   assert.deepEqual(run(), run());
 });
 
-test('a seeded run gathers materials: stockpiles only ever grow until they are spent on a level, a building or a wonder', () => {
+test('a seeded run gathers materials into the settlements\' stores, never negative and never over a store\'s cap at the end of a year', () => {
   const sim = new Simulation({ seed: 'gatherrun', size: 12, civCount: 2, startPop: 40, water: 0.2 });
-  let prev = sim.levels.stock.slice();
-  // What a civ can have spent materials on this year: a level, starting a building, starting a wonder.
-  const bd = sim.levels.buildings;
-  const spendSign = (c) => `${sim.levels.level[c]}|${[0, 1, 2, 3].map((e) => `${bd.state[c * 4 + e] !== 0}${bd.aHex[c * 4 + e] >= 0}`).join()}`;
-  let signs = [0, 1].map(spendSign);
+  const st = sim.levels.settlements;
   let grew = false;
+  let prev = sim.levels.held.slice();
   for (let y = 0; y < 300; y++) {
     sim.tick();
-    const now = sim.levels.stock;
-    for (let c = 0; c < 2; c++) {
-      const sign = spendSign(c);
-      const levelled = (sim.levels.yearsAt[c] === 0 && y > 0) || sign !== signs[c];
-      signs[c] = sign;
-      for (let m = 0; m < MATERIAL_COUNT; m++) {
-        const i = c * MATERIAL_COUNT + m;
-        if (!levelled) assert.ok(now[i] >= prev[i] - 1e-9, `year ${y} civ ${c} ${MATERIAL_IDS[m]}`);
-        if (now[i] > prev[i]) grew = true;
-      }
-    }
+    for (let i = 0; i < st.store.length; i++) assert.ok(st.store[i] >= 0, `year ${y} store ${i}`);
+    // What gathering added this year shows up in the civs' stores together (spending can hide it, so look for any growth).
+    const now = sim.levels.held;
+    for (let i = 0; i < now.length; i++) if (now[i] > prev[i] + 1e-9) grew = true;
     prev = now.slice();
   }
   assert.ok(grew, 'civs gathered something');
+  // Gathering, carrying and refunds stop at a store's cap (RULES.md "Settlements", store caps).
+  for (let h = 0; h < sim.map.count; h++) {
+    if (st.tier[h] < 0) continue;
+    for (let m = 0; m < MATERIAL_COUNT; m++) assert.ok(st.store[h * MATERIAL_COUNT + m] <= st.storeCap[h] * 1.0001 + 1e-6, `hex ${h} ${MATERIAL_IDS[m]}`);
+  }
 });
 
 test('inspect lists who gathered in a hex this year with materials, gatherers and amount', () => {

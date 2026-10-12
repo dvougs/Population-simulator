@@ -451,6 +451,8 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 6px 
 .death-bar .starvation { background: var(--danger); }
 .death-bar .war { background: #c9a227; }
 .end-log { gap: 4px; }
+.end-cities { margin: 0; padding-left: 1.4em; display: grid; gap: 4px; font-size: 0.9rem; }
+.end-cities .emblem { margin-right: 4px; vertical-align: -1px; }
 .end-log li { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 10px; background: var(--surface-2); font-size: 0.9rem; }
 .table-wrap { overflow-x: auto; margin-top: 8px; }
 .end-traits { border-collapse: collapse; width: 100%; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
@@ -519,6 +521,9 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 6px 
 .inspector dd .emblem { margin-right: 3px; }
 .inspector h3 .emblem { vertical-align: -1px; }
 .people-toggle { width: 100%; margin-top: 8px; }
+/* The settlement in the hex (inspector.js fillSettlement). */
+.settlement-card { background: var(--surface-2); border-radius: 10px; border-left: 4px solid #c9a46a; padding: 6px 8px; margin-bottom: 8px; }
+.settlement-card h4 { margin: 0 0 4px; font-size: 0.95rem; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 /* Building and wonder cards at the top of the hex card (inspector.js). */
 .building-cards { display: grid; gap: 6px; margin-bottom: 8px; }
 .building-card { background: var(--surface-2); border-radius: 10px; border-left: 4px solid var(--text-dim); padding: 6px 8px; }

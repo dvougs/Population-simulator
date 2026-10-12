@@ -20,7 +20,7 @@ export const MILESTONES = Object.freeze([100, 500, 1000]);
  * `famines` deadliest such famines are kept.
  */
 export const CHRONICLE = Object.freeze({ lines: 12, famineShare: 0.1, famines: 3 });
-export const EVENT_TYPES = ['famine', 'extinction', 'contact', 'milestone', 'level', 'wonder', 'captured'];
+export const EVENT_TYPES = ['famine', 'extinction', 'contact', 'milestone', 'level', 'wonder', 'captured', 'city', 'cityTaken'];
 /** Wonder captures logged at most (the rest are only counted). */
 export const CAPTURES_LOGGED = 16;
 const EV_FAMINE = 0;
@@ -30,10 +30,15 @@ const EV_MILESTONE = 3;
 const EV_LEVEL = 4;
 const EV_WONDER = 5;
 const EV_CAPTURED = 6;
+const EV_CITY = 7;
+const EV_CITY_TAKEN = 8;
+/** Settlement tiers whose first reaching is logged once per civ (city, metropolis, megapolis), and city captures logged at most. */
+export const CITY_TIERS_LOGGED = Object.freeze([3, 4, 5]);
+export const CITY_TAKEN_LOGGED = 16;
 /** Order of events in the same year: famines, level-ups (start of the year), first contacts, milestones, extinctions (end of it). */
-const EVENT_ORDER = { famine: 0, level: 1, wonder: 1, captured: 1, contact: 2, milestone: 3, extinction: 4 };
+const EVENT_ORDER = { famine: 0, level: 1, wonder: 1, captured: 1, city: 1, cityTaken: 1, contact: 2, milestone: 3, extinction: 4 };
 /** Which events the chronicle keeps first when there are too many. */
-const IMPORTANCE = { extinction: 0, wonder: 1, level: 1, captured: 2, contact: 2, milestone: 3, famine: 4 };
+const IMPORTANCE = { extinction: 0, wonder: 1, level: 1, captured: 2, city: 2, cityTaken: 2, contact: 2, milestone: 3, famine: 4 };
 const byYear = (a, b) => a.year - b.year || EVENT_ORDER[a.type] - EVENT_ORDER[b.type] || a.civ - b.civ
   || (a.other ?? 0) - (b.other ?? 0) || (a.level ?? 0) - (b.level ?? 0) || (a.people ?? 0) - (b.people ?? 0);
 /** Within a kind: higher levels and milestones, then deadlier famines, then the earlier event. */
@@ -109,11 +114,14 @@ export class Records {
     this.milestones = new Uint8Array(civs);
     this.levelsLogged = new Uint8Array(civs);
     this.captures = 0;
+    this.cityLogged = new Uint8Array(civs);
+    this.cityTaken = 0;
   }
 
   /** Every event the log can hold: a first contact per pair; per civ 3 milestones, 4 level-ups (levels 2 to 5) and an extinction. */
   room() {
-    return (this.civs * (this.civs - 1)) / 2 + (MILESTONES.length + 4 + 1) * this.civs + 4 + CAPTURES_LOGGED;
+    return (this.civs * (this.civs - 1)) / 2 + (MILESTONES.length + 4 + 1 + CITY_TIERS_LOGGED.length) * this.civs + 4 + CAPTURES_LOGGED
+      + CITY_TAKEN_LOGGED;
   }
 
   /**
@@ -128,6 +136,24 @@ export class Records {
     } else if (kind === 'captured' && this.captures++ < CAPTURES_LOGGED) {
       const e = this.push(EV_CAPTURED, c, year);
       if (e >= 0) { this.evValue[e] = era; this.evOther[e] = other < 0 ? 255 : other; }
+    }
+  }
+
+  /**
+   * A settlements event (settlements.js): a civ's first settlement to reach each of
+   * CITY_TIERS_LOGGED ('tier', other = the tier) and the first CITY_TAKEN_LOGGED times a
+   * city or bigger changed hands ('taken', other = the civ it was taken from).
+   */
+  settlement(kind, c, h, year, other) {
+    if (kind === 'tier') {
+      const bit = CITY_TIERS_LOGGED.indexOf(other);
+      if (bit < 0 || this.cityLogged[c] & (1 << bit)) return;
+      this.cityLogged[c] |= 1 << bit;
+      const e = this.push(EV_CITY, c, year);
+      if (e >= 0) { this.evValue[e] = other; this.evHex[e] = h; }
+    } else if (kind === 'taken' && this.cityTaken++ < CITY_TAKEN_LOGGED) {
+      const e = this.push(EV_CITY_TAKEN, c, year);
+      if (e >= 0) { this.evOther[e] = other; this.evHex[e] = h; }
     }
   }
 
@@ -337,6 +363,11 @@ export class Records {
       else if (t === EV_LEVEL) e.level = this.evValue[k];
       else if (t === EV_WONDER) e.era = this.evValue[k];
       else if (t === EV_CAPTURED) Object.assign(e, { era: this.evValue[k], other: this.evOther[k] === 255 ? null : this.evOther[k] });
+      else if (t === EV_CITY || t === EV_CITY_TAKEN) {
+        const h = this.evHex[k];
+        Object.assign(e, { hex: h, col: h % this.cols, row: Math.floor(h / this.cols) });
+        if (t === EV_CITY) e.tier = this.evValue[k]; else e.other = this.evOther[k];
+      }
       events.push(e);
     }
     const famine = (civ, startYear, endYear, deaths, startPop, ongoing) => ({ type: 'famine', civ, year: startYear, endYear, deaths, startPop, ongoing });
