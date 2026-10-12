@@ -127,6 +127,7 @@ export class MenuScene {
     this.fadeT0 = -1;
     this.enterT0 = -1;
     this.heroAlpha = 0;
+    this.boardFade = 1; // the 2D board fades out while the 3D world (homeScene3d.js) is on
     this.lastYear = -1;
     this.totals = null;
     this.onLive = null;
@@ -304,6 +305,13 @@ export class MenuScene {
     this.lastDraw = performance.now();
     this.update(0);
     this.app.render();
+  }
+
+  /** Opacity of the living world's board (0 to 1), lowered while the 3D world covers it. */
+  setBoardFade(a) {
+    if (a === this.boardFade) return;
+    this.boardFade = a;
+    if (this.app && this.still) this.drawStill();
   }
 
   /** The element the living world sits over, and the element that scrolls it. */
@@ -561,6 +569,7 @@ export class MenuScene {
     const cy = hb.y + hb.h / 2 + (still ? 0 : Math.sin(t * 0.6) * 4) + (1 - enter) * 30 + px.y * 6;
     this.heroC.alpha = this.heroAlpha * enter;
     const bc = this.boardC;
+    bc.alpha = this.boardFade;
     bc.pivot.set(bd.cx, bd.cy);
     bc.position.set(cx, cy);
     bc.scale.set(scale);
