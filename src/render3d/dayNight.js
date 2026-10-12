@@ -47,3 +47,18 @@ export function partOfDay(t) {
 
 /** Whether it is day (more light than not) at clock time t. */
 export const isDay = (t) => daylight(t) >= 0.5;
+
+/**
+ * Where the sun is at clock time t: 0 rising in the east at the start of dawn
+ * to 1 setting in the west at the end of dusk, and 1 through the night (when
+ * it gives no light), so it never jumps while it can be seen.
+ */
+export function sunArc(t) {
+  const cycle = DAY_S + NIGHT_S;
+  const up = DAY_S + TWILIGHT_S;
+  const s = ((((t + TWILIGHT_S / 2) % cycle) + cycle) % cycle);
+  return s < up ? s / up : 1;
+}
+
+/** Where the moon is at clock time t: as sunArc, over the night from the start of dusk to the end of dawn. */
+export const moonArc = (t) => sunArc(t - DAY_S);

@@ -15,8 +15,18 @@
 // the game runs) and shadows are recomputed only then; a pan or zoom just
 // draws again. When a game starts the tiles rise out of the flat map from the
 // middle outwards (instantly with reduced motion or a software renderer).
+//
+// Day and night run on their own clock in real seconds (dayNight.js), the
+// same one the inside of a hex uses: the sun crosses from east to west, dusk
+// and dawn fade the light, and at night a dimmer moonlight keeps the map
+// readable while windows glow where people live. The seasons follow the
+// sim's day of the year (seasons.js), easing in rather than jumping. Light
+// alone redraws at most every LIGHT_FRAME_MS (TWILIGHT_FRAME_MS while it
+// fades) and moves the shadows at most every SHADOW_MS.
 
 import { loadThree, probeGl, addLights, aimSun } from './threeLoad.js';
+import { daylight, sunArc, moonArc } from './dayNight.js';
+import { seasonLook, seasonAmount, looksDiffer } from './seasons.js';
 import { DioramaWorld } from './dioramaWorld.js';
 import { RISE_MS, GAME_TILT_DEG, VIEW_PLANE, tiltKy, riseAt, rayHex } from './diorama.js';
 import { hexColours } from '../render/palette.js';
@@ -25,6 +35,20 @@ import { HEX_SIZE } from '../render/layout.js';
 const PEOPLE_FRAME_MS = 400; // as the 2D renderer: new head counts are drawn at most this often
 const SOFTWARE_MAX_DPR = 1;
 const BACKGROUND = 0x0b0e13;
+const BACKGROUND_NIGHT = 0x04060b;
+const LIGHT_FRAME_MS = 250;
+const TWILIGHT_FRAME_MS = 33;
+const SOFTWARE_LIGHT_MS = 500;
+const SHADOW_MS = 400;
+const SEASON_EASE_S = 0.35; // the seasons' look catches up with the calendar over about this long
+const SKY_DAY = 0xe4f0ff; const SKY_NIGHT = 0x5d74b8;
+const GROUND_DAY = 0x30384a; const GROUND_NIGHT = 0x161b2b;
+const SUN = 0xfff1d6; const SUN_LOW = 0xff9a52; const MOON = 0x9fb6ff;
+
+const mixHex = (a, b, t) => {
+  const ch = (s) => ((a >> s) & 255) + ((((b >> s) & 255) - ((a >> s) & 255)) * t);
+  return (Math.round(ch(16)) << 16) | (Math.round(ch(8)) << 8) | Math.round(ch(0));
+};
 const RING = 0xffffff;
 
 export class Renderer3D {
@@ -39,6 +63,11 @@ export class Renderer3D {
     this.pending = { pop: null, settlements: null, buildings: null };
     this.dirtyWorld = false;
     this.riseStart = -1; // render time the tiles began rising, -1 when risen
+    /** Render time (ms) when the day/night clock read 0 (see setClock). */
+    this.clockStart = -4000;
+    this.lastShadow = -Infinity;
+    /** The seasons: the look the calendar asks for, and the look on show. */
+    this.lookWant = null; this.lookShown = null; this.lookPainted = null; this.lastLookAt = 0;
     /** Mirrors the 2D renderer's people layer; step 1 of the 3D map draws no individual people. */
     this.people = { shown: false };
     const mq = typeof window !== 'undefined' ? window.matchMedia?.('(prefers-reduced-motion: reduce)') : null;
@@ -62,6 +91,9 @@ export class Renderer3D {
     this.scene = new T.Scene();
     this.camera = new T.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000);
     this.sun = addLights(T, this.scene, !soft, 2048);
+    this.sky = this.scene.children.find((o) => o.isHemisphereLight);
+    this.moon = new T.DirectionalLight(MOON, 0);
+    this.scene.add(this.moon, this.moon.target);
     this.diorama = new DioramaWorld(T, { shadows: !soft });
     const ring = new T.RingGeometry(0.8, 1, 6, 1, Math.PI / 6);
     ring.rotateX(-Math.PI / 2);
@@ -79,8 +111,11 @@ export class Renderer3D {
     this.map = map;
     this.scene.add(this.diorama.build(map, hexColours(map)));
     aimSun(this.sun, this.diorama.board);
+    this.moon.target.position.copy(this.sun.target.position);
+    this.moon.target.updateMatrixWorld();
+    this.lookPainted = null;
     this.pending = { pop: null, settlements: null, buildings: null };
-    this.year = { pop: null, settlements: null, buildings: [] };
+    this.year = { pop: null, settlements: null, buildings: [], levels: null };
     this.selected = -1;
     this.riseStart = this.still ? -1 : 0;
     this.dirtyWorld = true;
@@ -89,6 +124,16 @@ export class Renderer3D {
   setBuildings(list) {
     if (!this.map || !list || list === this.year.buildings) return false;
     this.year.buildings = list;
+    this.dirtyWorld = true;
+    return true;
+  }
+
+  /** Each civ's level (1 to 5): a civ at level 1 lives in huts. Returns whether anything changed. */
+  setLevels(levels) {
+    if (!this.map || !levels) return false;
+    const old = this.year.levels;
+    if (old && old.length === levels.length && old.every((v, k) => v === levels[k])) return false;
+    this.year.levels = levels;
     this.dirtyWorld = true;
     return true;
   }
@@ -112,10 +157,27 @@ export class Renderer3D {
   personAt() { return null; }
   personPosition() { return null; }
 
-  /** Whether a redraw is due with nothing else changed: tiles rising, or new head counts waiting. */
+  /** Start the day/night clock at `seconds` (it runs on from there in real time). */
+  setClock(seconds, now = performance.now()) { this.clockStart = now - seconds * 1000; }
+
+  /** Seconds on the day/night clock at render time `now`. */
+  clock(now = performance.now()) { return (now - this.clockStart) / 1000; }
+
+  /** The sim's day of the year (0 = first day of spring) and how many years pass a second (0 when paused). */
+  setDay(day, yearsPerSecond) {
+    if (day < 0) return;
+    this.lookWant = seasonLook(day, seasonAmount(yearsPerSecond));
+    if (!this.lookShown || this.still) this.lookShown = { ...this.lookWant };
+  }
+
+  /** Whether a redraw is due with nothing else changed: tiles rising, light changing, the season easing, or new head counts waiting. */
   needsFrame(now) {
     if (!this.map) return false;
     if (this.riseStart >= 0) return true;
+    const d = daylight(this.clock(now));
+    const every = this.software ? SOFTWARE_LIGHT_MS : d > 0 && d < 1 ? TWILIGHT_FRAME_MS : LIGHT_FRAME_MS;
+    if (now - this.lastDraw >= every) return true;
+    if (looksDiffer(this.lookShown, this.lookWant, 0.002) && now - this.lastDraw >= TWILIGHT_FRAME_MS) return true;
     return (this.pending.pop || this.pending.settlements) !== null && now - this.lastDraw >= PEOPLE_FRAME_MS;
   }
 
@@ -149,7 +211,10 @@ export class Renderer3D {
 
   draw(camera, selected = -1, now = performance.now()) {
     if (!this.renderer || !this.map) return;
+    const dt = Math.min(0.25, Math.max(0, (now - this.lastDraw) / 1000));
     this.lastDraw = now;
+    this.light(now);
+    this.season(dt);
     const d = this.diorama;
     // New head counts and settlements wait for this redraw (see needsFrame).
     if (this.pending.pop) { this.year.pop = this.pending.pop; this.pending.pop = null; this.dirtyWorld = true; }
@@ -170,10 +235,44 @@ export class Renderer3D {
       this.dirtyWorld = false;
       rising = true;
     }
-    if (rising) this.renderer.shadowMap.needsUpdate = true;
+    if (rising || now - this.lastShadow >= SHADOW_MS) { this.renderer.shadowMap.needsUpdate = true; this.lastShadow = now; }
     this.placeRing(selected);
     this.placeCamera(camera);
     this.renderer.render(this.scene, this.camera);
+  }
+
+  /** Day and night: sky light, the sun and moon on their arcs, the background, and the lights where people live. */
+  light(now) {
+    const t = this.clock(now);
+    const day = daylight(t);
+    const b = this.diorama.board;
+    const full = Math.max(b.w, b.d);
+    this.sky.intensity = 0.8 + 1.1 * day;
+    this.sky.color.setHex(mixHex(SKY_NIGHT, SKY_DAY, day));
+    this.sky.groundColor.setHex(mixHex(GROUND_NIGHT, GROUND_DAY, day));
+    // Low sun at dawn and dusk turns warm.
+    const warm = day > 0 && day < 1 ? 1 - Math.abs(day * 2 - 1) : 0;
+    this.sun.color.setHex(mixHex(SUN, SUN_LOW, warm));
+    this.sun.intensity = 2.6 * day;
+    const sa = sunArc(t) * Math.PI;
+    this.sun.position.set(b.cx + Math.cos(sa) * full * 0.9, full * (0.25 + 0.9 * Math.sin(sa)), b.cz - full * 0.7);
+    this.moon.intensity = 0.55 * (1 - day);
+    const ma = moonArc(t) * Math.PI;
+    this.moon.position.set(b.cx + Math.cos(ma) * full * 0.9, full * (0.3 + 0.8 * Math.sin(ma)), b.cz - full * 0.5);
+    this.renderer.setClearColor(mixHex(BACKGROUND_NIGHT, BACKGROUND, day), 1);
+    this.diorama.setGlow(1 - day);
+  }
+
+  /** Ease the seasons' look on show toward the calendar's, repainting when it has moved. */
+  season(dt) {
+    const want = this.lookWant; const shown = this.lookShown;
+    if (!want || !shown) return;
+    const k = this.still ? 1 : Math.min(1, dt / SEASON_EASE_S);
+    for (const key of ['snow', 'autumn', 'spring']) shown[key] += (want[key] - shown[key]) * k;
+    if (looksDiffer(shown, this.lookPainted)) {
+      this.diorama.setLook({ ...shown });
+      this.lookPainted = { ...shown };
+    }
   }
 
   placeRing(selected) {

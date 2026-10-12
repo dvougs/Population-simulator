@@ -318,11 +318,20 @@ test.describe('3D graphics flag', () => {
     await landed(page);
     await shot(page, testInfo, 'game-3d');
 
+    // Day and night run on their own clock; the map's light follows it, and night shows the lights where people live.
+    const day = await page.evaluate(() => window.popsim.light());
+    expect(day.look).not.toBeNull();
+    await page.evaluate(() => window.popsim.setClock(45));
+    await expect.poll(() => page.evaluate(() => window.popsim.light().daylight)).toBe(0);
+    await shot(page, testInfo, 'game-3d-night');
+    await page.evaluate(() => window.popsim.setClock(13));
+    await expect.poll(() => page.evaluate(() => window.popsim.light().daylight)).toBe(1);
+
     // Step inside: the hex's own world covers the map while the game waits, and Back returns to it.
     await page.locator('#inspector .enter-hex').click();
     await expect(page.locator('#hex-view')).toBeVisible();
     await expect.poll(() => page.evaluate(() => window.popsim.insideHex()?.index)).toBe(hex.index);
-    await expect(page.locator('#hex-view-time')).not.toHaveText('');
+    await expect(page.locator('#hex-view-time')).toHaveText(/^(spring|summer|autumn|winter) (dawn|day|dusk|night)$/i);
     expect(await page.evaluate(() => window.popsim.loop.paused)).toBe(true);
     await shot(page, testInfo, 'inside-hex');
     await page.locator('#btn-hex-leave').click();
