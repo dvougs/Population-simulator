@@ -67,9 +67,9 @@ export function levelFacts() {
   const e = LEVEL_EFFECTS;
   const does = [
     'Hunting, gathering and getting by. Every civ starts here.',
-    `Farming: plains and river hexes feed ${pct(e.farmBonus)} more.`,
+    `Farming: plains and river hexes feed ${pct(e.farmBonus)} more. Rafts: people can cross ${e.raftRange === 1 ? 'one sea or lake hex' : `${e.raftRange} sea or lake hexes`} when they move.`,
     `Shelter: hunger hurts ${e.shelterFactor === 0.5 ? 'half as much' : `× ${e.shelterFactor}`} in desert, tundra and mountain.`,
-    `Boats: people can cross one sea or lake hex when they move.`,
+    `Boats: people can sail across up to ${e.boatRange} sea or lake hexes in a row when they move.`,
     `Every hex feeds ${pct(e.kingdomBonus)} more, old age comes ${e.oldAgeDelay} years later, and the Kingdom fights at × ${e.kingdomStrength} strength `
       + 'against civs that are not Kingdoms. Land it surrounds joins it, people and all, and no other civ can move in.',
   ];
@@ -216,7 +216,7 @@ export function howText() {
           `Every game begins with a map of hexagons, from ${LIMITS.size.min} × ${LIMITS.size.min} up to ${LIMITS.size.max} × ${LIMITS.size.max}. `
             + 'The sea runs all around the edge; inside it the land rises into coasts and plains, forests, hills and mountain ranges, '
             + 'deserts and tundra, with lakes, and rivers that wind downhill to the water.',
-          'On the map screen you pick the seed, the size, how much water, mountains and rivers, and the mix of plains, forest, desert and tundra, '
+          'On the map screen you pick the seed, the size, one continent or islands, how much water, mountains and rivers, and the mix of plains, forest, desert and tundra, '
             + 'with a live preview. The same settings always make the same map, so a world you love can be shared by its seed.',
           `Land feeds people. Each hex grows food up to its capacity and regrows ${pct(L.foodRegrowth)} of it every year. `
             + `A river adds +${RIVER_FOOD_BONUS} food to every hex it runs through: river valleys are where civilisations bloom.`,
@@ -270,7 +270,7 @@ export function howText() {
           `A person who went hungry sets out with a ${pct(M.hungryChance)} chance. A fed person in a crowded hex, with more people than `
             + `${pct(M.crowdedShare)} of its food capacity (counting food carried in twice) or more than its settlement can house, sets out with a ${pct(M.crowdedChance)} chance.`,
           `People move one hex a year, into a land hex next door. Nomads walk instead, with ${nomadic.movePoints} movement points a year. `
-            + 'Seas and lakes block the way, until a civ builds boats.',
+            + `Seas and lakes block the way, until a civ builds rafts (level ${LEVEL_EFFECTS.raftLevel}) and later boats (level ${LEVEL_EFFECTS.boatLevel}).`,
           'They head for a hex with more spare food than home, picked at random but weighted by that spare food, '
             + `counted ${M.ownCivWeight === 2 ? 'twice' : `× ${M.ownCivWeight}`} where their own civ already lives. So civs spread like ink: along rivers and coasts first, into the hills last.`,
           `Civs also choose with a plan: a hex with a material their next level needs counts × ${M.materialWeight}; `

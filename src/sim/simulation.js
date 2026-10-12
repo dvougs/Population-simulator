@@ -9,9 +9,9 @@ import { indexToAxial } from './hex.js';
 import { Rng } from './rng.js';
 import { People, NO_PARENT } from './people.js';
 import { pickStarts, found, eat, deaths, births, regrow } from './life.js';
-import { buildStepReach, migrate, migrationRules, setReach } from './migration.js';
+import { buildStepReach, landPieces, migrate, migrationRules, setReach } from './migration.js';
 import { Contact, CONTACT } from './contact.js';
-import { Levels, LEVEL_EFFECTS, GATHER } from './levels.js';
+import { Levels, LEVEL_EFFECTS, GATHER, boatRange } from './levels.js';
 import { CIV_TYPE_NAMES } from './civTypes.js';
 import { CivStats } from './civStats.js';
 import { Records, FAMINE } from './records.js';
@@ -76,6 +76,9 @@ export class Simulation {
     this.contact.inside = this.levels.inside;
     this.contact.level = this.levels.level;
     this.contact.eff = this.levels.buildings.eff;
+    // Land each civ can reach from its start, by boat range (see setReachableLand).
+    this.landPieces = new Map();
+    for (let c = 0; c < civs; c++) this.setReachableLand(c);
     // Walkers' movement points before any building bonus, and the bonus their reach was built with.
     this.baseMove = Int32Array.from(this.migrationRules.movePoints);
     this.moveApplied = new Int32Array(civs);
@@ -118,9 +121,12 @@ export class Simulation {
     this.levels.onSettle = (kind, c, h, year, other) => rec.settlement(kind, c, h, year, other);
     this.onLevel = (c, from, to, year) => {
       rec.level(c, to, year);
-      // Boats come and go with level 4.
-      const boats = to >= LEVEL_EFFECTS.boatLevel;
-      if (boats !== (this.migrationRules.boats[c] === 1)) setReach(this.migrationRules, c, map, boats, LEVEL_EFFECTS.boatCost);
+      // Rafts come and go with level 2, boats with level 4.
+      const range = boatRange(to);
+      if (range !== this.migrationRules.boats[c]) {
+        setReach(this.migrationRules, c, map, range, LEVEL_EFFECTS.boatCost);
+        this.setReachableLand(c);
+      }
     };
     this.recordYear();
   }
@@ -153,6 +159,22 @@ export class Simulation {
       this.onDeath, this.onFight, this.onSwitch);
   }
 
+  /**
+   * Caps civ c's land needs for levels at the land it can reach (see Levels.setReachable):
+   * the land hexes joined to its starting hex by walking and by voyages of its boat range.
+   */
+  setReachableLand(c) {
+    const start = this.starts[c];
+    if (start === undefined) return;
+    const range = this.migrationRules.boats[c];
+    let pieces = this.landPieces.get(range);
+    if (!pieces) {
+      pieces = landPieces(this.map, range ? buildStepReach(this.map, range) : this.reach);
+      this.landPieces.set(range, pieces);
+    }
+    this.levels.setReachable(c, pieces.size[pieces.id[start]]);
+  }
+
   /** Walkers (Nomadic) get their buildings' extra movement points; reach tables follow. */
   applyMove() {
     const move = this.levels.buildings.eff.move;
@@ -162,7 +184,7 @@ export class Simulation {
       if (extra === this.moveApplied[c]) continue;
       this.moveApplied[c] = extra;
       r.movePoints[c] = this.baseMove[c] + extra;
-      setReach(r, c, this.map, r.boats[c] === 1, LEVEL_EFFECTS.boatCost);
+      setReach(r, c, this.map, r.boats[c], LEVEL_EFFECTS.boatCost);
     }
   }
 

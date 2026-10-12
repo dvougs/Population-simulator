@@ -1324,7 +1324,7 @@ test('"Migration" Reach: Horse Paddock gives a walker +1 movement point (Nomadic
   sim.levels.level[0] = 4; sim.onLevel(0, 3, 4, 1);
   sim.applyMove();
   assert.equal(r.movePoints[0], 6);
-  assert.equal(r.boats[0], 1);
+  assert.equal(r.boats[0], 3);
 });
 
 // ---- the World and the host -------------------------------------------------------------------------------------

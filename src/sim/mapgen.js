@@ -19,7 +19,15 @@ import {
 /** Shares of land and lowland used by the generator (also in RULES.md). */
 export const GEN = Object.freeze({
   hillsShare: 0.15, // of land, next below the mountains on the mountain score
+  // Islands land shape: a grid of islandGrid(size) × islandGrid(size) island centres, each
+  // moved up to islandJitter of a cell, raising land within islandRadius cells of it.
+  islandJitter: 0.3,
+  islandRadius: 0.55,
+  islandNoise: 0.4, // noise share of elevation (0.6 for one continent)
 });
+
+/** Island centres across (and down) an islands map of this size. */
+export const islandGrid = (size) => 2 + Math.floor(size / 15);
 
 export function createMap(cols, rows) {
   const count = cols * rows;
@@ -61,6 +69,7 @@ export function generateMap(input) {
   // Forked after the others, so adding deposits left every earlier stream (and the terrain) unchanged.
   const depositRng = rng.fork('deposits');
   const rerollRng = rng.fork('depositReroll');
+  const islandRng = rng.fork('islands');
 
   // Sample the noise at each hex centre, scaled so the map spans [0, 1] both ways.
   const b = mapBounds(n, n, 1);
@@ -69,6 +78,7 @@ export function generateMap(input) {
   const temp = new Float64Array(count);
   const moist = new Float64Array(count);
   const edge = new Uint8Array(count);
+  const islands = p.landShape === 'islands' ? islandCentres(islandRng, n) : null;
   for (let i = 0; i < count; i++) {
     const col = i % n;
     const row = (i - col) / n;
@@ -78,8 +88,11 @@ export function generateMap(input) {
     const v = (c.y - b.minY) / (b.maxY - b.minY);
     const nx = 2 * u - 1;
     const ny = 2 * v - 1;
-    // Falloff towards the edges makes one landmass with coasts rather than land cut off by the frame.
-    elev[i] = 0.6 * elevNoise(u, v) + 0.4 * (1 - (nx * nx + ny * ny) / 2);
+    // Falloff towards the edges makes one landmass with coasts rather than land cut off by the frame;
+    // with islands, land rises around each island centre instead.
+    elev[i] = islands
+      ? GEN.islandNoise * elevNoise(u, v) + (1 - GEN.islandNoise) * islandHeight(islands, u, v)
+      : 0.6 * elevNoise(u, v) + 0.4 * (1 - (nx * nx + ny * ny) / 2);
     ridge[i] = 1 - Math.abs(2 * ridgeNoise(u, v) - 1);
     const latitude = 1 - Math.abs(2 * v - 1); // 1 at the middle row, 0 at the top and bottom
     temp[i] = 0.7 * latitude + 0.3 * tempNoise(u, v) - 0.2 * elev[i];
@@ -323,6 +336,33 @@ class MinHeap {
 }
 
 /** Number of hexes of each terrain, indexed by terrain id. */
+/** Island centres in the unit square, a jittered grid; r2 is the squared radius of each island's rise. */
+function islandCentres(rng, size) {
+  const g = islandGrid(size);
+  const xs = [];
+  const ys = [];
+  for (let gy = 0; gy < g; gy++) {
+    for (let gx = 0; gx < g; gx++) {
+      xs.push((gx + 0.5 + GEN.islandJitter * (2 * rng.next() - 1)) / g);
+      ys.push((gy + 0.5 + GEN.islandJitter * (2 * rng.next() - 1)) / g);
+    }
+  }
+  const r = GEN.islandRadius / g;
+  return { xs, ys, r2: r * r };
+}
+
+/** 1 at an island centre, falling to 0 at its radius (the highest of all islands). */
+function islandHeight({ xs, ys, r2 }, u, v) {
+  let best = 0;
+  for (let k = 0; k < xs.length; k++) {
+    const dx = u - xs[k];
+    const dy = v - ys[k];
+    const hgt = 1 - (dx * dx + dy * dy) / r2;
+    if (hgt > best) best = hgt;
+  }
+  return best;
+}
+
 export function countTerrain(map) {
   const counts = new Array(TERRAIN_COUNT).fill(0);
   for (let i = 0; i < map.count; i++) counts[map.terrain[i]]++;

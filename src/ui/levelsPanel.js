@@ -120,9 +120,9 @@ const SITE_TEXT = { farm: ', on plains, coast or a river', water: ', next to wat
 
 const LEVEL_TEXT = [
   'Gathering only. Every civ starts here.',
-  `Plains and river hexes feed ${pct(LEVEL_EFFECTS.farmBonus)} more.`,
+  `Plains and river hexes feed ${pct(LEVEL_EFFECTS.farmBonus)} more. Rafts: people can migrate across ${LEVEL_EFFECTS.raftRange} sea or lake hex${LEVEL_EFFECTS.raftRange === 1 ? '' : 'es'}.`,
   `Shelter: hunger hurts half as much in desert, tundra and mountain.`,
-  `Boats: people can migrate across one sea or lake hex (it costs ${LEVEL_EFFECTS.boatCost} movement point).`,
+  `Boats: people can migrate across up to ${LEVEL_EFFECTS.boatRange} sea or lake hexes in a row (each costs ${LEVEL_EFFECTS.boatCost} movement point for Nomads).`,
   `Every hex feeds ${pct(LEVEL_EFFECTS.kingdomBonus)} more (plains and rivers ${pct(LEVEL_EFFECTS.farmBonus + LEVEL_EFFECTS.kingdomBonus)} in all), old age starts `
     + `${LEVEL_EFFECTS.oldAgeDelay} years later, and it fights at × ${LEVEL_EFFECTS.kingdomStrength} strength against civs that are not Kingdoms. `
     + 'A hex whose land neighbours all hold its people is enclosed: everyone else there joins the Kingdom, and no other civ can move in.',

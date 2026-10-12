@@ -3,12 +3,13 @@
 // short fade and a light sweep; slider drags only redraw, so it never flickers.
 
 import { h } from './dom.js';
-import { PRESETS, LIMITS, presetParams, randomParams, normalizeParams, MAP_KEYS, LOWLAND_KEYS } from '../sim/params.js';
+import { PRESETS, LIMITS, presetParams, randomParams, normalizeParams, MAP_KEYS, LOWLAND_KEYS, LAND_SHAPES } from '../sim/params.js';
 import { randomSeedString } from '../sim/rng.js';
 import { drawPreview } from '../render/preview.js';
 
 const pct = (v) => `${Math.round(v * 100)}%`;
 const LOWLAND_LABELS = { plains: 'Plains', forest: 'Forest', desert: 'Desert', tundra: 'Tundra' };
+const SHAPE_LABELS = { continent: 'One continent', islands: 'Islands' };
 
 export class MapgenScreen {
   /**
@@ -123,6 +124,9 @@ export class MapgenScreen {
               fullRender(Object.fromEntries(MAP_KEYS.map((k) => [k, r[k]])), 'custom');
             } }, '🎲 Randomise')),
         slider('m-size', 'Size', p.size, LIMITS.size.min, LIMITS.size.max, 1, (v) => `${v} × ${v}`, (v) => this.apply({ size: v })),
+        h('div', { class: 'row' }, h('label', { for: 'm-shape' }, 'Land'),
+          h('select', { id: 'm-shape', class: 'grow', onchange: (e) => this.apply({ landShape: e.target.value }) },
+            LAND_SHAPES.map((k) => h('option', { value: k, selected: k === p.landShape }, SHAPE_LABELS[k])))),
         slider('m-water', 'Water', Math.round(p.water * 100), LIMITS.water.min * 100, LIMITS.water.max * 100, 1,
           (v) => pct(v / 100), (v) => this.apply({ water: v / 100 })),
         slider('m-mountains', 'Mountains', Math.round(p.mountains * 100), LIMITS.mountains.min * 100, LIMITS.mountains.max * 100, 1,

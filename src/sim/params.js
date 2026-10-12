@@ -16,7 +16,9 @@ const OLDER_END_CONDITIONS = ['lastCiv', 'dominance', 'years'];
 export const YEAR_LIMIT_CHOICES = Object.freeze([1000, 2500, 5000, 10000]);
 /** Lowland terrain weights, in the order they appear on the map-generation screen. */
 export const LOWLAND_KEYS = ['plains', 'forest', 'desert', 'tundra'];
-export const MAP_KEYS = ['seed', 'size', 'water', 'mountains', 'rivers', ...LOWLAND_KEYS];
+/** Land shapes: one continent in the middle of the map, or a scatter of islands. */
+export const LAND_SHAPES = ['continent', 'islands'];
+export const MAP_KEYS = ['seed', 'size', 'water', 'mountains', 'rivers', ...LOWLAND_KEYS, 'landShape'];
 
 /** Valid ranges, shared by validation, the setup screens and RULES.md. */
 export const LIMITS = Object.freeze({
@@ -48,6 +50,7 @@ export const DEFAULT_PARAMS = Object.freeze({
   forest: 0.3,
   desert: 0.15,
   tundra: 0.15,
+  landShape: 'continent',
   // Game settings: civilisations placed at the start and people in each.
   civCount: 3,
   // One type per civ (Civ 1 first); the default order gives every civ a different one.
@@ -75,7 +78,7 @@ export const PRESETS = {
     seed: 'continent', size: 30, water: 0.2, mountains: 0.12, rivers: 6, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
     civCount: 4, civTypes: ['expansionist', 'aggressive', 'cooperative', 'isolationist'], startPop: 30, ...MUTATION, ...END_DEFAULTS, endConditions: ['kingdom', 'dominance', 'years'], endTicks: 5000 } },
   archipelago: { label: 'Archipelago', params: {
-    seed: 'islands', size: 30, water: 0.6, mountains: 0.08, rivers: 2, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
+    seed: 'islands', size: 30, water: 0.6, landShape: 'islands', mountains: 0.08, rivers: 2, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
     civCount: 5, civTypes: ['nomadic', 'expansionist', 'isolationist', 'cooperative', 'aggressive'], startPop: 20, ...MUTATION, ...END_DEFAULTS, endConditions: ['lastCiv', 'years'], endTicks: 10000 } },
   highlands: { label: 'Highlands', params: {
     seed: 'peaks', size: 20, water: 0.15, mountains: 0.3, rivers: 5, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
@@ -106,6 +109,7 @@ export function normalizeParams(input = {}) {
   p.mountains = Math.round(range(input.mountains, 'mountains', d.mountains) * 100) / 100;
   p.rivers = Math.round(range(input.rivers, 'rivers', d.rivers));
   for (const k of LOWLAND_KEYS) p[k] = Math.round(range(input[k], k, d[k]) * 100) / 100;
+  p.landShape = LAND_SHAPES.includes(input.landShape) ? input.landShape : d.landShape;
   p.civCount = Math.round(range(input.civCount, 'civCount', d.civCount));
   p.civTypes = normalizeTypes(input.civTypes, p.civCount);
   p.startPop = Math.round(range(input.startPop, 'startPop', d.startPop));
@@ -184,5 +188,7 @@ export function randomParams(random = Math.random) {
   p.civTypes = Array.from({ length: p.civCount }, () => CIV_TYPES[Math.floor(random() * CIV_TYPES.length)]);
   // First to Kingdom came later still, so it is drawn after the types.
   if (random() < 0.5) p.endConditions.push('kingdom');
+  // Land shape came after that: islands one time in four.
+  p.landShape = random() < 0.25 ? 'islands' : 'continent';
   return normalizeParams(p);
 }

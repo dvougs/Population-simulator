@@ -52,7 +52,7 @@ export class SetupScreen {
     const map = h('fieldset', { class: 'group' },
       h('legend', {}, 'Map'),
       h('p', { class: 'map-summary', id: 'setup-map-summary' },
-        `${p.size} × ${p.size} hexes, seed “${p.seed}”, water ${pct(p.water)}, mountains ${pct(p.mountains)}, ${p.rivers} ${p.rivers === 1 ? 'river' : 'rivers'}`),
+        `${p.size} × ${p.size} hexes${p.landShape === 'islands' ? ' of islands' : ''}, seed “${p.seed}”, water ${pct(p.water)}, mountains ${pct(p.mountains)}, ${p.rivers} ${p.rivers === 1 ? 'river' : 'rivers'}`),
       h('div', { class: 'row' },
         h('button', { type: 'button', class: 'btn grow', id: 'btn-change-map', onclick: () => this.onChangeMap(this.getParams()) }, '← Change map')),
     );

@@ -74,8 +74,12 @@ export const LEVEL_EFFECTS = Object.freeze({
   /** From level 3: hunger's health loss in desert, tundra and mountain is multiplied by this. */
   shelterLevel: 3,
   shelterFactor: 0.5,
-  /** From level 4: migration may cross one sea or lake hex, costing this many movement points. */
+  /** From level 2, rafts: migration may cross up to raftRange sea or lake hexes in a row. */
+  raftLevel: 2,
+  raftRange: 1,
+  /** From level 4, boats: up to boatRange water hexes in a row. Each water hex costs boatCost movement points (walkers). */
   boatLevel: 4,
+  boatRange: 3,
   boatCost: 1,
   /** At level 5: every hex + this share of food capacity, and old age starts this many years later. */
   kingdomBonus: 0.25,
@@ -83,10 +87,19 @@ export const LEVEL_EFFECTS = Object.freeze({
   /** The top level, Kingdom (the same as MAX_LEVEL). */
   kingdomLevel: 5,
   /** A Kingdom's strength in a fight against a civ that is not a Kingdom is multiplied by this. */
-  kingdomStrength: 5,
+  kingdomStrength: 3,
   /** A civ below its level's minimum population this many years in a row drops one level. */
   fallBackYears: 100,
 });
+
+/** Land needs for levels never exceed this share of the land a civ can reach (rounded up). */
+export const REACHABLE_SHARE = 0.9;
+
+/** Water hexes a civ at `level` may sail across in a row (0: no boats). */
+export function boatRange(level) {
+  const e = LEVEL_EFFECTS;
+  return level >= e.boatLevel ? e.boatRange : level >= e.raftLevel ? e.raftRange : 0;
+}
 
 const MATERIAL_RARE = MATERIAL_TIER.map((t) => (t === 'common' ? 0 : 1));
 
@@ -144,6 +157,8 @@ export class Levels {
       this.minHex[L] = m.hexes;
       this.minPeople[L] = m.pop;
     }
+    /** Most hexes a civ's level needs can ask for: REACHABLE_SHARE of the land it can reach (set by the Simulation). */
+    this.reachHex = new Int32Array(civs).fill(0x7fffffff);
     this.level = new Uint8Array(civs).fill(1);
     /** Progress at the current level: + 1 a year, more with civic buildings (Settlements.progress). */
     this.yearsAt = new Float64Array(civs);
@@ -210,6 +225,7 @@ export class Levels {
     this.buildings = new Buildings(map, types);
     /** Every lived-in hex's settlement, store, buildings and supply routes (settlements.js). */
     this.settlements = new Settlements(map, types, seed);
+    this.settlements.boats = this.boats;
     /** Filled at the end of each year by the Simulation: people who went hungry in each hex that year. */
     this.hungryHex = new Int32Array(n);
     this.onSettle = null;
@@ -235,16 +251,24 @@ export class Levels {
   /** Whole-percent factor (100 = none) of civ c's hex and people minimums (Road Network). */
   landPct(c) { return 100 - Math.round(this.buildings.eff.land[c] * 100); }
 
+  /** Civ c can reach `land` land hexes (its start's landmass and what its boats add). */
+  setReachable(c, land) {
+    this.reachHex[c] = Math.max(1, Math.ceil(REACHABLE_SHARE * land));
+  }
+
+  /** Hexes `level` asks of civ c before its bonuses: the map's need, at most what it can reach. */
+  baseHexes(c, level) { return Math.min(this.minHex[level], this.reachHex[c]); }
+
   /** Hexes civ c needs to reach `level`, after its bonuses (rounded up, at least 1). */
   minHexesFor(c, level) {
     if (level <= 1) return 0;
-    return Math.max(1, reduce(this.minHex[level], this.landPct(c)));
+    return Math.max(1, reduce(this.baseHexes(c, level), this.landPct(c)));
   }
 
   /** People civ c needs to reach (and keep) `level`, after its bonuses. */
   minPopFor(c, level) {
     if (level <= 1) return 0;
-    return reduce(this.minPeople[level], this.landPct(c));
+    return reduce(REQUIREMENTS[level - 2].perHex * this.baseHexes(c, level), this.landPct(c));
   }
 
   /** Years civ c needs at its level `level`, after its bonuses (rounded up). */
@@ -308,7 +332,7 @@ export class Levels {
       this.shelter[c] = L >= e.shelterLevel ? e.shelterFactor : 1;
       this.hungerMul[c] = 1 - eff.hunger[c];
       this.oldAgeDelay[c] = (L >= MAX_LEVEL ? e.oldAgeDelay : 0) + eff.oldAge[c];
-      this.boats[c] = L >= e.boatLevel ? 1 : 0;
+      this.boats[c] = boatRange(L);
     }
   }
 

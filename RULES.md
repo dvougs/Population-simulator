@@ -29,13 +29,15 @@ This describes the current build (Phase 2, in progress): a generated hex map whe
 - The map is a square of pointy-top hexes, size × size, default 10 × 10, any size from 10 to 100.
 - Rows are laid out with odd rows shifted half a hex to the right. Each hex touches up to 6 neighbours; hexes on the edge have fewer (none off the map). The map does not wrap.
 - The distance between two hexes is the number of steps from one to the other through neighbours.
-- The map depends only on the nine map settings (seed, size, water, mountains, rivers, plains, forest, desert, tundra): the same settings always give the same map.
+- The map depends only on the ten map settings (seed, size, land shape, water, mountains, rivers, plains, forest, desert, tundra): the same settings always give the same map.
 
 ### How the map is made
 
 All noise is value noise (random values on a grid, blended with smoothstep), sampled at each hex centre with the map scaled to fill a unit square.
 
-1. **Elevation** = 0.6 × noise + 0.4 × (1 − (x² + y²) ÷ 2), where x and y run from −1 at one edge to 1 at the other. The second term lowers the land towards the edges so the land forms a coastline inside the sea. The noise has 4 octaves and 2 + ⌊size ÷ 12⌋ cells across at the coarsest.
+1. **Elevation.** The noise has 4 octaves and 2 + ⌊size ÷ 12⌋ cells across at the coarsest.
+   - *One continent* (the default land shape): elevation = 0.6 × noise + 0.4 × (1 − (x² + y²) ÷ 2), where x and y run from −1 at one edge to 1 at the other. The second term lowers the land towards the edges so the land forms a coastline inside the sea.
+   - *Islands*: elevation = 0.4 × noise + 0.6 × rise, where rise is the highest of 1 − d² ÷ r² over the island centres, and 0 where all are below 0. The centres are a grid of g × g, g = 2 + ⌊size ÷ 15⌋ (4 × 4 on a 30 × 30 map), each placed in the middle of its cell of the map and then moved by up to 0.3 of a cell across and down (uniform, from the map's own seeded stream); d is the distance to a centre and r = 0.55 of a cell, both measured with the map scaled to a unit square. With 60% water on a 30 × 30 map this gives about 11 islands of 5 hexes or more, and boats (3 water hexes) join about 95% of the land.
 2. **Water.** The water amount counts against all hexes, edge ring included: total deep water = round(*water amount* × size²). Every edge hex is always deep water (ocean); only the water beyond the edge ring (total − edge hexes) is taken from the lowest of the other hexes. A water amount below the edge ring's share gives just the edge ring (on a 10 × 10 map the ring is 36 hexes, so anything up to 36% gives only the ring). Water connected to the edge is sea; any other water is a lake.
 3. **Mountains and hills.** Each land hex gets a mountain score = 0.6 × ridge + 0.4 × elevation, where ridge = 1 − |2 × noise − 1| (2 octaves, 2 + ⌊size ÷ 8⌋ cells), which runs in lines and makes ranges. The top *mountains* share of land hexes become mountain; the next 15% of land hexes become hills.
 4. **Coast.** Every other land hex next to the sea is coast. Hexes next only to a lake are not coast.
@@ -62,7 +64,7 @@ When several hexes tie on a value, the one with the lower index (row × size + c
 | Tundra | 15 | 1.5 | 0% |
 
 - **Rivers** run through land hexes. A river hex keeps its terrain's movement cost and defence bonus (rivers are walkable) and gets +30 food capacity (rivers are fertile).
-- Seas and lakes are impassable (civs at level 4 can cross one water hex by boat; see "Migration").
+- Seas and lakes are impassable, except by raft (level 2, one water hex) and boat (level 4, up to 3 water hexes in a row); see "Migration".
 - Levels raise food capacity: plains and river hexes from level 2, every hex at level 5 (see "Gathering and levels"). The table gives the capacity at level 1.
 - Every hex starts with food equal to its food capacity.
 - Food capacity is in food units; a person eats 0.75 to 1.25 food a year by their metabolism, 1 at metabolism 0.5 (see "Traits").
@@ -187,8 +189,8 @@ Each year (tick) runs these steps in order. Within a step everyone decides first
 - A person who went hungry this year sets out with chance 50%.
 - A person who ate, in a crowded hex, sets out with chance 20%. A hex is crowded when it holds more people (all civs) than 50% of its support (its food capacity + 2 × the food carried in; see "A year", Births), or more than its settlement's housing. Food regrows by 50% of the capacity a year, so 50% is about as many people as a hex feeds year after year: above it the stored food runs down until people go hungry.
 - **By civ type** (see "Civ types"): for Expansionist people a hex is already crowded above 30% of its support (or its housing); Isolationist people who ate never set out; Nomadic people set out at twice the chance (100% hungry, 40% fed in a crowded hex) and have 5 movement points. Aggressive and Cooperative people use the usual numbers.
-- **Reach.** People move one hex a year: the hexes in reach are the land hexes next to theirs, whatever the terrain. Nomadic people walk instead, with 5 movement points a year: entering a hex costs its movement cost (coast and plains 1, desert and tundra 1.5, forest and hills 2, mountain 3), and the hexes in reach are the land hexes that can be reached along a path of land hexes costing no more than 5 in total (6 with a Horse Paddock standing; see "Buildings and wonders"). Seas and lakes cannot be entered or crossed, except by boat.
-- **Boats** (civs at level 4 or higher): the land hexes next to a sea or lake hex that is next to theirs are in reach too (one water hex crossed). For Nomadic people a path may cross one sea or lake hex, which costs 1 movement point. Only one water hex in the whole path, and the path must end on land (a person never stops on water). Any water hex counts, a lake or the sea, the ocean ring at the map's edge included; since the map does not wrap, crossing a ring hex only leads to land that also touches it. So a lake or strait one hex wide can be crossed, but not two water hexes in a row.
+- **Reach.** People move one hex a year: the hexes in reach are the land hexes next to theirs, whatever the terrain. Nomadic people walk instead, with 5 movement points a year: entering a hex costs its movement cost (coast and plains 1, desert and tundra 1.5, forest and hills 2, mountain 3), and the hexes in reach are the land hexes that can be reached along a path of land hexes costing no more than 5 in total (6 with a Horse Paddock standing; see "Buildings and wonders"). Seas and lakes cannot be entered or crossed, except by raft or boat.
+- **Rafts and boats.** A civ's boat range is the number of sea or lake hexes its people can cross in a row: 0 at level 1, 1 at levels 2 and 3 (rafts), 3 at levels 4 and 5 (boats). With a range of R, the hexes in reach also include every land hex next to a water hex that can be reached from the person's hex through at most R water hexes in a row (water neighbours of their hex count as the first). For Nomadic people a path may make one voyage of up to R sea or lake hexes in a row, each costing 1 movement point; only one voyage in the whole path, and the path must end on land (a person never stops on water). Any water hex counts, a lake or the sea, the ocean ring at the map's edge included; since the map does not wrap, crossing ring hexes only leads to land that also touches them. So rafts cross a lake or strait one hex wide, and boats a channel of up to 3.
 - **Spare food** of a hex = the food it will hold after this year's regrowth (food + 50% of capacity, at most the capacity) − the people in it now (after this year's births).
 - A person who sets out picks one hex in reach whose spare food is above 0 and above their own hex's spare food, at random, with chances in proportion to each hex's weight. With no such hex, they stay.
 - **Where civs expand.** A hex's weight is its spare food, multiplied by each of these that applies:
@@ -215,12 +217,12 @@ Checked once a year, after food regrowth, in every land hex where people of 2 or
   If any of (b) to (e) holds (and A is not Aggressive), A attacks with a chance equal to its average aggression in the hex: one roll per pair, however many of those triggers hold.
 - **At most one fight per hex a year.** If several pairs would fight, the fight is between the pair holding the civ with the most people in the hex, and among those the pair whose other civ has the most people (ties go to the lower civ number). If both civs of that pair would attack each other, the attacker is the one that did not hold the hex.
 - **The hex holder** is the civ of the two that had more people in the hex at the end of last year; on a tie (for example both just arrived), the one with more people now, then the lower civ number. The holder may be the attacker or the attacked.
-- **Strength** of each side = the sum of its people's strength in the hex. The holder's strength is multiplied by 1 + the hex's defence bonus (forest +25%, hills +50%, mountain +100%, otherwise 0%; see "Terrain"), + the defence of its settlement's buildings (Palisade +25%, Stone walls +75%, Palace +50%; see "Settlements") when the holder of the fight is also the civ holding the settlement. A Kingdom fighting a civ that is not a Kingdom has its strength × 5 (on top of any defence bonus); two Kingdoms fight at their normal strength. Buildings and wonders (see "Buildings and wonders") add to this: each side's strength × (1 + its strength bonus), and the holder's defence bonus + its defence bonus (so a holder with Walls on hills fights at × (1 + 0.5 + 0.75)).
+- **Strength** of each side = the sum of its people's strength in the hex. The holder's strength is multiplied by 1 + the hex's defence bonus (forest +25%, hills +50%, mountain +100%, otherwise 0%; see "Terrain"), + the defence of its settlement's buildings (Palisade +25%, Stone walls +75%, Palace +50%; see "Settlements") when the holder of the fight is also the civ holding the settlement. A Kingdom fighting a civ that is not a Kingdom has its strength × 3 (on top of any defence bonus); two Kingdoms fight at their normal strength. Buildings and wonders (see "Buildings and wonders") add to this: each side's strength × (1 + its strength bonus), and the holder's defence bonus + its defence bonus (so a holder with Walls on hills fights at × (1 + 0.5 + 0.75)).
 - **Result.** The side with more strength wins; on equal strength the holder wins.
   - The loser loses ⌈20%⌉ of its people in the hex (rounded up, so at least 1), picked at random among them: these are **war deaths**. A loser with a war-loss bonus (Barracks) loses ⌈20% × (1 − bonus)⌉ instead, still at least 1. The rest of the loser's people there flee together to a neighbouring land hex where the winner has no people, the one with the most food left over for its people (food − people, counted when the step starts; on a tie the lower index); if the winner has people in every land neighbour, to the one of them with the most food left over. A hex enclosed by a Kingdom other than the loser is never chosen. With no land neighbour left to choose they stay.
   - The winner loses 5% of its people in the hex, rounded down (a winning group of fewer than 20 loses nobody), picked at random: also war deaths.
   - Other civs in the hex are not involved.
-- The winner of each hex's fight this year is kept until next year's step 1, where it takes the hex's settlement if it still has people there (see "Settlements"). Fleeing never uses boats.
+- The winner of each hex's fight this year is kept until next year's step 1, where it takes the hex's settlement if it still has people there (see "Settlements"). Fleeing never uses rafts or boats.
 
 ### Switching civ
 
@@ -267,11 +269,11 @@ Every year each civ that has people adds 1 to its years at its level, plus its *
 | 3 → 4 Organised | 500 | 50% | 14 | 300 stone, 80 copper, 60 iron, 40 salt |
 | 4 → 5 Kingdom | 800 | 75% | 16 | 150 iron, 30 gold, 15 gemstones, 20 spices |
 
-- **Hexes and people** follow the land each civ started with. Land per civ = the map's land hexes (every hex that is not deep water) ÷ the number of civs the game started with. Hexes needed = the percentage above × land per civ, rounded to the nearest whole number (half up), at least 1. People needed = people per hex × the hexes needed. A full map settles at about 22 people per land hex, so the hexes are what a civ has to win; the people only check that its land is settled.
+- **Hexes and people** follow the land each civ started with. Land per civ = the map's land hexes (every hex that is not deep water) ÷ the number of civs the game started with. Hexes needed = the percentage above × land per civ, rounded to the nearest whole number (half up), at least 1, but never more than 90% (rounded up) of the land the civ can reach: the land hexes joined to its starting hex by moves of one hex and crossings of up to its boat range (see "Migration"), worked out at the start and again whenever its boat range changes. So a civ on a small island is never locked out of levelling. People needed = people per hex × the hexes needed. A full map settles at about 22 people per land hex, so the hexes are what a civ has to win; the people only check that its land is settled.
 - Examples (hexes / people for levels 2, 3, 4 and 5): the Small world (10 × 10, 64 land hexes, 3 civs) 3/30, 6/72, 11/154, 16/256; 30 × 30 with 630 land hexes and 4 civs 24/240, 47/564, 79/1106, 118/1888; the Large world (50 × 50, 1750 land hexes) with 6 civs 44/440, 88/1056, 146/2044, 219/3504, and with 8 civs 33/330, 66/792, 109/1526, 164/2624.
 - Hexes and people are counted at the end of last year.
 - **By type:** Nomadic civs need 25% more years and Isolationist civs 20% fewer, rounded up: Nomadic 188, 375, 625 and 1000 years; Isolationist 120, 240, 400 and 640. Isolationist civs spend 25% more materials, rounded up: 100 wood, 38 stone, 38 clay; 250 wood, 188 stone, 125 clay, 38 copper; 375 stone, 100 copper, 75 iron, 50 salt; 188 iron, 38 gold, 19 gemstones, 25 spices.
-- The fastest possible climb to Kingdom is 150 + 300 + 500 + 800 = 1750 years (Nomadic 2188, Isolationist 1400).
+- Without bonuses the climb to Kingdom takes at least 150 + 300 + 500 + 800 = 1750 years (Nomadic 2188, Isolationist 1400). Civic progress (at most +20%; see "Settlements") and years bonuses (Observatory, Grand Library) shorten it: at +20% the years count 1.2 each, so 125, 250, 417 and 667 years, 1459 in all.
 - **Falling back.** In a year it does not level up, a civ at level 2 or higher whose people are below the people needed to reach its current level (see above) adds 1 to its years below the minimum; otherwise that count goes back to 0. At 100 years in a row it drops one level, keeps its stores, and its years at the level start again from 0. To climb back it must meet that level's requirements and spend the materials again.
 - A civ that dies out keeps the level it had.
 
@@ -282,10 +284,10 @@ Each level keeps everything from the levels below it.
 | Level | Effect |
 |---|---|
 | Every level above 1 | Birth chance + 0.5 percentage points per level above 1 (+2 points at level 5; see "A year", Births). |
-| 2 Farmers | Plains and river hexes + 25% food capacity. |
+| 2 Farmers | Plains and river hexes + 25% food capacity. Rafts: migration may cross one sea or lake hex (see "Migration"). |
 | 3 Builders | Shelter: hunger's health loss in desert, tundra and mountain is halved, round(35 × B × climate × 0.5). |
-| 4 Organised | Boats: migration may cross one sea or lake hex (see "Migration"). |
-| 5 Kingdom | Every hex + 25% food capacity (plains and river hexes + 50% in all); old age starts 5 years later; strength × 5 in fights against civs that are not Kingdoms (see "Fights"); encloses hexes, absorbs everyone else in them and closes them to other civs (below). |
+| 4 Organised | Boats: migration may cross up to 3 sea or lake hexes in a row (see "Migration"). |
+| 5 Kingdom | Every hex + 25% food capacity (plains and river hexes + 50% in all); old age starts 5 years later; strength × 3 in fights against civs that are not Kingdoms (see "Fights"); encloses hexes, absorbs everyone else in them and closes them to other civs (below). |
 
 - **Food capacity** of a land hex follows the highest level among the civs with people in it at the end of last year: capacity = its level-1 capacity × (1 + 0.25 if that level is 2 or more and the hex is plains or has a river, + 0.25 if that level is 5, + the biggest food bonus among the civs living there, + its settlement's food bonus) + its settlement's flat food bonus (see "Settlements": the size's bonus, Fields, Granary, Irrigation, Fishing dock). A civ's food bonus in a hex is the sum of its buildings' and wonders' food bonuses, plus their hills, mountain, desert and tundra bonus on those terrains (Granary, Colonial Office, Terraces, Hanging Gardens; see "Buildings and wonders"). An empty hex has its level-1 capacity. When a hex's capacity falls, any food above the new capacity is lost. Capacities are set once a year, in step 1.
 - **Enclosed hexes.** After levelling, a land hex with at least one land neighbour is enclosed by a Kingdom when every one of its land neighbours held people of that Kingdom at the end of last year (sea and lake neighbours do not count; the hex itself may hold anyone or nobody). Enclosed by several Kingdoms: the one with the most people (civ-wide), then the lower civ number.
@@ -395,7 +397,7 @@ Each settlement builds one building at a time, paid from its own store; each kin
 | Palisade | defence | Village | 1 | | 30 wood | 5 | defence +25% |
 | Stone walls | defence | City | 1 | | 100 stone | 15 | defence +75% |
 
-- **Progress.** A civ's civic progress bonus is the sum of the progress of its civic buildings, each kind counted in at most 5 of its settlements, and at most +50% in all. It makes every year at a level count for 1 + the bonus (see "Levelling up").
+- **Progress.** A civ's civic progress bonus is the sum of the progress of its civic buildings, each kind counted in at most 5 of its settlements, and at most +20% in all. It makes every year at a level count for 1 + the bonus (see "Levelling up").
 - **Defence** adds to the terrain's defence bonus when the civ holding the settlement fights there as the holder (see "Fights").
 - **Choosing.** A settlement with no plan and a free slot decides what to build every 5 years (in the years where hex index + year is a multiple of 5). It considers every building it may build (tier, holder's level, where, not standing yet) whose materials its civ has somewhere (in any of its stores, or as a deposit in a hex it holds), and scores each:
   - housing 3, only when its people are at least 90% of its housing;
@@ -409,7 +411,7 @@ Each settlement builds one building at a time, paid from its own store; each kin
 
 ### Supply routes
 
-After capacities, every year, each settlement that wants something looks for it in the hexes its civ holds, over land its civ holds (not across water or other civs' land), nearest first. Settlements are served biggest first (bigger tier, then more people, then by a fixed shuffle of hex and year, so no area is always first).
+After capacities, every year, each settlement that wants something looks for it in the hexes its civ holds, over land its civ holds (not across other civs' land), nearest first. A civ with rafts or boats may also carry materials across up to its boat range of sea or lake hexes in a row (see "Migration"), so its islands supply each other and its capital; each water hex counts as a step. Food is carried over land only. Settlements are served biggest first (bigger tier, then more people, then by a fixed shuffle of hex and year, so no area is always first).
 
 - **Carrying capacity.** A hex can send 0.5 goods (food and materials together) a year per person living there, × 1.5 with a Market.
 - **Materials.** A settlement with a planned building that has not started asks for what its store lacks, from hexes within its reach or within the supplier's reach (the larger of the two, in steps). A capital also asks for what its civ is saving for beyond its store (up to its cap): the era's wonder if committed and not started, the next level and the era building if not started, together, from any hex its civ holds that its land connects to the capital. A hex gives the materials in its store beyond its own planned building's cost; a capital gives nothing of what its civ is saving for (the same list). Nobody asks for more than all its civ's stores can give.
@@ -484,6 +486,7 @@ Chosen on the map-generation screen, before setup.
 | Setting | Default | Range |
 |---|---|---|
 | Seed | pangaea | any text, up to 64 characters (empty means the default) |
+| Land shape | One continent | One continent or Islands (anything else means the default) |
 | Size | 10 (10 × 10 hexes) | 10 to 100 |
 | Water amount | 25% of all hexes, edge ring included | 0% to 70%, whole percent |
 | Mountains | 12% of land hexes | 0% to 40%, whole percent |
@@ -501,12 +504,12 @@ Presets:
 |---|---|---|---|---|---|---|---|---|---|
 | Small world (the default) | pangaea | 10 | 25% | 12% | 2 | 40% | 30% | 15% | 15% |
 | Continent | continent | 30 | 20% | 12% | 6 | 40% | 30% | 15% | 15% |
-| Archipelago | islands | 30 | 60% | 8% | 2 | 40% | 30% | 15% | 15% |
+| Archipelago (land shape Islands; every other preset One continent) | islands | 30 | 60% | 8% | 2 | 40% | 30% | 15% | 15% |
 | Highlands | peaks | 20 | 15% | 30% | 5 | 40% | 30% | 15% | 15% |
 | Large world | vast | 50 | 30% | 12% | 12 | 40% | 30% | 15% | 15% |
 
 - Regenerate picks a new random seed and keeps the other settings.
-- Randomise picks a new seed, a size from 10 to 50, water 10% to 60%, mountains 5% to 30%, 0 to ⌊size ÷ 4⌋ rivers, plains 20% to 60%, forest 10% to 50%, desert 0% to 30% and tundra 0% to 30%.
+- Randomise picks a new seed, a size from 10 to 50, water 10% to 60%, mountains 5% to 30%, 0 to ⌊size ÷ 4⌋ rivers, plains 20% to 60%, forest 10% to 50%, desert 0% to 30% and tundra 0% to 30%, and Islands as the land shape with chance 25% (otherwise One continent).
 
 ## Game settings
 
