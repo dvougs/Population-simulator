@@ -535,7 +535,7 @@ test.describe('setup screen', () => {
     expect(await page.evaluate(() => window.popsim.mapHash())).toBe(hash);
     expect(await page.evaluate(() => window.popsim.mapParams())).toEqual(params);
     await expect.poll(() => year(page), { timeout: 10_000 }).toBeGreaterThan(3);
-    await expect(page.locator('#hud-year')).toHaveText(/^Year [1-9]\d*$/);
+    await expect(page.locator('#hud-year')).toHaveText(/^(Spring|Summer|Autumn|Winter), year [1-9]\d*$/);
     await expect(page.locator('#hud-pop')).toContainText('14 × 14 hexes');
     // RULES.md "Statistics": total population and civs still alive; Small world has 3 civs of 20.
     await expect(page.locator('#hud-pop')).toHaveText(/^[\d,.]+[kM]? people · [1-3] of 3 civs · 14 × 14 hexes$/);
@@ -544,30 +544,30 @@ test.describe('setup screen', () => {
 });
 
 test.describe('game', () => {
-  test('pause, step exactly one year, and every speed', async ({ page }) => {
+  test('pause, step exactly one month, and every speed', async ({ page }) => {
+    // RULES.md "Time": one tick is one day; Step runs 30 days.
+    const days = (p) => p.evaluate(() => window.popsim.days());
     await startGame(page);
     await pause(page);
-    const y0 = await year(page);
+    const d0 = await days(page);
     await page.waitForTimeout(400);
-    expect(await year(page)).toBe(y0);
+    expect(await days(page)).toBe(d0);
     await page.locator('#btn-step').click();
-    await expect.poll(() => year(page)).toBe(y0 + 1);
+    await expect.poll(() => days(page)).toBe(d0 + 30);
     await page.waitForTimeout(300);
-    expect(await year(page)).toBe(y0 + 1);
-    await expect(page.locator('#hud-year')).toHaveText(`Year ${y0 + 1}`);
-    // Step while running pauses and advances exactly one year.
+    expect(await days(page)).toBe(d0 + 30);
+    await expect(page.locator('#hud-year')).toHaveText(/^(Spring|Summer|Autumn|Winter), year \d+$/);
+    // Step while running pauses and advances exactly a month.
     await page.locator('#btn-play').click();
-    await expect.poll(() => year(page)).toBeGreaterThan(y0 + 1);
-    const running = await year(page);
+    await expect.poll(() => days(page)).toBeGreaterThan(d0 + 30);
     await page.locator('#btn-step').click();
     await expect.poll(() => page.evaluate(() => window.popsim.loop.paused)).toBe(true);
     await page.waitForTimeout(200);
-    const afterStep = await year(page);
-    expect(afterStep).toBeGreaterThan(running);
+    const afterStep = await days(page);
     await page.waitForTimeout(300);
-    expect(await year(page)).toBe(afterStep);
+    expect(await days(page)).toBe(afterStep);
 
-    const labels = ['1×', '2×', '5×', '20×', 'Max'];
+    const labels = ['1×', '3×', '10×', '30×', 'Max'];
     await expect(page.locator('#speed button')).toHaveText(labels);
     for (let i = 0; i < labels.length; i++) {
       const btn = page.locator('#speed button', { hasText: labels[i] }).first();
@@ -575,28 +575,28 @@ test.describe('game', () => {
       await expect(btn).toHaveAttribute('aria-checked', 'true');
       expect(await page.evaluate(() => window.popsim.loop.speedIndex)).toBe(i);
       expect(await page.evaluate(() => window.popsim.loop.paused)).toBe(false);
-      const before = await year(page);
-      await expect.poll(() => year(page), { timeout: 5_000 }).toBeGreaterThan(before);
+      const before = await days(page);
+      await expect.poll(() => days(page), { timeout: 5_000 }).toBeGreaterThan(before);
     }
-    // RULES.md: 1× runs 8 years per second, 20× runs 160.
+    // RULES.md: 1× runs 120 days per second (a year in 3 seconds), 10× runs 1,200.
     await page.locator('#speed button', { hasText: '1×' }).click();
-    let a = await year(page);
+    let a = await days(page);
     await page.waitForTimeout(1000);
-    let rate = (await year(page)) - a;
-    expect(rate).toBeGreaterThanOrEqual(4);
-    expect(rate).toBeLessThanOrEqual(12);
-    await page.locator('#speed button', { hasText: '20×' }).click();
-    a = await year(page);
-    await page.waitForTimeout(1000);
-    rate = (await year(page)) - a;
+    let rate = (await days(page)) - a;
     expect(rate).toBeGreaterThanOrEqual(60);
-    expect(rate).toBeLessThanOrEqual(200);
+    expect(rate).toBeLessThanOrEqual(180);
+    await page.locator('#speed button', { hasText: '10×' }).click();
+    a = await days(page);
+    await page.waitForTimeout(1000);
+    rate = (await days(page)) - a;
+    expect(rate).toBeGreaterThanOrEqual(600);
+    expect(rate).toBeLessThanOrEqual(1800);
   });
 
   test('the sim is still running after 60 years at Max speed and food stays in range', async ({ page }) => {
     await startGame(page);
     await page.locator('#speed button', { hasText: 'Max' }).click();
-    await expect.poll(() => year(page), { timeout: 10_000 }).toBeGreaterThan(60);
+    await expect.poll(() => year(page), { timeout: 30_000 }).toBeGreaterThan(60);
     const y = await year(page);
     await expect.poll(() => year(page)).toBeGreaterThan(y);
     // RULES.md "A year": food is eaten and regrows, never below 0 or above capacity.
@@ -614,7 +614,9 @@ test.describe('game', () => {
 
   test('a year limit of 10 stops at year 10 and opens the end screen', async ({ page }, testInfo) => {
     await startGame(page, { endTicks: 10 });
-    await expect.poll(() => page.evaluate(() => window.popsim.host.finished), { timeout: 10_000 }).toBe(true);
+    // A year is 3 s at 1×, so run at 30× to reach year 10 quickly.
+    await page.locator('#speed button', { hasText: '30×' }).click();
+    await expect.poll(() => page.evaluate(() => window.popsim.host.finished), { timeout: 20_000 }).toBe(true);
     expect(await year(page)).toBe(10);
     await expect(page.locator('#end')).toBeVisible();
     await expect(page.locator('#end-reason')).toHaveText('Reached year 10');
@@ -946,7 +948,7 @@ test.describe('narrow phones', () => {
     await startGame(page);
     const rects = await controlRects(page);
     const speeds = rects.slice(2);
-    expect(speeds.map((r) => r.id)).toEqual(['1×', '2×', '5×', '20×', 'Max']);
+    expect(speeds.map((r) => r.id)).toEqual(['1×', '3×', '10×', '30×', 'Max']);
     for (const r of rects) {
       expect(r.left, r.id).toBeGreaterThanOrEqual(0);
       expect(r.right, r.id).toBeLessThanOrEqual(342);

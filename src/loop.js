@@ -1,14 +1,17 @@
-// Fixed-timestep driver. The sim advances in whole ticks at BASE_TPS × speed,
-// independent of frame rate; rendering happens at most once per animation frame.
+// Fixed-timestep driver. The sim advances in whole ticks (days) at BASE_TPS ×
+// speed, independent of frame rate; rendering happens at most once per animation frame.
 
-export const BASE_TPS = 8;
+/** Days a second at 1×: a 360-day year takes 3 seconds. */
+export const BASE_TPS = 120;
 export const SPEEDS = [
   { label: '1×', mult: 1 },
-  { label: '2×', mult: 2 },
-  { label: '5×', mult: 5 },
-  { label: '20×', mult: 20 },
+  { label: '3×', mult: 3 },
+  { label: '10×', mult: 10 },
+  { label: '30×', mult: 30 },
   { label: 'Max', mult: Infinity },
 ];
+/** Days one press of Step advances: a month. */
+export const STEP_DAYS = 30;
 const MAX_FRAME_MS = 250; // ignore long gaps (tab in background)
 const TICK_BUDGET_MS = 9; // never spend more than this per frame on the sim
 
@@ -45,8 +48,8 @@ export class Loop {
     this.acc = 0;
   }
 
-  /** Advance exactly one tick on the next frame (works while paused). */
-  step() { this.pendingSteps++; }
+  /** Advance exactly n ticks (days) on the next frame (works while paused). */
+  step(n = 1) { this.pendingSteps += n; }
 
   onFrame(now) {
     if (!this.running) return;

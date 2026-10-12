@@ -1,7 +1,10 @@
 // Simulation: owns the map, the people and the clock. The only entry point the
-// UI, the headless runner and the tests use. One tick is one year: gathering
-// and levels, birthdays, eating, deaths, births, migration, food regrowth,
-// contact (fights and switching civ), then the year's stats are recorded.
+// UI, the headless runner and the tests use. One tick is one day (calendar.js):
+// on the first day of the year come gathering and levels, birthdays, eating,
+// deaths and births; each month a twelfth of the people may move; food grows
+// back at the start of each season; on the last day come contact (fights and
+// switching civ) and the year's stats. tickCount counts whole years begun, the
+// unit every yearly rule is written in; dayCount counts days.
 
 import { normalizeParams, mapParams } from './params.js';
 import { generateMap, countTerrain, hashMap, fnv } from './mapgen.js';
@@ -21,6 +24,11 @@ import {
 import { MATERIAL_COUNT, MATERIAL_IDS } from './materials.js';
 import { settlementName } from './settlements.js';
 import { TRAITS, TRAIT_COUNT, COOPERATION } from './traits.js';
+import {
+  DAYS_PER_YEAR, MONTH_DAYS, MONTHS, SEASON_DAYS, MOVE_DAY, SEASON_REGROWTH, WINTER, SEASON_NAMES,
+  winterClosedMask, seasonOf,
+} from './calendar.js';
+import { TERRAIN_COUNT } from './terrain.js';
 
 export class Simulation {
   constructor(params) {
@@ -28,6 +36,9 @@ export class Simulation {
     this.map = generateMap(this.params);
     this.terrainCounts = countTerrain(this.map);
     this.tickCount = 0;
+    this.dayCount = 0;
+    this.winterClosed = winterClosedMask(TERRAIN_COUNT);
+    this.round = { month: 0, months: MONTHS, closed: null };
     this.finished = false;
     this.endReason = null;
     /** How the run ended ('extinction', 'lastCiv', 'kingdom', 'dominance', 'years', 'player') and the winning civ, if any. */
@@ -137,7 +148,8 @@ export class Simulation {
   }
 
   /** One year of the life cycle (see RULES.md "A year"). */
-  year() {
+  /** The first day of the year: gathering and levels, birthdays, eating, deaths and births. */
+  yearStart() {
     const people = this.people;
     const { alive, age } = people;
     const lv = this.levels;
@@ -152,12 +164,49 @@ export class Simulation {
     births(people, this.map, this.rng.birth, this.hexPop, this.parents, this.onBirth, this.rng.traits, this.params.mutation, lv.birthBonus);
     if (this.dest.length < people.capacity) this.allocPersonScratch();
     this.expansionPriorities();
-    migrate(people, this.map, this.reach, this.rng.migration, this.hexPop, this.spare, this.dest, this.civHeld, this.migrationRules);
-    regrow(this.map);
-    // hexCivPop still holds last year's counts here: it decides each fight's defender.
-    this.contact.year(people, this.map, this.hexCivPop, this.tickCount, this.rng.war, this.rng.switch,
-      this.onDeath, this.onFight, this.onSwitch);
   }
+
+  /** One month's movers (people whose id mod 12 is the month) set out; in winter tundra and mountains are closed. */
+  moveRound(month, winter) {
+    const round = this.round;
+    round.month = month;
+    round.closed = winter ? this.winterClosed : null;
+    migrate(this.people, this.map, this.reach, this.rng.migration, this.hexPop, this.spare, this.dest, this.civHeld,
+      this.migrationRules, round);
+  }
+
+  /** The last day of the year: fights and switching civ, then the year's stats and the end conditions. */
+  yearEnd() {
+    // hexCivPop still holds last year's counts here: it decides each fight's defender.
+    this.contact.year(this.people, this.map, this.hexCivPop, this.tickCount, this.rng.war, this.rng.switch,
+      this.onDeath, this.onFight, this.onSwitch);
+    this.recordYear();
+    this.checkEnd();
+  }
+
+  /** Run day `doy` of the year (0 … 359). */
+  runDay(doy) {
+    if (doy === 0) { this.tickCount++; this.yearStart(); }
+    const season = seasonOf(doy);
+    if (doy % MONTH_DAYS === MOVE_DAY) this.moveRound(Math.floor(doy / MONTH_DAYS), season === WINTER);
+    if (doy % SEASON_DAYS === 0) regrow(this.map, SEASON_REGROWTH[season], season === WINTER ? this.winterClosed : null);
+    if (doy === DAYS_PER_YEAR - 1) this.yearEnd();
+  }
+
+  /** Advance n days (stops early when the end condition is met). Returns days run. */
+  days(n = 1) {
+    let ran = 0;
+    while (ran < n && !this.finished) {
+      const doy = this.dayCount % DAYS_PER_YEAR;
+      this.dayCount++;
+      ran++;
+      this.runDay(doy);
+    }
+    return ran;
+  }
+
+  /** Day of the year (0 … 359) of the last day run, or −1 before the first. */
+  get dayOfYear() { return this.dayCount === 0 ? -1 : (this.dayCount - 1) % DAYS_PER_YEAR; }
 
   /**
    * Caps civ c's land needs for levels at the land it can reach (see Levels.setReachable):
@@ -273,17 +322,19 @@ export class Simulation {
     this.records.endYear(this.tickCount, this.civPop, this.civHexes, this.hexCivPop);
   }
 
-  /** Advance n ticks (stops early when the end condition is met). Returns ticks run. */
+  /**
+   * Advance n whole years: days up to and including the last day of the n-th
+   * year to end (stops early when the end condition is met). Returns years ended.
+   * The tests and the headless runner count in years; the game runs days.
+   */
   tick(n = 1) {
-    let ran = 0;
-    while (ran < n && !this.finished) {
-      this.tickCount++;
-      ran++;
-      this.year();
-      this.recordYear();
-      this.checkEnd();
+    let years = 0;
+    while (years < n && !this.finished) {
+      const last = this.dayCount % DAYS_PER_YEAR === DAYS_PER_YEAR - 1;
+      this.days(1);
+      if (last) years++;
     }
-    return ran;
+    return years;
   }
 
   /**
@@ -340,8 +391,13 @@ export class Simulation {
   }
 
   stats() {
+    const doy = this.dayOfYear;
     return {
       tick: this.tickCount,
+      /** Day of the year (0 … 359) and its season, of the last day run (−1 and null before the first). */
+      day: doy,
+      season: doy >= 0 ? SEASON_NAMES[seasonOf(doy)] : null,
+      days: this.dayCount,
       totalPop: this.people.count,
       civs: this.civStats.summary().map((c, k) => ({
         ...c, type: this.civTypes[k], typeName: CIV_TYPE_NAMES[this.civTypes[k]], ...this.levels.summary(k),
@@ -513,7 +569,7 @@ export class Simulation {
     const m = this.map;
     const st = this.levels.settlements;
     return fnv([m.terrain, m.lake, m.river, m.riverTo, m.food, ...this.people.views(), st.store, st.built, st.tier,
-      new Uint32Array([this.tickCount])]);
+      new Uint32Array([this.tickCount, this.dayCount])]);
   }
 
   get mapParams() { return mapParams(this.params); }

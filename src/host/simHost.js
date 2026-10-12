@@ -56,9 +56,14 @@ export class LocalSimHost {
     return this.cacheMap;
   }
 
-  /** Run up to n ticks; returns how many ran. */
+  /** Run up to n whole years; returns how many ended. */
   tick(n) {
     return this.sim ? this.sim.tick(n) : 0;
+  }
+
+  /** Run up to n days (ticks); returns how many ran. */
+  days(n) {
+    return this.sim ? this.sim.days(n) : 0;
   }
 
   /** End the run now ("End now"); no winner. */

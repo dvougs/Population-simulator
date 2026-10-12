@@ -338,17 +338,24 @@ let sharedHeld = new Uint8Array(0);
  * people (before anyone moves). A hex a Kingdom encloses (rules.inside) is
  * closed to every other civ. With no such hex it stays.
  * dest: scratch Int32Array at least people.high long. held: scratch
- * Uint8Array of (civ count × map.count); without it a shared one sized for any civ id is used. Returns how many moved.
+ * Uint8Array of (civ count × map.count); without it a shared one sized for any civ id is used.
+ * round (optional, see calendar.js): { month, months, closed } — only people whose id
+ * mod months is month may set out this time, and in winter (closed[terrain] = 1) nobody
+ * leaves or enters a closed hex. Returns how many moved.
  */
-export function migrate(people, map, reach, rng, pop, spare, dest, held = null, rules = null) {
+export function migrate(people, map, reach, rng, pop, spare, dest, held = null, rules = null, round = null) {
   const n = map.count;
   if (!held) {
     if (sharedHeld.length < 256 * n) sharedHeld = new Uint8Array(256 * n);
     held = sharedHeld;
   }
   snapshot(people, map, pop, spare, held);
-  const { alive, hex, hunger, civ } = people;
+  const { alive, hex, hunger, civ, id } = people;
   const civs = rules ? rules.hungryChance.length : 0;
+  const month = round ? round.month : -1;
+  const months = round ? round.months : 1;
+  const closed = round?.closed ?? null;
+  const shut = (t) => closed !== null && closed[map.terrain[t]] === 1;
   if (rules) rules.gen++;
   const inside = rules?.inside ?? null;
   const want = rules?.want ?? null;
@@ -357,7 +364,9 @@ export function migrate(people, map, reach, rng, pop, spare, dest, held = null, 
   for (let i = 0; i < people.high; i++) {
     dest[i] = -1;
     if (!alive[i]) continue;
+    if (month >= 0 && id[i] % months !== month) continue;
     const h = hex[i];
+    if (shut(h)) continue;
     const c = civ[i];
     let chance = 0;
     if (rules) {
@@ -378,7 +387,7 @@ export function migrate(people, map, reach, rng, pop, spare, dest, held = null, 
         for (let k = offsets[h]; k < offsets[h + 1]; k++) {
           const t = targets[k];
           const s = spare[t];
-          if (s > 0 && s > own && !(inside && inside[t] >= 0 && inside[t] !== c)) {
+          if (s > 0 && s > own && !(inside && inside[t] >= 0 && inside[t] !== c) && !shut(t)) {
             total += want ? s * priority(map, held, base, t, c, n, want[c], threat[t * civs + c]) : (held[base + t] ? s * MIGRATION.ownCivWeight : s);
           }
           cum[k] = total;
@@ -402,14 +411,14 @@ export function migrate(people, map, reach, rng, pop, spare, dest, held = null, 
     for (let k = offsets[h]; k < offsets[h + 1]; k++) {
       const t = targets[k];
       const s = spare[t];
-      if (s > 0 && s > own) total += held[base + t] ? s * MIGRATION.ownCivWeight : s;
+      if (s > 0 && s > own && !shut(t)) total += held[base + t] ? s * MIGRATION.ownCivWeight : s;
     }
     if (total <= 0) continue;
     let r = rng.next() * total;
     for (let k = offsets[h]; k < offsets[h + 1]; k++) {
       const t = targets[k];
       const s = spare[t];
-      if (!(s > 0 && s > own)) continue;
+      if (!(s > 0 && s > own) || shut(t)) continue;
       r -= held[base + t] ? s * MIGRATION.ownCivWeight : s;
       dest[i] = t;
       if (r < 0) break;

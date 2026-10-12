@@ -64,7 +64,7 @@ let startParams = null;
 let flight = null;
 
 const loop = new Loop({
-  tick: (n) => host.tick(n),
+  tick: (n) => host.days(n),
   frame: (ran, now) => {
     renderer.setMoving(!loop.paused);
     if (flight) stepFlight(now);
@@ -355,7 +355,7 @@ async function resumeGame() {
 function updatePanels() {
   const stats = host.stats();
   if (!stats) return;
-  ui.year.textContent = `Year ${stats.tick}${stats.finished ? ' (ended)' : ''}`;
+  ui.year.textContent = `${stats.season ? `${stats.season}, year` : 'Year'} ${stats.tick}${stats.finished ? ' (ended)' : ''}`;
   const alive = stats.civs.filter((c) => c.pop > 0).length;
   ui.pop.textContent = `${formatNumber(stats.totalPop)} people · ${alive} of ${stats.civs.length} civs · ${map.cols} × ${map.rows} hexes`;
   renderCivStats(ui.civStats, stats);
@@ -638,6 +638,8 @@ window.popsim = {
   screen: () => screen,
   /** Current year of the running game (0 before a game starts). */
   year: () => host.tickCount,
+  /** Days run in the running game (one tick is one day). */
+  days: () => host.stats()?.days ?? 0,
   /** Map settings of the running game, or null. */
   mapParams: () => (host.params ? mapParams(host.params) : null),
   /** Hash of the running game's map, or null. */
