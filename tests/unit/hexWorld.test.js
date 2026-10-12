@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  layoutHex, inHex, HEX_R, HOMES_BY_TIER, TOWERS_BY_TIER, WALL_TIER, MAX_WALKERS, MAX_TENTS, PEOPLE_PER_TENT, NATURE,
+  layoutHex, inHex, HEX_R, HOMES_BY_TIER, TOWERS_BY_TIER, MAX_WALKERS, PLAZA_LEVEL, LAMP_LEVEL, LAMPS, MODEL_SCALE, MAX_TENTS, PEOPLE_PER_TENT, NATURE,
 } from '../../src/render3d/hexWorld.js';
 import { daylight, partOfDay, DAY_S, NIGHT_S, TWILIGHT_S } from '../../src/render3d/dayNight.js';
 
@@ -18,12 +18,12 @@ test('the same hex in the same state looks the same every visit', () => {
   assert.notDeepEqual(layoutHex(town(2)).homes, layoutHex({ ...town(2), index: 38 }).homes);
 });
 
-test('homes, towers and the wall follow the settlement tier', () => {
+test('homes and towers follow the settlement tier', () => {
   for (let tier = 0; tier < HOMES_BY_TIER.length; tier++) {
     const L = layoutHex(town(tier));
     assert.equal(L.homes.length, HOMES_BY_TIER[tier], `tier ${tier} homes`);
     assert.equal(L.towers.length, TOWERS_BY_TIER[tier], `tier ${tier} towers`);
-    assert.equal(L.wall > 0, tier >= WALL_TIER, `tier ${tier} wall`);
+    assert.equal(L.wall, 0, 'no wall without palisade or stone walls');
     assert.ok(L.homes.every((h) => h.civ === 1 && !h.tent));
   }
 });
@@ -78,12 +78,47 @@ test('windows light up at night only where people live', () => {
   assert.equal(layoutHex({ ...town(2, 0), peopleByCiv: [0, 0, 0, 0] }).lit, false);
 });
 
-test('buildings, wonders, sites and ruins stand as monuments', () => {
+test('every building and wonder here stands as its own model, none overlapping, sites by their progress', () => {
   const L = layoutHex(hexOf({
     people: 5, peopleByCiv: [5, 0, 0, 0],
-    buildings: [{ kind: 'wonder', status: 'standing', civ: 0 }, { kind: 'building', status: 'building', civ: 0 }, { kind: 'wonder', status: 'abandoned' }],
+    buildings: [{ kind: 'wonder', id: 'sunCircle', status: 'standing', civ: 0 }, { kind: 'building', id: 'forge', status: 'building', work: 20, years: 80, civ: 0 },
+      { kind: 'wonder', id: 'greatWall', status: 'abandoned', civ: -1 }],
   }));
-  assert.deepEqual(L.monuments.map((m) => m.kind), ['wonder', 'site', 'ruin']);
+  assert.deepEqual(L.structures.map((m) => m.id).sort(), ['forge', 'greatWall', 'sunCircle']);
+  assert.equal(L.structures.find((m) => m.id === 'forge').progress, 0.25);
+  assert.equal(L.structures.find((m) => m.id === 'greatWall').civ, -1);
+  assert.equal(L.structures[0].s, MODEL_SCALE);
+});
+
+test('a big city with every kind of building still stands every one of them, shrinking them if it must', () => {
+  const ids = ['granary', 'woodcutter', 'quarry', 'clayPit', 'mine', 'deepMine', 'warehouse', 'market', 'shrine', 'school', 'library', 'palace', 'irrigation'];
+  const hex = hexOf({
+    terrain: 'coast', people: 200, peopleByCiv: [0, 200, 0, 0], level: 5,
+    settlement: { tier: 5, holder: 1, name: 'X', buildings: [...ids, 'stoneWalls', 'houses', 'fishingDock'].map((id) => ({ id, status: 'standing' })) },
+    buildings: [{ kind: 'wonder', id: 'grandLibrary', status: 'standing', civ: 1 }, { kind: 'wonder', id: 'hangingGardens', status: 'standing', civ: 1 },
+      { kind: 'building', id: 'citadel', status: 'standing', civ: 1 }, { kind: 'building', id: 'senate', status: 'building', work: 5, years: 120, civ: 1 }],
+  });
+  const L = layoutHex(hex);
+  assert.deepEqual(L.structures.map((m) => m.id).sort(), [...ids, 'citadel', 'grandLibrary', 'hangingGardens', 'senate'].sort());
+  assert.ok(L.dock);
+  assert.equal(L.wallKind, 'stone');
+  assert.ok(L.wall > 0);
+  const all = L.structures;
+  for (let a = 0; a < all.length; a++) {
+    assert.ok(inHex(all[a].x, all[a].z, HEX_R - all[a].r), `${all[a].id} inside`);
+    for (let b = a + 1; b < all.length; b++) assert.ok(Math.hypot(all[a].x - all[b].x, all[a].z - all[b].z) >= all[a].r + all[b].r - 1e-9, `${all[a].id} / ${all[b].id}`);
+  }
+});
+
+test('the look follows the civ level: a square from level 3, lamps from level 4; palisade or stone walls ring it', () => {
+  const at = (level, walls) => layoutHex({ ...town(2), level, settlement: { tier: 2, holder: 1, name: 'X', buildings: walls ? [{ id: walls, status: 'standing' }] : [] } });
+  assert.equal(at(2).plaza, 0);
+  assert.ok(at(PLAZA_LEVEL).plaza > 0);
+  assert.equal(at(PLAZA_LEVEL).lamps.length, 0);
+  assert.equal(at(LAMP_LEVEL).lamps.length, LAMPS);
+  assert.equal(at(2, 'palisade').wallKind, 'wood');
+  assert.equal(at(2, 'stoneWalls').wallKind, 'stone');
+  assert.equal(at(2).wallKind, null);
 });
 
 test('a day and a night last 30 seconds each, with smooth dusk and dawn', () => {

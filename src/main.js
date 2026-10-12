@@ -336,12 +336,46 @@ async function enterHex(index) {
   const doy = host.dayOfYear();
   const season = doy >= 0 ? `${SEASON_NAMES[seasonOf(doy)].toLowerCase()} ` : '';
   hexView.onPart = (part) => { $('hex-view-time').textContent = `${season}${part}`; };
+  fillHexBuildings(hex);
   const ok = await hexView.enter(hex, host.hexPeople(col, row, 48)?.people ?? [], renderer3d.clock(), seasonLook(host.dayOfYear()));
   if (!ok) { showToast('This browser cannot draw the inside of a hex.'); leaveHex(); return; }
   requestAnimationFrame(() => el.classList.add('shown'));
   $('btn-hex-leave').focus({ preventScroll: true });
 }
 
+
+const KIND_NAMES = { housing: 'Housing', food: 'Food', industry: 'Industry', trade: 'Trade', civic: 'Civic', defence: 'Defence' };
+
+/** The city view's list of every building and wonder in the hex; tapping one turns the view to it. */
+function fillHexBuildings(hex) {
+  const box = $('hex-buildings'); const list = $('hex-buildings-list');
+  const items = [
+    ...(hex.buildings ?? []).map((b) => ({ ...b, note: `${b.kind === 'wonder' ? 'Wonder' : `Civ ${b.civ + 1}'s building`}, era ${b.era}` })),
+    ...(hex.settlement?.buildings ?? []).map((b) => ({ ...b, note: KIND_NAMES[b.kind] ?? b.kind })),
+  ];
+  list.replaceChildren();
+  box.hidden = items.length === 0;
+  box.open = items.length > 0 && items.length <= 4;
+  $('hex-buildings-title').textContent = `Buildings (${items.length})`;
+  for (const b of items) {
+    const status = b.status === 'building' ? `being built, ${Math.floor((100 * (b.work ?? 0)) / Math.max(1, b.years ?? 1))}%`
+      : b.status === 'planned' ? 'planned' : b.status === 'abandoned' ? 'abandoned' : '';
+    const li = document.createElement('li');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.innerHTML = '<span class="b-name"></span><span class="b-note"></span>';
+    btn.firstChild.textContent = b.name;
+    btn.lastChild.textContent = status ? `${b.note} · ${status}` : b.note;
+    btn.addEventListener('click', () => {
+      const on = btn.getAttribute('aria-pressed') === 'true';
+      for (const other of list.querySelectorAll('button')) other.setAttribute('aria-pressed', 'false');
+      if (!on && hexView.focus(b.id, b.kind)) btn.setAttribute('aria-pressed', 'true');
+      else hexView.focus(null);
+    });
+    li.append(btn);
+    list.append(li);
+  }
+}
 
 function leaveHex() {
   if (!inside) return;

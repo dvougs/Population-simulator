@@ -333,6 +333,13 @@ test.describe('3D graphics flag', () => {
     await expect.poll(() => page.evaluate(() => window.popsim.insideHex()?.index)).toBe(hex.index);
     await expect(page.locator('#hex-view-time')).toHaveText(/^(spring|summer|autumn|winter) (dawn|day|dusk|night)$/i);
     expect(await page.evaluate(() => window.popsim.loop.paused)).toBe(true);
+    // The city view lists every building and wonder in the hex (none: no list).
+    const listed = await page.evaluate(({ c, r }) => {
+      const h = window.popsim.hex(c, r);
+      return (h.buildings?.length ?? 0) + (h.settlement?.buildings?.length ?? 0);
+    }, hex);
+    if (listed === 0) await expect(page.locator('#hex-buildings')).toBeHidden();
+    else await expect(page.locator('#hex-buildings-list button')).toHaveCount(listed);
     await shot(page, testInfo, 'inside-hex');
     await page.locator('#btn-hex-leave').click();
     await expect(page.locator('#hex-view')).toBeHidden();

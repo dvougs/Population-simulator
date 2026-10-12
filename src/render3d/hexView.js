@@ -19,6 +19,8 @@ import { TERRAIN_RGB, RIVER_RGB, LAKE_RGB, rgbToHex } from '../render/palette.js
 import { civStyle } from '../render/civStyle.js';
 import { TERRAIN_IDS } from '../sim/terrain.js';
 import { seasonRgb, SNOW_RGB, AUTUMN_RGB, SPRING_RGB } from './seasons.js';
+import { modelOf, SETTLEMENT_MODELS } from './buildingModels.js';
+import { shapeGeometries, buildModel } from './modelMeshes.js';
 
 const ENTER_MS = 1600;
 const SOFT_FRAME_MS = 250;
@@ -27,7 +29,14 @@ const PITCH = 0.72; // radians above the ground, once in
 const SKY_DAY = 0x9fcfff; const SKY_NIGHT = 0x0a1328;
 const STONE = 0xe9dfcb; const WOOD = 0x7a5232; const GOLD = 0xf2c14e;
 const WINDOW = 0xffc46b;
-const MUD = 0xa58660; const THATCH = 0xb08a4e; const FLAME = 0xff8a2a;
+const MUD = 0xa58660; const THATCH = 0xb08a4e; const FLAME = 0xff8a2a; const PAVING = 0xb9b2a4;
+/** How homes look by civ level (level 1 has huts). */
+const HOME_STYLES = {
+  2: { wall: 0xb08a63, roof: THATCH, storeys: 1, ridge: false },
+  3: { wall: STONE, roof: 'civ', storeys: 1, ridge: false },
+  4: { wall: STONE, roof: 'civ', storeys: 2, ridge: false },
+  5: { wall: 0xf6efe0, roof: 'civ', storeys: 2, ridge: true },
+};
 const SMOKE = 14; const SPARKS = 18;
 
 const easeOut = (t) => (t >= 1 ? 1 : 1 - (1 - t) ** 3);
@@ -83,6 +92,7 @@ export class HexView {
     this.t0 = performance.now();
     this.clock0 = clock;
     this.yaw = 0.5; this.dist = DIST; this.zoomed = false;
+    this.aim = { x: 0, z: 0 }; this.aimTo = { x: 0, z: 0 };
     this.resize();
     this.kick();
     return true;
@@ -210,16 +220,22 @@ export class HexView {
       scene.add(g);
       this.fire = { flame, core, light };
     }
-    const walls = inst(new T.BoxGeometry(0.9, 0.7, 0.8).translate(0, 0.35, 0), mat(STONE), homes.length);
+    // Homes change with the civ's level: mud brick under thatch (Farmers), stone under tiles in the civ's colour (Builders),
+    // two storeys (Organised), tall white townhouses with gold-ridged roofs (Kingdom).
+    const style = HOME_STYLES[Math.max(2, Math.min(5, L.level))];
+    const walls = inst(new T.BoxGeometry(0.9, 0.7, 0.8).translate(0, 0.35, 0), mat(style.wall), homes.length);
     const roofs = inst(new T.ConeGeometry(0.78, 0.6, 4).rotateY(Math.PI / 4).translate(0, 0.3, 0), mat(0xffffff), homes.length);
-    const windows = inst(new T.BoxGeometry(0.22, 0.2, 0.04), new T.MeshBasicMaterial({ color: WINDOW, transparent: true, opacity: 0 }), homes.length, false);
+    const windows = inst(new T.BoxGeometry(0.22, 0.2, 0.04), new T.MeshBasicMaterial({ color: WINDOW, transparent: true, opacity: 0 }), homes.length * style.storeys, false);
+    const ridges = style.ridge ? inst(new T.BoxGeometry(0.1, 0.1, 0.1), mat(GOLD), homes.length, false) : null;
     homes.forEach((h, k) => {
-      put(walls, k, h.x, 0, h.z, h.s, h.s, h.s, h.rot);
-      put(roofs, k, h.x, 0.7 * h.s, h.z, h.s, h.s, h.s, h.rot);
-      roofs.setColorAt(k, c.setHex(civHex(h.civ)));
-      // A window on the front wall.
+      const tall = style.storeys;
+      put(walls, k, h.x, 0, h.z, h.s, h.s * tall, h.s, h.rot);
+      put(roofs, k, h.x, 0.7 * h.s * tall, h.z, h.s, h.s, h.s, h.rot);
+      roofs.setColorAt(k, c.setHex(style.roof === 'civ' ? civHex(h.civ) : mixHex(style.roof, civHex(h.civ), 0.25)));
+      if (ridges) put(ridges, k, h.x, (0.7 * tall + 0.6) * h.s, h.z, h.s, h.s, h.s, h.rot);
+      // A window on the front wall, one per storey.
       const fx = Math.sin(h.rot) * 0.41 * h.s; const fz = Math.cos(h.rot) * 0.41 * h.s;
-      put(windows, k, h.x + fx, 0.38 * h.s, h.z + fz, h.s, h.s, h.s, h.rot);
+      for (let f = 0; f < tall; f++) put(windows, k * tall + f, h.x + fx, (0.38 + 0.7 * f) * h.s, h.z + fz, h.s, h.s, h.s, h.rot);
     });
     const tentMesh = inst(new T.ConeGeometry(0.6, 0.9, 6).translate(0, 0.45, 0), mat(0xffffff), tents.length);
     tents.forEach((h, k) => { put(tentMesh, k, h.x, 0, h.z, h.s, h.s, h.s, h.rot); tentMesh.setColorAt(k, c.setHex(civHex(h.civ))); });
@@ -236,7 +252,17 @@ export class HexView {
       put(towerLights, k, t.x, t.h * 0.7, t.z, 1, 1, 1);
     });
     this.towerLights = towerLights;
-    if (L.wall > 0) {
+    if (L.wall > 0 && L.wallKind === 'wood') {
+      // A palisade of sharpened stakes.
+      const n = Math.round(L.wall * 9);
+      const stakes = inst(new T.CylinderGeometry(0.11, 0.13, 1.1, 5).translate(0, 0.55, 0), mat(WOOD), n);
+      const tips = inst(new T.ConeGeometry(0.12, 0.25, 5).translate(0, 0.125, 0), mat(WOOD), n);
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * Math.PI * 2;
+        put(stakes, k, L.wall * Math.cos(a), 0, L.wall * Math.sin(a), 1, 0.85 + 0.3 * ((k * 7) % 5) / 4, 1);
+        put(tips, k, L.wall * Math.cos(a), 1.1 * (0.85 + 0.3 * ((k * 7) % 5) / 4), L.wall * Math.sin(a), 1, 1, 1);
+      }
+    } else if (L.wall > 0) {
       const segs = 36;
       const wall = inst(new T.BoxGeometry(1, 0.9, 0.3).translate(0, 0.45, 0), mat(0xcfc3a8), segs);
       for (let k = 0; k < segs; k++) {
@@ -246,39 +272,40 @@ export class HexView {
       }
     }
 
-    // Monuments: a wonder is a stepped pyramid with a gold top, a building a hall, a site its scaffold, a ruin grey and broken.
-    for (const m of L.monuments) {
-      const g = new T.Group();
-      g.position.set(m.x, 0, m.z);
-      if (m.kind === 'wonder' || m.kind === 'ruin') {
-        const sizes = [2.6, 1.9, 1.2, 0.6];
-        let y = 0;
-        sizes.forEach((s, k) => {
-          const last = k === sizes.length - 1;
-          if (m.kind === 'ruin' && last) return;
-          const step = new T.Mesh(new T.BoxGeometry(s, 0.55, s).translate(0, 0.275, 0), mat(m.kind === 'ruin' ? 0x8f897e : last ? GOLD : STONE));
-          step.position.y = y; step.rotation.y = m.kind === 'ruin' ? k * 0.12 : 0;
-          step.castShadow = shadows; step.receiveShadow = shadows;
-          g.add(step);
-          y += 0.55;
-        });
-      } else if (m.kind === 'building') {
-        const hall = new T.Mesh(new T.BoxGeometry(1.5, 0.9, 1.1).translate(0, 0.45, 0), mat(STONE));
-        const roof = new T.Mesh(new T.ConeGeometry(1.15, 0.7, 4).rotateY(Math.PI / 4).translate(0, 0.35, 0), mat(civHex(m.civ)));
-        roof.position.y = 0.9; roof.scale.set(1.05, 1, 0.8);
-        for (const x of [-0.55, 0, 0.55]) {
-          const col = new T.Mesh(new T.CylinderGeometry(0.07, 0.07, 0.9, 6).translate(0, 0.45, 0), mat(0xf6efe0));
-          col.position.set(x, 0, 0.62);
-          g.add(col);
-        }
-        for (const mesh of [hall, roof]) { mesh.castShadow = shadows; mesh.receiveShadow = shadows; g.add(mesh); }
-      } else {
-        const frame = new T.Mesh(new T.BoxGeometry(1.4, 1.2, 1.4).translate(0, 0.6, 0), new T.MeshBasicMaterial({ color: WOOD, wireframe: true }));
-        const floor = new T.Mesh(new T.BoxGeometry(1.4, 0.2, 1.4).translate(0, 0.1, 0), mat(STONE));
-        g.add(frame, floor);
-      }
+    // Every building and wonder here, each as its own model (buildingModels.js); a site rises with its work under scaffolding, a ruin stands grey.
+    this.geo ??= shapeGeometries(T);
+    for (const m of L.structures) {
+      const g = buildModel(T, this.geo, modelOf(m), { civHex: civHex(m.civ), status: m.status, progress: m.progress, scale: m.s, shadows });
+      g.position.set(m.x, 0, m.z); g.rotation.y = m.ry;
       scene.add(g);
     }
+    if (L.dock) {
+      const g = buildModel(T, this.geo, SETTLEMENT_MODELS.fishingDock, { civHex: civHex(L.homes[0]?.civ ?? -1), status: L.dock.status, scale: 1.2, shadows });
+      g.position.set(L.dock.x, 0, L.dock.z);
+      scene.add(g);
+    }
+    // From level 3 a paved square in the middle, a well at its heart; from level 4 lamps round it, and at level 5 banners and a gilded statue.
+    if (L.plaza > 0) {
+      const sq = add(new T.Mesh(new T.CylinderGeometry(L.plaza, L.plaza, 0.06, 8), mat(PAVING)));
+      sq.position.y = 0.03;
+      add(new T.Mesh(new T.CylinderGeometry(0.45, 0.5, 0.45, 8).translate(0, 0.225, 0), mat(STONE)));
+      if (L.level >= 5) {
+        add(new T.Mesh(new T.BoxGeometry(0.5, 0.6, 0.5).translate(0, 0.75, 0), mat(STONE)));
+        add(new T.Mesh(new T.CylinderGeometry(0.12, 0.18, 0.9, 6).translate(0, 1.5, 0), mat(GOLD)));
+      } else {
+        const water = new T.Mesh(new T.CylinderGeometry(0.35, 0.35, 0.02, 8), mat(0x3d7fbf));
+        water.position.y = 0.46; scene.add(water);
+      }
+    }
+    const lamps = inst(new T.CylinderGeometry(0.04, 0.05, 1.4, 5).translate(0, 0.7, 0), mat(0x3b3229), L.lamps.length);
+    const lampHeads = inst(new T.OctahedronGeometry(0.14, 0), new T.MeshBasicMaterial({ color: WINDOW, transparent: true, opacity: 0 }), L.lamps.length, false);
+    const flags = L.level >= 5 ? inst(new T.BoxGeometry(0.45, 0.3, 0.02), mat(0xffffff), L.lamps.length, false) : null;
+    L.lamps.forEach((l, k) => {
+      put(lamps, k, l.x, 0, l.z, 1, 1, 1);
+      put(lampHeads, k, l.x, 1.45, l.z, 1, 1, 1);
+      if (flags) { put(flags, k, l.x + 0.24, 1.1, l.z, 1, 1, 1, Math.atan2(l.x, l.z)); flags.setColorAt(k, c.setHex(civHex(L.homes[0]?.civ ?? -1))); }
+    });
+    this.lampHeads = lampHeads;
 
     // Nature: one instanced mesh per kind, swaying on its own.
     const kinds = {
@@ -394,6 +421,7 @@ export class HexView {
     const glow = this.layout.lit ? 1 - day : 0;
     this.windows.material.opacity = glow;
     this.towerLights.material.opacity = glow;
+    this.lampHeads.material.opacity = glow;
     // Foragers have no lamps in windows: their light is the bonfire, burning all day and brightest at night.
     this.lamp.intensity = this.fire ? 0 : 30 * glow * (this.layout.homes.length > 0 ? 1 : 0.3);
     if (this.fire) {
@@ -438,8 +466,12 @@ export class HexView {
     const dist = this.dist + (1 - u) * 50;
     const pitch = PITCH + (1 - u) * 0.75;
     const cam = this.camera;
-    cam.position.set(Math.sin(this.yaw) * Math.cos(pitch) * dist, Math.sin(pitch) * dist, Math.cos(this.yaw) * Math.cos(pitch) * dist);
-    cam.lookAt(0, 0.6, 0);
+    // The view glides to whatever it is aimed at (a building picked from the list).
+    const k = this.reduced ? 1 : 0.08;
+    this.aim.x += (this.aimTo.x - this.aim.x) * k; this.aim.z += (this.aimTo.z - this.aim.z) * k;
+    const { x: ax, z: az } = this.aim;
+    cam.position.set(ax + Math.sin(this.yaw) * Math.cos(pitch) * dist, Math.sin(pitch) * dist, az + Math.cos(this.yaw) * Math.cos(pitch) * dist);
+    cam.lookAt(ax, 0.6, az);
     this.place(s);
     this.daylight = this.light(this.clock);
     this.renderer.render(this.scene, cam);
@@ -466,6 +498,22 @@ export class HexView {
     el.addEventListener('pointerup', up);
     el.addEventListener('pointercancel', up);
     el.addEventListener('wheel', (e) => { e.preventDefault(); this.zoom(e.deltaY > 0 ? 1.1 : 1 / 1.1); }, { passive: false });
+  }
+
+  /**
+   * Aim the view at the building or wonder `id` of kind `kind` here (as SimHost.inspect lists it) and close in;
+   * with no id, back to the whole hex. Returns whether it is drawn here.
+   */
+  focus(id = null, kind = null) {
+    if (!this.layout) return false;
+    if (!id) { this.aimTo = { x: 0, z: 0 }; this.zoomed = false; this.resize(); return true; }
+    const L = this.layout;
+    const m = id === 'fishingDock' ? L.dock : L.structures.find((st) => st.id === id && (!kind || st.kind === kind));
+    if (!m) return false;
+    this.aimTo = { x: m.x, z: m.z };
+    this.zoomed = true;
+    this.dist = Math.max(MIN_DIST, Math.min(DIST, 6 + (m.r ?? 1.5) * 3));
+    return true;
   }
 
   zoom(f) { this.zoomed = true; this.dist = Math.min(MAX_DIST, Math.max(MIN_DIST, this.dist * f)); }

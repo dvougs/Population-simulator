@@ -530,6 +530,17 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 6px 
 .hex-view-title strong { font-size: 18px; }
 .hex-view-title span { font-size: 14px; opacity: 0.85; }
 .hex-view-time { font-size: 14px; padding: 6px 10px; border-radius: 999px; background: rgba(5, 10, 20, 0.55); text-transform: capitalize; }
+.hex-buildings { position: absolute; left: calc(10px + env(safe-area-inset-left)); bottom: calc(10px + env(safe-area-inset-bottom));
+  max-width: min(340px, calc(100% - 20px)); max-height: 48%; overflow-y: auto; color: #fff; border-radius: 14px;
+  background: rgba(5, 10, 20, 0.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.hex-buildings summary { min-height: 44px; display: flex; align-items: center; padding: 0 14px; font-size: 15px; font-weight: 650; cursor: pointer; }
+.hex-buildings ul { list-style: none; margin: 0; padding: 0 6px 6px; }
+.hex-buildings li button { width: 100%; min-height: 44px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px;
+  padding: 6px 8px; border: 0; border-radius: 10px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.hex-buildings li button:hover, .hex-buildings li button[aria-pressed="true"] { background: rgba(95, 179, 255, 0.18); }
+.hex-buildings li button:disabled { cursor: default; }
+.hex-buildings .b-name { font-size: 15px; font-weight: 600; }
+.hex-buildings .b-note { font-size: 13px; opacity: 0.75; }
 .enter-hex { width: 100%; margin-top: 8px; }
 .enter-hex[hidden] { display: none; }
 
