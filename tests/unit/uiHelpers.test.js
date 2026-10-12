@@ -48,7 +48,7 @@ test('How to play text: has the sections in the RULES.md order and every number 
   assert.deepEqual(t.sections.map((s) => s.id), ['map', 'people', 'year', 'migration', 'civs', 'traits', 'types', 'contact', 'levels', 'end', 'controls']);
   const text = all();
   for (const must of [
-    'from 10 × 10 up to 100 × 100', 'regrows 50%', '+30 food',
+    'from 10 × 10 up to 50 × 50', 'regrows 50%', '+30 food',
     'costs 1 movement point', 'desert or tundra 1.5', 'forest or hills 2', 'mountain 3', '+25% in forest, +50% in hills and +100% in mountain',
     'health from 0 to 100', 'they gain 25 health', 'they lose about 35', 'Between 16 and 40', 'about a 5% chance', 'From about 45', 'past about 85',
     '8 years every second', '2×, 5×, 20× or Max',

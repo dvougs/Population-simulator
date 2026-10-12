@@ -330,7 +330,7 @@ test.describe('map generation screen', () => {
     await expect(page.locator('#m-rivers')).toHaveValue('2');
     expect(await previewParams(page)).toEqual(PRESETS.default);
     // RULES.md ranges.
-    for (const [id, min, max] of [['m-size', 10, 100], ['m-water', 0, 70], ['m-mountains', 0, 40], ['m-rivers', 0, 20]]) {
+    for (const [id, min, max] of [['m-size', 10, 50], ['m-water', 0, 70], ['m-mountains', 0, 40], ['m-rivers', 0, 20]]) {
       await expect(page.locator(`#${id}`)).toHaveAttribute('min', String(min));
       await expect(page.locator(`#${id}`)).toHaveAttribute('max', String(max));
     }
@@ -663,6 +663,52 @@ test.describe('game', () => {
     expect(refit.scale).toBeCloseTo(fitted.scale, 5);
     expect(refit.x).toBeCloseTo(fitted.x, 3);
     expect(refit.y).toBeCloseTo(fitted.y, 3);
+  });
+
+  test('arrow keys move the view the way they point, and + and − zoom', async ({ page }) => {
+    // RULES.md "How civs and people look", Moving the map.
+    await startGame(page);
+    await page.evaluate(() => window.popsim.loop.setPaused(true));
+    // Zoom in first so the map has room to move in every direction.
+    const fit = await camera(page);
+    await page.keyboard.down('+');
+    await expect.poll(async () => (await camera(page)).scale).toBeGreaterThan(fit.scale * 1.5);
+    await page.keyboard.up('+');
+    const c0 = await camera(page);
+    await page.keyboard.down('ArrowRight');
+    await page.waitForTimeout(300);
+    await page.keyboard.up('ArrowRight');
+    const c1 = await camera(page);
+    expect(c1.x).toBeLessThan(c0.x - 20); // the view went right: the map moved left
+    expect(Math.abs(c1.y - c0.y)).toBeLessThan(1);
+    await page.keyboard.down('ArrowUp');
+    await page.waitForTimeout(300);
+    await page.keyboard.up('ArrowUp');
+    const c2 = await camera(page);
+    expect(c2.y).toBeGreaterThan(c1.y + 20);
+    // Released keys stop the map.
+    await page.waitForTimeout(200);
+    expect(await camera(page)).toEqual(await camera(page));
+    const c3 = await camera(page);
+    await page.waitForTimeout(200);
+    expect((await camera(page)).x).toBe(c3.x);
+    await page.keyboard.down('-');
+    await expect.poll(async () => (await camera(page)).scale).toBeLessThan(c3.scale / 1.5);
+    await page.keyboard.up('-');
+  });
+
+  test('arrow keys do nothing outside the map, and leave the setup fields alone', async ({ page }) => {
+    await page.locator('#m-seed').focus();
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.locator('#mapgen')).toBeVisible();
+    await startGame(page);
+    const before = await camera(page);
+    await page.locator('#btn-setup').click();
+    await page.keyboard.down('ArrowRight');
+    await page.waitForTimeout(250);
+    await page.keyboard.up('ArrowRight');
+    await page.locator('#btn-resume').click();
+    expect((await camera(page)).x).toBe(before.x);
   });
 
   test('two-finger pinch zooms and one-finger touch drag pans', async ({ page }, testInfo) => {

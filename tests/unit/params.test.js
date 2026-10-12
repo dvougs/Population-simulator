@@ -22,7 +22,7 @@ test('defaults match RULES.md "Map settings" and "Game settings"', () => {
 });
 
 test('ranges match RULES.md', () => {
-  assert.deepEqual(LIMITS.size, { min: 10, max: 100 });
+  assert.deepEqual(LIMITS.size, { min: 10, max: 50 });
   assert.deepEqual(LIMITS.water, { min: 0, max: 0.7 });
   assert.deepEqual(LIMITS.mountains, { min: 0, max: 0.4 });
   assert.deepEqual(LIMITS.rivers, { min: 0, max: 20 });
@@ -40,16 +40,15 @@ test('ranges match RULES.md', () => {
   assert.deepEqual(LOWLAND_KEYS, ['plains', 'forest', 'desert', 'tundra']);
 });
 
-test('size: 10 to 100, clamped on both sides, rounded to whole hexes', () => {
+test('size: 10 to 50, clamped on both sides, rounded to whole hexes', () => {
   const s = (v) => normalizeParams({ size: v }).size;
   assert.equal(s(9), 10);
   assert.equal(s(10), 10);
   assert.equal(s(11), 11);
   assert.equal(s(49), 49);
   assert.equal(s(50), 50);
-  assert.equal(s(51), 51);
-  assert.equal(s(100), 100);
-  assert.equal(s(101), 100);
+  assert.equal(s(51), 50);
+  assert.equal(s(100), 50);
   assert.equal(s(-100), 10);
   assert.equal(s(24.6), 25);
   assert.equal(s('30'), 30);
