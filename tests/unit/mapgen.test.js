@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generateMap, hashMap, countTerrain, createMap, GEN } from '../../src/sim/mapgen.js';
+import { generateMap, hashMap, countTerrain, createMap, GEN, islandGrid } from '../../src/sim/mapgen.js';
 import { presetParams, PRESETS, normalizeParams, MAP_KEYS, LOWLAND_KEYS } from '../../src/sim/params.js';
 import {
   DEEP_WATER, COAST, PLAINS, FOREST, HILLS, MOUNTAIN, DESERT, TUNDRA, TERRAIN_COUNT,
   FOOD_CAPACITY, RIVER_FOOD_BONUS,
 } from '../../src/sim/terrain.js';
+import { buildStepReach, landPieces } from '../../src/sim/migration.js';
 
 // A spread of settings: defaults, every preset and some boundary values.
 const CASES = [
@@ -91,8 +92,8 @@ test('same settings give the same map (same hash); different seed gives a differ
   }
 });
 
-test('the map depends only on the nine map settings', () => {
-  assert.deepEqual(MAP_KEYS, ['seed', 'size', 'water', 'mountains', 'rivers', 'plains', 'forest', 'desert', 'tundra']);
+test('the map depends only on the ten map settings', () => {
+  assert.deepEqual(MAP_KEYS, ['seed', 'size', 'water', 'mountains', 'rivers', 'plains', 'forest', 'desert', 'tundra', 'landShape']);
   const a = generateMap({ seed: 'only', size: 15, endCondition: 'ticks', endTicks: 20 });
   const b = generateMap({ seed: 'only', size: 15 });
   assert.equal(hashMap(a), hashMap(b));
@@ -385,4 +386,30 @@ test('elevation is drawing data only: hashMap ignores it', () => {
   const h = hashMap(map);
   map.elevation.fill(0.5);
   assert.equal(hashMap(map), h);
+});
+
+// ---- land shape ---------------------------------------------------------------------------------
+
+test('RULES.md "Elevation": One continent maps are unchanged by the land shape setting (hashes from before it existed)', () => {
+  const pinned = { default: '181c695a', continent: '1ab9ba73', highlands: '47d027ac', large: 'fcafc938' };
+  for (const [k, h] of Object.entries(pinned)) assert.equal(hashMap(generateMap(presetParams(k))), h, k);
+});
+
+test('RULES.md "Elevation": Islands numbers, and an islands map is a scatter of islands that boats join', () => {
+  assert.deepEqual([GEN.islandJitter, GEN.islandRadius, GEN.islandNoise], [0.3, 0.55, 0.4]);
+  assert.deepEqual([10, 15, 30, 50, 100].map(islandGrid), [2, 3, 4, 5, 8]);
+  const p = presetParams('archipelago');
+  assert.equal(p.landShape, 'islands');
+  const islands = generateMap(p);
+  assert.notEqual(hashMap(islands), hashMap(generateMap({ ...p, landShape: 'continent' })));
+  assert.equal(hashMap(islands), hashMap(generateMap(p)), 'same settings, same islands');
+  const pieces = (r) => {
+    const lp = landPieces(islands, buildStepReach(islands, r));
+    return lp.size.slice().sort((a, b) => b - a);
+  };
+  const walk = pieces(0);
+  const land = walk.reduce((a, b) => a + b, 0);
+  assert.ok(walk.filter((s) => s >= 5).length >= 5, `several islands: ${walk}`);
+  assert.ok(walk[0] < 0.5 * land, 'no island holds half the land');
+  assert.ok(pieces(3)[0] >= 0.8 * land, 'boats join most of it');
 });

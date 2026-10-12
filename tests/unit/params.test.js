@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  normalizeParams, presetParams, randomParams, mapParams, PRESETS, DEFAULT_PARAMS, LIMITS, MAP_KEYS, LOWLAND_KEYS,
+  normalizeParams, presetParams, randomParams, mapParams, PRESETS, DEFAULT_PARAMS, LIMITS, MAP_KEYS, LOWLAND_KEYS, LAND_SHAPES,
   END_CONDITIONS,
 } from '../../src/sim/params.js';
 
@@ -13,7 +13,7 @@ function lcg(seed) {
 test('defaults match RULES.md "Map settings" and "Game settings"', () => {
   assert.deepEqual({ ...DEFAULT_PARAMS }, {
     seed: 'pangaea', size: 10, water: 0.25, mountains: 0.12, rivers: 2,
-    plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15, civCount: 3, civTypes: ['expansionist', 'aggressive', 'cooperative'], startPop: 20, mutation: 0.03,
+    plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15, landShape: 'continent', civCount: 3, civTypes: ['expansionist', 'aggressive', 'cooperative'], startPop: 20, mutation: 0.03,
     endConditions: [], endTicks: 2500, dominanceShare: 0.6, dominanceYears: 300, starts: [],
   });
   assert.deepEqual(normalizeParams(), { ...DEFAULT_PARAMS });
@@ -35,7 +35,8 @@ test('ranges match RULES.md', () => {
   assert.deepEqual(LIMITS.mutation, { min: 0, max: 0.1 });
   assert.deepEqual(LIMITS.dominanceShare, { min: 0.25, max: 1 });
   assert.deepEqual(LIMITS.dominanceYears, { min: 10, max: 10000 });
-  assert.deepEqual(MAP_KEYS, ['seed', 'size', 'water', 'mountains', 'rivers', 'plains', 'forest', 'desert', 'tundra']);
+  assert.deepEqual(MAP_KEYS, ['seed', 'size', 'water', 'mountains', 'rivers', 'plains', 'forest', 'desert', 'tundra', 'landShape']);
+  assert.deepEqual(LAND_SHAPES, ['continent', 'islands']);
   assert.deepEqual(LOWLAND_KEYS, ['plains', 'forest', 'desert', 'tundra']);
 });
 
@@ -179,31 +180,33 @@ test('normalizeParams is idempotent and drops unknown keys', () => {
 
 test('presets match RULES.md', () => {
   const expected = {
-    default: ['Small world', 'pangaea', 10, 0.25, 0.12, 2, 0.4, 0.3, 0.15, 0.15],
-    continent: ['Continent', 'continent', 30, 0.2, 0.12, 6, 0.4, 0.3, 0.15, 0.15],
-    archipelago: ['Archipelago', 'islands', 30, 0.6, 0.08, 2, 0.4, 0.3, 0.15, 0.15],
-    highlands: ['Highlands', 'peaks', 20, 0.15, 0.3, 5, 0.4, 0.3, 0.15, 0.15],
-    large: ['Large world', 'vast', 50, 0.3, 0.12, 12, 0.4, 0.3, 0.15, 0.15],
+    default: ['Small world', 'pangaea', 10, 0.25, 0.12, 2, 0.4, 0.3, 0.15, 0.15, 'continent'],
+    continent: ['Continent', 'continent', 30, 0.2, 0.12, 6, 0.4, 0.3, 0.15, 0.15, 'continent'],
+    archipelago: ['Archipelago', 'islands', 30, 0.6, 0.08, 2, 0.4, 0.3, 0.15, 0.15, 'islands'],
+    highlands: ['Highlands', 'peaks', 20, 0.15, 0.3, 5, 0.4, 0.3, 0.15, 0.15, 'continent'],
+    large: ['Large world', 'vast', 50, 0.3, 0.12, 12, 0.4, 0.3, 0.15, 0.15, 'continent'],
   };
   assert.deepEqual(Object.keys(PRESETS).sort(), Object.keys(expected).sort());
-  for (const [key, [label, seed, size, water, mountains, rivers, plains, forest, desert, tundra]] of Object.entries(expected)) {
+  for (const [key, [label, seed, size, water, mountains, rivers, plains, forest, desert, tundra, landShape]] of Object.entries(expected)) {
     assert.equal(PRESETS[key].label, label);
     const p = presetParams(key);
-    assert.deepEqual(mapParams(p), { seed, size, water, mountains, rivers, plains, forest, desert, tundra }, key);
-    // Non-default presets list every map setting themselves.
-    if (key !== 'default') for (const k of MAP_KEYS) assert.ok(k in PRESETS[key].params, `${key} lists ${k}`);
+    assert.deepEqual(mapParams(p), { seed, size, water, mountains, rivers, plains, forest, desert, tundra, landShape }, key);
+    // Non-default presets list every map setting themselves (the land shape only when it is not the default).
+    if (key !== 'default') for (const k of MAP_KEYS) if (k !== 'landShape') assert.ok(k in PRESETS[key].params, `${key} lists ${k}`);
     assert.deepEqual(normalizeParams(p), p, `${key} is already normal`);
   }
   assert.throws(() => presetParams('nope'));
 });
 
-test('mapParams keeps only the nine map settings', () => {
+test('mapParams keeps only the ten map settings', () => {
   const m = mapParams({ seed: 's', size: 12, endCondition: 'ticks', endTicks: 50 });
   assert.deepEqual(Object.keys(m), MAP_KEYS);
-  assert.equal(Object.keys(m).length, 9);
+  assert.equal(Object.keys(m).length, 10);
   assert.deepEqual(m, {
-    seed: 's', size: 12, water: 0.25, mountains: 0.12, rivers: 2, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15,
+    seed: 's', size: 12, water: 0.25, mountains: 0.12, rivers: 2, plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15, landShape: 'continent',
   });
+  assert.equal(mapParams({ landShape: 'islands' }).landShape, 'islands');
+  assert.equal(mapParams({ landShape: 'donut' }).landShape, 'continent', 'anything else means the default');
   const w = mapParams({ seed: 's', forest: 0.9, tundra: 2 });
   assert.equal(w.forest, 0.9);
   assert.equal(w.tundra, 1);
@@ -337,4 +340,16 @@ test('RULES.md "Starting positions": one entry per civ, a hex of the map or -1; 
   assert.deepEqual(st([100], 1, 11), [100], 'hex 100 is on an 11 x 11 map');
   assert.deepEqual(st(['7', 3]), [7, 3, -1], 'numbers as text are read');
   assert.deepEqual(st('nonsense'), []);
+});
+
+test('RULES.md "Map settings": randomise picks Islands as the land shape about one time in four', () => {
+  let islands = 0;
+  for (let k = 0; k < 400; k++) {
+    let x = k * 7919 + 1;
+    const random = () => { x = (x * 48271) % 2147483647; return x / 2147483647; };
+    const p = randomParams(random);
+    assert.ok(LAND_SHAPES.includes(p.landShape));
+    if (p.landShape === 'islands') islands++;
+  }
+  assert.ok(islands > 60 && islands < 140, `${islands} of 400`);
 });

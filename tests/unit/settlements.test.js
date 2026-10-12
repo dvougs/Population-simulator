@@ -131,7 +131,7 @@ test('RULES.md "Settlements" numbers: hysteresis, looting, ruins, shrinking, dec
   assert.equal(SETTLE.planEvery, 5);
   assert.equal(SETTLE.planYears, 40);
   assert.equal(SETTLE.blockYears, 25);
-  assert.equal(MAX_PROGRESS_BONUS, 0.5);
+  assert.equal(MAX_PROGRESS_BONUS, 0.2);
   assert.equal(CIVIC_COUNTED, 5);
   assert.deepEqual({ ...HAND.yield }, { common: 0.5, uncommon: 0.25, exotic: 0.0625 });
   assert.deepEqual({ ...HAND.cap }, { common: 10, uncommon: 5, exotic: 1.25 });
@@ -881,21 +881,25 @@ test('RULES.md "Progress": a civ\'s bonus is the sum of its civic buildings\' pr
   assert.equal(w.levels.summary(0).progressBonus, w.levels.settlements.progress[0]);
 });
 
-test('RULES.md "Progress": each kind counts in at most 5 of a civ\'s settlements; the total is at most +50%', () => {
+test('RULES.md "Progress": each kind counts in at most 5 of a civ\'s settlements; the total is at most +20%', () => {
   const w = civicWorld();
   for (let h = 11; h < 17; h++) give(w, h, 'shrine'); // six Shrines
   w.step();
   near(w.levels.settlements.progress[0], 5 * 0.02, 1e-6);
   const v = civicWorld();
-  for (let h = 11; h < 16; h++) give(v, h, 'shrine', 'school', 'library'); // 5 × (2 + 3 + 5) = 50%
+  for (let h = 11; h < 16; h++) give(v, h, 'shrine', 'school', 'library'); // 5 × (2 + 3 + 5) = 50%, capped at 20%
   v.step();
-  near(v.levels.settlements.progress[0], 0.5, 1e-6);
+  near(v.levels.settlements.progress[0], 0.2, 1e-6);
+  const s3 = civicWorld();
+  for (let h = 11; h < 13; h++) give(s3, h, 'shrine', 'school'); // 2 × (2 + 3) = 10%, under the cap
+  s3.step();
+  near(s3.levels.settlements.progress[0], 0.1, 1e-6);
   const u = civicWorld();
   for (let h = 11; h < 16; h++) give(u, h, 'shrine', 'school', 'library');
   give(u, 16, 'palace');
   u.step();
   near(u.levels.settlements.progress[0], MAX_PROGRESS_BONUS, 1e-9);
-  near(u.levels.yearsAt[0], 1.5, 1e-6);
+  near(u.levels.yearsAt[0], 1.2, 1e-6);
   // Two libraries in one hex are not possible (each kind once per settlement), so one hex counts once.
   const t = civicWorld();
   give(t, 11, 'library');
@@ -1013,6 +1017,23 @@ test('RULES.md "Supply routes": materials come from hexes within the reach of ei
   w.store(43, { wood: 50 });
   w.carry();
   assert.equal(w.stock(41, 'wood'), 0, 'another civ\'s hex in between');
+});
+
+test('RULES.md "Supply routes": with rafts or boats, materials cross up to the boat range of water hexes in a row; food never does', () => {
+  // Row 4: town 41, water 42 and 43, town 44 (three steps, within a town's reach of 3).
+  const run = (boats) => {
+    const w = mk(['expansionist'], { terrain: (i) => (i === 42 || i === 43 ? DEEP_WATER : PLAINS) });
+    w.level[0] = 2;
+    w.st.boats = boats;
+    w.put(41, 0, 30).put(44, 0, 30).upd();
+    w.st.plan[41] = B('huts');
+    w.store(44, { wood: 50 });
+    w.carry();
+    return w.stock(41, 'wood');
+  };
+  assert.equal(run(null), 0, 'no boats: water blocks the way');
+  assert.equal(run(Uint8Array.of(1)), 0, 'rafts cross one water hex, not two');
+  assert.ok(run(Uint8Array.of(3)) > 0, 'boats cross both');
 });
 
 test('RULES.md "Supply routes": a hex gives the materials beyond its own planned building\'s cost', () => {
@@ -1387,9 +1408,10 @@ test('a seeded run: settlements are deterministic (same params and seed give the
   // Changing any one store, building or tier changes the hash.
   const h0 = a.hash();
   const i = [...st.store].findIndex((v) => v > 0);
-  st.store[i] += 1;
+  const v0 = st.store[i];
+  st.store[i] = v0 + 1;
   assert.notEqual(a.hash(), h0, 'store');
-  st.store[i] -= 1;
+  st.store[i] = v0;
   assert.equal(a.hash(), h0);
   const t = [...st.tier].findIndex((v) => v >= 0);
   st.tier[t]++;

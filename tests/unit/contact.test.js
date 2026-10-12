@@ -512,32 +512,32 @@ test('RULES.md Wars: in seeded runs the per-pair kills add up to each civ\'s war
   assert.ok(sawWar);
 });
 
-test('RULES.md "Strength": a Kingdom has × 5 strength against a civ that is not a Kingdom, either side; two Kingdoms fight as usual', () => {
-  // Civ 0 (Aggressive, always attacks) has strength 10; civ 1 has 10 people of strength 0.25: 2.5, or 12.5 as a Kingdom.
+test('RULES.md "Strength": a Kingdom has × 3 strength against a civ that is not a Kingdom, either side; two Kingdoms fight as usual', () => {
+  // Civ 0 (Aggressive, always attacks) has strength 10; civ 1 has 10 people of strength 0.4: 4, or 12 as a Kingdom.
   const fight = (levels, holderLast = null) => {
-    const w = scene(['aggressive', 'cooperative'], [[HEX, 0, 10, { str: 1 }], [HEX, 1, 10, { str: 0.25 }]]);
+    const w = scene(['aggressive', 'cooperative'], [[HEX, 0, 10, { str: 1 }], [HEX, 1, 10, { str: 0.4 }]]);
     w.contact.level = Uint8Array.from(levels);
     const last = counts(w);
     if (holderLast !== null) last[HEX * 2 + holderLast] += 1;
     return run(w, { lastPop: last }).fights[0].winner;
   };
-  assert.equal(fight([1, 1]), 0, 'no Kingdom: 10 beats 2.5');
-  assert.equal(fight([4, 5]), 1, 'civ 1 a Kingdom: 12.5 beats 10');
+  assert.equal(fight([1, 1]), 0, 'no Kingdom: 10 beats 4');
+  assert.equal(fight([4, 5]), 1, 'civ 1 a Kingdom: 12 beats 10');
   assert.equal(fight([4, 5], 1), 1, 'as the holder too');
-  assert.equal(fight([5, 5]), 0, 'two Kingdoms: 10 beats 2.5');
-  // The Kingdom as the weaker attacker: 10 × 0.25 × 5 = 12.5 beats 10.
-  const w = scene(['aggressive', 'cooperative'], [[HEX, 0, 10, { str: 0.25 }], [HEX, 1, 10, { str: 1 }]]);
+  assert.equal(fight([5, 5]), 0, 'two Kingdoms: 10 beats 4');
+  // The Kingdom as the weaker attacker: 10 × 0.4 × 3 = 12 beats 10.
+  const w = scene(['aggressive', 'cooperative'], [[HEX, 0, 10, { str: 0.4 }], [HEX, 1, 10, { str: 1 }]]);
   w.contact.level = Uint8Array.of(5, 2);
   assert.equal(run(w).fights[0].winner, 0);
-  // Exactly × 5 on top of the defence bonus: civ 1 holds hills (+50%) as a Kingdom: 2.5 × 1.5 × 5 = 18.75 v 18.5 and 19.
+  // Exactly × 3 on top of the defence bonus: civ 1 holds hills (+50%) as a Kingdom: 4 × 1.5 × 3 = 18 v 17.5 and 18.5.
   const hold = (str0) => {
-    const v = scene(['aggressive', 'cooperative'], [[HEX, 0, 10, { str: str0 }], [HEX, 1, 10, { str: 0.25 }]], { terrain: HILLS });
+    const v = scene(['aggressive', 'cooperative'], [[HEX, 0, 10, { str: str0 }], [HEX, 1, 10, { str: 0.4 }]], { terrain: HILLS });
     v.contact.level = Uint8Array.of(1, 5);
     const last = counts(v); last[HEX * 2 + 1] += 1;
     return run(v, { lastPop: last }).fights[0].winner;
   };
-  assert.equal(hold(1.85), 1);
-  assert.equal(hold(1.9), 0);
+  assert.equal(hold(1.75), 1);
+  assert.equal(hold(1.85), 0);
 });
 
 test('RULES.md "Fights": losers never flee into a hex enclosed by a Kingdom other than their own civ', () => {

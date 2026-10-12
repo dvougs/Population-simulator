@@ -3,14 +3,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  Levels, REQUIREMENTS, GATHER, LEVEL_EFFECTS, LEVEL_NAMES, MAX_LEVEL, TYPE_LEVEL_RULES,
+  Levels, REQUIREMENTS, GATHER, LEVEL_EFFECTS, REACHABLE_SHARE, boatRange, LEVEL_NAMES, MAX_LEVEL, TYPE_LEVEL_RULES,
   levelMinimums, yearsNeeded, materialsNeeded, capacityFactor,
 } from '../../src/sim/levels.js';
 import { HAND, SETTLE } from '../../src/sim/settlements.js';
 import {
   WOOD, STONE, CLAY, COPPER, IRON, SALT, GOLD, GEMSTONES, SPICES, MATERIAL_COUNT, MATERIAL_IDS,
 } from '../../src/sim/materials.js';
-import { buildReach } from '../../src/sim/migration.js';
+import { buildReach, buildStepReach, landPieces } from '../../src/sim/migration.js';
 import { People } from '../../src/sim/people.js';
 import { Simulation } from '../../src/sim/simulation.js';
 import { PLAINS, FOREST, DESERT, HILLS, DEEP_WATER, MOUNTAIN } from '../../src/sim/terrain.js';
@@ -67,10 +67,12 @@ test('RULES.md "Gathering": the numbers', () => {
   assert.equal(LEVEL_EFFECTS.oldAgeDelay, 5);
   assert.equal(LEVEL_EFFECTS.shelterFactor, 0.5);
   assert.equal(LEVEL_EFFECTS.fallBackYears, 100);
-  assert.equal(LEVEL_EFFECTS.kingdomStrength, 5);
+  assert.equal(LEVEL_EFFECTS.kingdomStrength, 3);
   assert.equal(LEVEL_EFFECTS.absorbPct, undefined, 'Kingdoms absorb enclosed hexes whole');
   assert.equal(LEVEL_EFFECTS.boatCost, 1);
-  assert.deepEqual([LEVEL_EFFECTS.farmLevel, LEVEL_EFFECTS.shelterLevel, LEVEL_EFFECTS.boatLevel], [2, 3, 4]);
+  assert.deepEqual([LEVEL_EFFECTS.raftRange, LEVEL_EFFECTS.boatRange], [1, 3]);
+  assert.deepEqual([LEVEL_EFFECTS.farmLevel, LEVEL_EFFECTS.raftLevel, LEVEL_EFFECTS.shelterLevel, LEVEL_EFFECTS.boatLevel], [2, 2, 3, 4]);
+  assert.equal(REACHABLE_SHARE, 0.9);
   assert.deepEqual({ ...TYPE_LEVEL_RULES.nomadic }, { yearsPct: 125 });
   assert.deepEqual({ ...TYPE_LEVEL_RULES.isolationist }, { yearsPct: 80, materialsPct: 125 });
   assert.deepEqual({ ...TYPE_LEVEL_RULES.cooperative }, { gatherPct: 125 });
@@ -432,7 +434,7 @@ test('RULES.md "What levels do": per-level effects on birth, shelter, boats and 
   for (let L = 1; L <= 5; L++) { w.levels.level[0] = L; out.push(effects()); }
   near(out[0][0], 0); near(out[1][0], 0.005); near(out[2][0], 0.01); near(out[3][0], 0.015); near(out[4][0], 0.02);
   assert.deepEqual(out.map((e) => e[1]), [1, 1, 0.5, 0.5, 0.5]);
-  assert.deepEqual(out.map((e) => e[2]), [0, 0, 0, 1, 1]);
+  assert.deepEqual(out.map((e) => e[2]), [0, 1, 1, 3, 3], 'boat range: rafts 1 from level 2, boats 3 from level 4');
   assert.deepEqual(out.map((e) => e[3]), [0, 0, 0, 0, 5]);
 });
 
@@ -808,17 +810,26 @@ test('RULES.md "Boats": the crossing costs 1 movement point on top of the land b
   assert.deepEqual([...slow.targets.slice(slow.offsets[0], slow.offsets[1])], [], '1.5 + 1 = 2.5 > 2');
 });
 
-test('RULES.md "Boats": a civ gets boats at level 4 (Simulation.onLevel) and loses them when it falls back', () => {
+test('RULES.md "Rafts and boats": rafts at level 2 (range 1), boats at level 4 (range 3), lost again when a civ falls back', () => {
+  assert.deepEqual([1, 2, 3, 4, 5].map(boatRange), [0, 1, 1, 3, 3]);
   const sim = new Simulation({ seed: 'boats', size: 14, civCount: 2, water: 0.4 });
   const rules = sim.migrationRules;
   assert.deepEqual([...rules.boats], [0, 0]);
   const before = rules.reach[0];
-  sim.onLevel(0, 3, 4, 100);
+  sim.onLevel(0, 1, 2, 100);
   assert.equal(rules.boats[0], 1);
+  const rafts = rules.reach[0];
+  assert.ok(rafts.targets.length >= before.targets.length);
+  sim.onLevel(0, 2, 3, 200);
+  assert.equal(rules.reach[0], rafts, 'level 3 keeps the rafts');
+  sim.onLevel(0, 3, 4, 300);
+  assert.equal(rules.boats[0], 3);
   assert.equal(rules.boats[1], 0);
-  assert.notEqual(rules.reach[0], before);
-  assert.ok(rules.reach[0].targets.length >= before.targets.length);
-  sim.onLevel(0, 4, 3, 300);
+  assert.ok(rules.reach[0].targets.length >= rafts.targets.length);
+  sim.onLevel(0, 4, 3, 400);
+  assert.equal(rules.boats[0], 1);
+  assert.equal(rules.reach[0], rafts, 'back to the shared rafts table');
+  sim.onLevel(0, 2, 1, 500);
   assert.equal(rules.boats[0], 0);
   assert.equal(rules.reach[0], before, 'back to the shared table');
   // Nomadic keeps its 5 movement points with boats too.
@@ -826,6 +837,53 @@ test('RULES.md "Boats": a civ gets boats at level 4 (Simulation.onLevel) and los
   nm.onLevel(0, 3, 4, 10);
   assert.equal(nm.migrationRules.movePoints[0], 5);
   assert.ok(nm.migrationRules.reach[0].targets.length >= buildReach(nm.map, 5).targets.length);
+});
+
+test('RULES.md "Rafts and boats": buildStepReach sails up to the range of water hexes in a row, never ending on water', () => {
+  // Land, then 1, 2 and 3 water hexes between land: P W P W W P W W W P.
+  const T = [PLAINS, DEEP_WATER, PLAINS, DEEP_WATER, DEEP_WATER, PLAINS, DEEP_WATER, DEEP_WATER, DEEP_WATER, PLAINS];
+  const map = makeMap(10, 1, (i) => T[i]);
+  const list = (r, h) => [...r.targets.slice(r.offsets[h], r.offsets[h + 1])];
+  assert.deepEqual(list(buildStepReach(map, 0), 0), []);
+  assert.deepEqual(list(buildStepReach(map, true), 0), [2], 'true is a range of 1');
+  assert.deepEqual(list(buildStepReach(map, 1), 2), [0], 'rafts: one water hex, not two');
+  assert.deepEqual(list(buildStepReach(map, 2), 2), [0, 5]);
+  assert.deepEqual(list(buildStepReach(map, 3), 5), [2, 9], 'boats: three in a row');
+  assert.deepEqual(list(buildStepReach(map, 2), 5), [2]);
+  for (let h = 0; h < map.count; h++) for (const t of list(buildStepReach(map, 3), h)) assert.notEqual(map.terrain[t], DEEP_WATER);
+});
+
+test('RULES.md "Rafts and boats": a Nomadic voyage crosses up to the range at 1 point a water hex, once per path', () => {
+  const T = [PLAINS, DEEP_WATER, DEEP_WATER, PLAINS, DEEP_WATER, PLAINS];
+  const map = makeMap(6, 1, (i) => T[i]);
+  const list = (r, h) => [...r.targets.slice(r.offsets[h], r.offsets[h + 1])];
+  assert.deepEqual(list(buildReach(map, 5, 1, 1), 0), [], 'two water hexes in a row need range 2');
+  assert.deepEqual(list(buildReach(map, 5, 1, 2), 0), [3], '1 + 1 + 1 = 3; a second voyage to 5 is not allowed');
+  assert.deepEqual(list(buildReach(map, 5, 1, 3), 3), [0, 5]);
+  assert.deepEqual(list(buildReach(map, 2, 1, 3), 3), [5], 'range 3 but 2 points: only one water hex and the plains beyond');
+});
+
+test('RULES.md "Hexes and people": a civ\'s land needs never exceed 90% of the land it can reach', () => {
+  const sim = new Simulation({ seed: 'isl3', size: 30, water: 0.6, landShape: 'islands', civCount: 5 });
+  const lv = sim.levels;
+  for (let c = 0; c < 5; c++) {
+    const pieces = landPieces(sim.map, sim.reach);
+    const land = pieces.size[pieces.id[sim.starts[c]]];
+    assert.equal(lv.reachHex[c], Math.ceil(0.9 * land), `civ ${c}`);
+    for (let L = 2; L <= 5; L++) {
+      assert.equal(lv.minHexesFor(c, L), Math.max(1, Math.min(lv.minHex[L], lv.reachHex[c])));
+      assert.equal(lv.minPopFor(c, L), REQUIREMENTS[L - 2].perHex * Math.min(lv.minHex[L], lv.reachHex[c]));
+    }
+  }
+  // Some civ starts on an island smaller than the Kingdom's need; with boats its reachable land grows.
+  const small = [0, 1, 2, 3, 4].find((c) => lv.reachHex[c] < lv.minHex[5]);
+  assert.ok(small !== undefined, 'an island civ');
+  const was = lv.reachHex[small];
+  sim.onLevel(small, 3, 4, 10);
+  assert.ok(lv.reachHex[small] > was, 'boats reach more land');
+  // On one continent nobody is capped.
+  const big = new Simulation({ seed: 'pangaea', civCount: 3 });
+  for (let c = 0; c < 3; c++) for (let L = 2; L <= 5; L++) assert.equal(big.levels.minHexesFor(c, L), big.levels.minHex[L]);
 });
 
 // ---- Simulation: stats, end condition, determinism --------------------------------------------

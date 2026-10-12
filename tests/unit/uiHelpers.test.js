@@ -87,10 +87,10 @@ test('levelFacts: five levels with the RULES.md names, effects and requirement r
       assert.ok(l.needs.includes(`${n} ${name}`), `${part} in "${l.needs}"`);
     }
   });
-  assert.match(f[1].does, /25% more/);
+  assert.match(f[1].does, /25% more.*Rafts.*one sea or lake hex/);
   assert.match(f[2].does, /half as much in desert, tundra and mountain/);
-  assert.match(f[3].does, /one sea or lake hex/);
-  assert.match(f[4].does, /25% more.*5 years later.*× 5 strength.*no other civ can move in/);
+  assert.match(f[3].does, /up to 3 sea or lake hexes in a row/);
+  assert.match(f[4].does, /25% more.*5 years later.*× 3 strength.*no other civ can move in/);
   assert.deepEqual(f.map((l) => /Birth chance \+([\d.]+) percentage point/.exec(l.does)?.[1] ?? null), [null, '0.5', '1', '1.5', '2']);
 });
 
