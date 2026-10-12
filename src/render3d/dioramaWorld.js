@@ -17,6 +17,8 @@ import { civStyle } from '../render/civStyle.js';
 import { hexTotal, largestCiv } from '../render/peopleMaths.js';
 import { DEEP_WATER, FOREST, MOUNTAIN } from '../sim/terrain.js';
 import { seasonRgb, SNOW_RGB } from './seasons.js';
+import { modelOf, footprint, SHAPES } from './buildingModels.js';
+import { shapeGeometries, placePart, partColour } from './modelMeshes.js';
 import { tileHeight, homesFor, HOME_SLOTS, MONUMENT_SLOT, MAX_HOMES, TILE_BASE, boardBounds } from './diorama.js';
 
 const GROW_MS = 380; // a new home growing out of the ground
@@ -35,6 +37,14 @@ const TREE_SNOW = 0.4; // how white the pines turn at full snow
 const THATCH = 0xb08a4e;
 const MUD = 0xa58660;
 const FIRE = 0xff8a2a;
+/** A building or wonder on the map fills the middle of its hex out to this radius (hex radii), at most MAP_MODEL_SCALE of its size inside a hex. */
+export const MAP_MODEL_R = 0.46;
+export const MAP_MODEL_SCALE = 0.2;
+/** Homes kept round it, pushed out to the hex's edge. */
+const HOMES_WITH_MODEL = 3;
+const MODEL_HOME_SPREAD = 1.75;
+/** Most parts of building models drawn on the map, per shape. */
+const MAX_PARTS = 1500;
 
 const easeOut = (t) => (t >= 1 ? 1 : t <= 0 ? 0 : 1 - (1 - t) * (1 - t) * (1 - t));
 const clamp01 = (t) => (t < 0 ? 0 : t > 1 ? 1 : t);
@@ -107,6 +117,7 @@ export class DioramaWorld {
     };
     const white = mat();
     const g = this.geo;
+    this.shapes ??= shapeGeometries(T);
     let forests = 0; let peaks = 0;
     for (let i = 0; i < n; i++) { if (map.terrain[i] === FOREST) forests++; if (map.terrain[i] === MOUNTAIN) peaks++; }
     const rivers = riverSegments(map);
@@ -128,6 +139,7 @@ export class DioramaWorld {
       hut: mesh(g.hut, n * MAX_HOMES, mat({ color: MUD })),
       thatch: mesh(g.thatch, n * MAX_HOMES, white),
       fire: mesh(g.fire, n, new T.MeshBasicMaterial({ color: FIRE, transparent: true, opacity: 0, depthWrite: false }), false),
+      ...Object.fromEntries(SHAPES.map((sh) => [`part_${sh}`, mesh(this.shapes[sh], MAX_PARTS, white)])),
       halo: mesh(g.halo, n, new T.MeshBasicMaterial({ color: HALO, transparent: true, opacity: 0, depthWrite: false, blending: T.AdditiveBlending }), false),
     };
     this.m.pane.receiveShadow = false; this.m.halo.receiveShadow = false;
@@ -228,10 +240,17 @@ export class DioramaWorld {
       tents: new Uint8Array(n), tower: new Uint8Array(n), monument: new Int8Array(n), huts: new Uint8Array(n),
     };
     show.monument.fill(-1);
+    // One building or wonder drawn per hex: a wonder before an era building, a later era before an earlier.
+    show.model = new Array(n).fill(null);
     for (const bd of buildings ?? []) {
-      if (bd.hex < 0 || bd.hex >= n) continue;
-      if (bd.status === 'standing') show.monument[bd.hex] = bd.kind === 'wonder' ? 1 : 0;
-      else if (bd.kind === 'wonder' && bd.status === 'abandoned') show.monument[bd.hex] = 2;
+      if (bd.hex < 0 || bd.hex >= n || !modelOf(bd)) continue;
+      const rank = (bd.kind === 'wonder' ? 10 : 0) + (bd.era ?? 0) + (bd.status === 'standing' ? 0.5 : 0);
+      const cur = show.model[bd.hex];
+      if (cur && cur.rank >= rank) continue;
+      const parts = modelOf(bd);
+      show.model[bd.hex] = { parts, scale: Math.min(MAP_MODEL_SCALE, MAP_MODEL_R / footprint(parts)), civ: bd.civ ?? -1, status: bd.status, rank,
+        progress: bd.status === 'building' ? Math.max(0, Math.min(1, (bd.work ?? 0) / Math.max(1, bd.years ?? 1))) : 1 };
+      show.monument[bd.hex] = bd.kind === 'wonder' ? (bd.status === 'abandoned' ? 2 : 1) : 0;
     }
     for (let i = 0; i < n; i++) {
       const water = map.terrain[i] === DEEP_WATER;
@@ -301,10 +320,12 @@ export class DioramaWorld {
 
   placeSettled(put, t, still) {
     const { show, m } = this;
-    if (!show) { for (const key of ['wall', 'roof', 'tent', 'tower', 'spire', 'step', 'pawn', 'pane', 'halo', 'hut', 'thatch', 'fire']) m[key].count = 0; return; }
+    if (!show) { for (const key of ['wall', 'roof', 'tent', 'tower', 'spire', 'step', 'pawn', 'pane', 'halo', 'hut', 'thatch', 'fire', ...SHAPES.map((sh) => `part_${sh}`)]) m[key].count = 0; return; }
     const { c } = this.tmp;
     const { n, cx, cz, top, rise } = this.tiles;
     const T = this.T;
+    const { o } = this.tmp;
+    const parts = Object.fromEntries(SHAPES.map((sh) => [sh, 0]));
     let walls = 0; let tents = 0; let towers = 0; let steps = 0; let pawns = 0; let panes = 0; let halos = 0; let huts = 0; let fires = 0;
     // A pane on the front of a thing at (x, z) turned ry, `d` out from its middle and `y` up.
     const pane = (x, y, z, d, ry, sc) => put(m.pane, panes++, x + Math.sin(ry) * d * sc, y, z + Math.cos(ry) * d * sc, sc, sc, sc, ry);
@@ -320,15 +341,17 @@ export class DioramaWorld {
       if (g <= 0) continue;
       const h = FLAT + (top[i] - FLAT) * r;
       const x = cx[i]; const z = cz[i];
-      if (show.monument[i] >= 0) {
-        const wonder = show.monument[i] >= 1;
-        const sizes = wonder ? [0.5, 0.36, 0.22] : [0.3, 0.2];
-        const hs = wonder ? 0.11 : 0.12;
-        let y = h;
-        for (let s = 0; s < sizes.length; s++) {
-          put(m.step, steps, x + MONUMENT_SLOT[0], y, z + MONUMENT_SLOT[1], sizes[s], hs * g, sizes[s]);
-          m.step.setColorAt(steps++, c.setHex(show.monument[i] === 2 ? 0x9a948a : s === sizes.length - 1 ? GOLD : STONE));
-          y += hs * g;
+      const model = show.model?.[i];
+      if (model) {
+        const civHex = model.civ >= 0 ? rgbToHex(civStyle(model.civ).rgb) : 0x9a948a;
+        const rise = model.status === 'building' ? 0.2 + 0.8 * model.progress : 1;
+        for (const p of model.parts) {
+          const mesh = m[`part_${p.s}`];
+          const k = parts[p.s]++;
+          if (k >= MAX_PARTS) continue;
+          placePart(o, p, x, h, z, 0, model.scale * g, rise);
+          mesh.setMatrixAt(k, o.matrix);
+          mesh.setColorAt(k, c.setHex(partColour(p, civHex, model.status === 'abandoned')));
         }
       }
       if (civ < 0) continue;
@@ -345,25 +368,27 @@ export class DioramaWorld {
         put(m.tent, tents, x + HOME_SLOTS[0][0], h, z + HOME_SLOTS[0][1], g, g, g);
         if (lit && !fireLit) pane(x + HOME_SLOTS[0][0], h + 0.02 * g, z + HOME_SLOTS[0][1], 0.15, 0, g);
       } else if (show.huts[i]) {
-        const homes = show.homes[i];
+        const homes = model ? Math.min(HOMES_WITH_MODEL, show.homes[i]) : show.homes[i];
+        const spread = model ? MODEL_HOME_SPREAD : 1;
         for (let s = 0; s < homes; s++) {
           const newest = s === homes - 1;
           const grow = newest && !still ? easeOut((t - this.homes.grownAt[i]) / (GROW_MS / 1000)) : 1;
           const sc = g * grow * (0.9 + 0.12 * (((i + s * 5) % 4) / 3));
-          const [ox, oz] = HOME_SLOTS[s];
+          const ox = HOME_SLOTS[s][0] * spread; const oz = HOME_SLOTS[s][1] * spread;
           put(m.hut, huts, x + ox, h, z + oz, sc, sc, sc);
           put(m.thatch, huts, x + ox, h + 0.1 * sc, z + oz, sc, sc, sc);
           m.thatch.setColorAt(huts++, c.setHex(THATCH).lerp(this.tmp.civ.setRGB(...civStyle(civ).rgb.map((v) => v / 255), T.SRGBColorSpace), 0.3));
         }
         tint(m.tent, tents++, civ);
       } else {
-        const homes = show.homes[i];
+        const homes = model ? Math.min(HOMES_WITH_MODEL, show.homes[i]) : show.homes[i];
+        const spread = model ? MODEL_HOME_SPREAD : 1;
         for (let s = 0; s < homes; s++) {
           // The newest home grows out of the ground.
           const newest = s === homes - 1;
           const grow = newest && !still ? easeOut((t - this.homes.grownAt[i]) / (GROW_MS / 1000)) : 1;
           const sc = g * grow * (0.9 + 0.12 * (((i + s * 5) % 4) / 3));
-          const [ox, oz] = HOME_SLOTS[s];
+          const ox = HOME_SLOTS[s][0] * spread; const oz = HOME_SLOTS[s][1] * spread;
           const ry = ((i * 3 + s) % 4) * 0.35;
           put(m.wall, walls, x + ox, h, z + oz, sc, sc, sc, ry);
           m.wall.setColorAt(walls, c.setHex(STONE));
@@ -371,9 +396,8 @@ export class DioramaWorld {
           tint(m.roof, walls++, civ);
           if (lit) pane(x + ox, h + 0.07 * sc, z + oz, 0.145, ry, sc);
         }
-        if (show.tower[i]) {
-          const tx = show.monument[i] >= 0 ? x + 0.1 : x;
-          const tz = show.monument[i] >= 0 ? z - 0.52 : z;
+        if (show.tower[i] && !model) {
+          const tx = x; const tz = z;
           put(m.tower, towers, tx, h, tz, g, g, g);
           put(m.spire, towers, tx, h + 0.52 * g, tz, g, g, g);
           tint(m.spire, towers++, civ);
@@ -391,6 +415,7 @@ export class DioramaWorld {
     }
     m.wall.count = walls; m.roof.count = walls; m.tent.count = tents;
     m.tower.count = towers; m.spire.count = towers; m.step.count = steps; m.pawn.count = pawns;
+    for (const sh of SHAPES) { m[`part_${sh}`].count = Math.min(MAX_PARTS, parts[sh]); m[`part_${sh}`].instanceMatrix.needsUpdate = true; if (m[`part_${sh}`].instanceColor) m[`part_${sh}`].instanceColor.needsUpdate = true; }
     m.pane.count = panes; m.halo.count = halos; m.hut.count = huts; m.thatch.count = huts; m.fire.count = fires;
     for (const mesh of [m.wall, m.roof, m.tent, m.spire, m.step, m.pawn, m.thatch]) if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   }
