@@ -10,11 +10,23 @@ This describes the current build (Phase 2, in progress): a generated hex map whe
 
 ## Home page
 
-- The game opens on the **home page**: *New game* goes to the map-generation screen, *How to play* opens the rules in plain words, and *Back to game* (shown only once a game has started in this session) returns to it. The map-generation screen has a *Home* button back to the home page.
+- The game opens on the **home page**: *New game* goes to the map-generation screen, *How to play* opens the rules in plain words, and *Back to game* (shown only once a game has started in this session) returns to it. The map-generation screen and the game settings screen (Step 2 of 2, also opened from the game's ☰ button) each have a *Home* button back to the home page; leaving a game this way keeps it paused, and *Back to game* returns to it.
 
 - **The living world.** Behind the buttons a small world lives: a real game, run by the same rules, with seed genesis, size 12 × 12, 3 rivers, 4 civs (Expansionist, Aggressive, Cooperative, Nomadic) of 20 people each, every other setting at its default, and no end condition. It is shown from year 60 and lives 6 years a second, drawn like the map zoomed out (tint, outlines, rings and each hex's largest civ's emblem, without head counts), with the year, its people and the civs still alive in its corner. After year 1500, or if nobody is left, it starts again from year 60. It runs only while the home page is on screen; with the device's reduced-motion setting on, it shows year 300 standing still. It is separate from your game and changes nothing in it.
 - **How to play** explains the map, people, a year, migration, civs, traits, civ types, fighting and switching civ, materials, settlements and levels (with buildings and wonders), the end of the game and the controls. Its numbers are read from the game, so they are the ones in this file. Its pictures are drawn by the game from the same world as the home page, in year 300: the map before anyone arrives, a close-up of its busiest hex (lowest index on ties) with every person, the hexes a person can walk to in a year from a lowland hex near the middle (3 movement points, and 5 for Nomadic), the civs' land, each civ's average traits, a close-up of the hex shared by civs where the smallest civ there has the most people (lowest index on ties), its first contact (from the end screen's History) and its deadliest war (from the War card), the Levels panel for Civ 1 and Civ 2, and the end screen's population chart.
 - **Addresses:** the page's address ending in #how opens How to play directly, and #new the map-generation screen. Opening How to play from the home page adds a step to the browser's history, so Back returns to the home page.
+
+## Feature flags
+
+New work can ship switched off and be tried on demand, on the live site too. Flags are kept on the device (they survive reloads and new releases) and are off until turned on.
+
+| Flag | Default | Turned on and off by | What it changes now |
+|---|---|---|---|
+| 3D graphics (preview) | Off | The *2D / 3D* switch on the home page's world, or an address with `?3d=1` (on) or `?3d=0` (off), which is then kept | The home page's living world is drawn in 3D. The game's own map stays 2D for now. |
+
+- **The 3D world** is the same world as the 2D one (same years, people and settlements), built as a small diorama: each hex is a tile standing by its terrain (water lowest, then coast, desert, plains, forest, tundra, hills, and mountains highest) and raised further by its elevation; forests carry trees, mountains snow-capped peaks, rivers run across the tiles, and settled land takes a little of its civ's colour. A hex with people but no settlement shows a tent; a Camp shows 2 homes roofed in its holder's colour, a Village 3, a Town 4 and a City or bigger 5, and a Town or bigger also a tower. Standing buildings and wonders stand as stepped monuments with a gold top (an abandoned wonder in grey), and up to 4 people (1 per 8 living there) walk round each settled hex.
+- **The change** takes 1.8 seconds: the 3D world appears over the flat board looking straight down, then the tiles rise from the middle outwards while the camera tilts down to its 3D view and turns slowly from side to side. Homes and people grow out of their tile at the end of its rise, and a new home grows out of the ground. Switching back plays it in reverse and hands back to the 2D board.
+- With the device's reduced-motion setting on, or on a browser without a graphics card (software WebGL), the change is instant and the world stands still. Without WebGL the switch is greyed out and the home page stays 2D. The 3D graphics code is only downloaded the first time the flag is turned on.
 
 ## Time
 

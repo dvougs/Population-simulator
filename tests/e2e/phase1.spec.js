@@ -15,14 +15,14 @@ const TERRAIN = {
 };
 const RIVER_BONUS = 30;
 
-// RULES.md "Map settings" presets; every preset uses the default lowland weights.
+// RULES.md "Map settings" presets; every preset uses the default lowland weights, and One continent except Archipelago (Islands).
 const LOWLAND = { plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15 };
 const PRESETS = {
-  default: { seed: 'pangaea', size: 10, water: 0.25, mountains: 0.12, rivers: 2, ...LOWLAND },
-  continent: { seed: 'continent', size: 30, water: 0.2, mountains: 0.12, rivers: 6, ...LOWLAND },
-  archipelago: { seed: 'islands', size: 30, water: 0.6, mountains: 0.08, rivers: 2, ...LOWLAND },
-  highlands: { seed: 'peaks', size: 20, water: 0.15, mountains: 0.3, rivers: 5, ...LOWLAND },
-  large: { seed: 'vast', size: 50, water: 0.3, mountains: 0.12, rivers: 12, ...LOWLAND },
+  default: { seed: 'pangaea', size: 10, water: 0.25, mountains: 0.12, rivers: 2, ...LOWLAND, landShape: 'continent' },
+  continent: { seed: 'continent', size: 30, water: 0.2, mountains: 0.12, rivers: 6, ...LOWLAND, landShape: 'continent' },
+  archipelago: { seed: 'islands', size: 30, water: 0.6, mountains: 0.08, rivers: 2, ...LOWLAND, landShape: 'islands' },
+  highlands: { seed: 'peaks', size: 20, water: 0.15, mountains: 0.3, rivers: 5, ...LOWLAND, landShape: 'continent' },
+  large: { seed: 'vast', size: 50, water: 0.3, mountains: 0.12, rivers: 12, ...LOWLAND, landShape: 'continent' },
 };
 
 const shot = (page, testInfo, name) =>
@@ -243,6 +243,66 @@ test.describe('home page and How to play', () => {
     await page.locator('#btn-home').click();
     await expect.poll(() => shownScreens(page)).toEqual(['home']);
     await expect(page.locator('#btn-home-resume')).toBeVisible();
+    await page.locator('#btn-home-resume').click();
+    await expect.poll(() => shownScreens(page)).toEqual(['game']);
+  });
+});
+
+test.describe('3D graphics flag', () => {
+  // RULES.md "Feature flags": off by default, switched on the home page's world, kept on the device.
+  const state = (page) => page.evaluate(() => ({ flag: window.popsim.flags.get('graphics3d'), ...window.popsim.home3d() }));
+
+  test('the home page starts in 2D, and the switch rises into 3D and back, kept across reloads', async ({ page }, testInfo) => {
+    await page.goto('/');
+    const toggle = page.locator('#btn-3d');
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-checked', 'false');
+    expect((await state(page)).flag).toBe(false);
+    // The 3D code is not even downloaded while the flag is off.
+    expect(await page.evaluate(() => performance.getEntriesByType('resource').some((r) => r.name.includes('three.mjs')))).toBe(false);
+    const box = await toggle.boundingBox();
+    expect(box.height).toBeGreaterThanOrEqual(44);
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-checked', 'true');
+    await expect.poll(async () => (await state(page)).opacity, { timeout: 15_000 }).toBe(1);
+    await expect.poll(async () => (await state(page)).progress).toBe(1);
+    await expect(page.locator('#home-3d')).toBeVisible();
+    await expect(page.locator('#home-caption')).toContainText('Year');
+    await shot(page, testInfo, 'home-3d');
+
+    await page.reload();
+    await expect(page.locator('#btn-3d')).toHaveAttribute('aria-checked', 'true');
+    await expect.poll(async () => (await state(page)).opacity, { timeout: 15_000 }).toBe(1);
+
+    await page.locator('#btn-3d').click();
+    await expect(page.locator('#btn-3d')).toHaveAttribute('aria-checked', 'false');
+    await expect.poll(async () => (await state(page)).opacity).toBe(0);
+    await expect(page.locator('#home-3d')).toBeHidden();
+    await page.reload();
+    expect((await state(page)).flag).toBe(false);
+  });
+
+  test('an address with ?3d=1 turns the flag on, and ?3d=0 off', async ({ page }) => {
+    await page.goto('/?3d=1');
+    await expect(page.locator('#btn-3d')).toHaveAttribute('aria-checked', 'true');
+    await expect.poll(async () => (await state(page)).opacity, { timeout: 15_000 }).toBe(1);
+    await page.goto('/');
+    expect((await state(page)).flag).toBe(true);
+    await page.goto('/?3d=0');
+    await expect(page.locator('#btn-3d')).toHaveAttribute('aria-checked', 'false');
+    expect((await state(page)).flag).toBe(false);
+  });
+
+  test('the game settings screen has a Home button back to the home page', async ({ page }) => {
+    await startGame(page);
+    await page.locator('#btn-setup').click();
+    await expect.poll(() => shownScreens(page)).toEqual(['setup']);
+    await expect(page.locator('#btn-setup-home')).toBeVisible();
+    await page.locator('#btn-setup-home').click();
+    await expect.poll(() => shownScreens(page)).toEqual(['home']);
+    // The game waits, paused, behind Back to game.
+    expect(await page.evaluate(() => window.popsim.loop.paused)).toBe(true);
     await page.locator('#btn-home-resume').click();
     await expect.poll(() => shownScreens(page)).toEqual(['game']);
   });

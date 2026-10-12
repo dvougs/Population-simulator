@@ -101,6 +101,7 @@ button, input, select { font: inherit; color: inherit; }
 .setup-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 720px; margin: 0 auto; }
 .setup-header h1 { font-size: 1.35rem; margin: 8px 0; }
 .head-title { min-width: 0; }
+.head-actions { display: flex; gap: 8px; flex: 0 0 auto; }
 .head-title h1 { margin: 2px 0 10px; font-size: clamp(1.45rem, 5vw, 1.9rem); letter-spacing: -0.02em; font-weight: 800; line-height: 1.1; }
 .step-kicker { display: flex; align-items: center; gap: 10px; margin: 6px 0 0; color: var(--accent); font-size: 0.75rem; font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.12em; }
@@ -201,6 +202,29 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 6px 
   backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   font-size: 0.8rem; font-variant-numeric: tabular-nums; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .home-world:not(.live) .home-caption { bottom: 12px; }
+/* The 3D world (src/render3d/homeScene3d.js) sits over the 2D one; its script sets its opacity as it rises and sinks. */
+.home-world canvas.home-3d { position: absolute; inset: 0; opacity: 0; visibility: hidden; transition: none; }
+/* The 2D / 3D switch: the 3D graphics feature flag. */
+.view-toggle { position: absolute; top: 6px; right: 6px; z-index: 2; display: inline-flex; align-items: center; min-height: 44px;
+  padding: 5px; border-radius: 999px; border: 1px solid var(--line-hi); background: rgba(11, 14, 19, 0.72); color: var(--text);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); font: inherit; cursor: pointer;
+  -webkit-tap-highlight-color: transparent; transition: border-color 0.2s, opacity 0.2s; }
+.vt-track { position: relative; display: inline-grid; grid-template-columns: 1fr 1fr; width: 76px; height: 32px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); }
+.vt-thumb { position: absolute; top: 2px; left: 2px; width: 36px; height: 28px; border-radius: 999px; background: rgba(255, 255, 255, 0.16);
+  transition: transform 0.45s var(--ease-spring), background 0.3s; }
+.vt-opt { position: relative; display: grid; place-items: center; font-size: 0.8rem; font-weight: 800; letter-spacing: 0.02em; color: var(--text); transition: color 0.3s; }
+.view-toggle .vt-3d { color: #8a96a8; }
+.view-toggle.on .vt-thumb { transform: translateX(36px); background: var(--grad); box-shadow: 0 0 14px rgba(95, 179, 255, 0.55); }
+.view-toggle.on .vt-2d { color: #8a96a8; }
+.view-toggle.on .vt-3d { color: var(--accent-ink); }
+.vt-tag { position: absolute; top: -7px; left: 50%; transform: translateX(-50%); padding: 1px 6px; border-radius: 999px; background: var(--accent-2);
+  font-size: 0.56rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: #fff; white-space: nowrap; pointer-events: none; }
+.view-toggle.busy { opacity: 0.7; cursor: progress; }
+.view-toggle.busy .vt-thumb { animation: vt-pulse 0.9s ease-in-out infinite alternate; }
+@keyframes vt-pulse { to { opacity: 0.5; } }
+.view-toggle:disabled { opacity: 0.45; cursor: not-allowed; }
+.view-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (hover: hover) { .view-toggle:hover:not(:disabled) { border-color: rgba(169, 216, 255, 0.45); } }
 .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #6fcf76; box-shadow: 0 0 0 0 rgba(111, 207, 118, 0.6); animation: live 2s ease-out infinite; flex: 0 0 auto; }
 @keyframes live { 0% { box-shadow: 0 0 0 0 rgba(111, 207, 118, 0.6); } 100% { box-shadow: 0 0 0 10px rgba(111, 207, 118, 0); } }
 .home-text { max-width: 560px; margin: 0 auto; width: 100%; }

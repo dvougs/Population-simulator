@@ -7,7 +7,8 @@ The game design and phases are in [project/ROADMAP.md](project/ROADMAP.md). The 
 ## Tech rules
 
 - **Plain HTML/CSS/JS with ES modules. No build step, no frameworks.** What is in the repo is what ships. `package.json` exists only for scripts and dev dependencies.
-- **Rendering uses PixiJS v8, vendored.** `pixi.js@^8` is a dev dependency; `npm run vendor:pixi` copies `node_modules/pixi.js/dist/pixi.min.mjs` to `vendor/pixi.mjs`, and that copied file is committed. Import it as `../vendor/pixi.mjs` (relative path), never from a CDN, so tests in the cloud and the Pages site load the same file. No other runtime libraries: pan and pinch-zoom are implemented directly with pointer events.
+- **Rendering uses PixiJS v8, vendored.** `pixi.js@^8` is a dev dependency; `npm run vendor:pixi` copies `node_modules/pixi.js/dist/pixi.min.mjs` to `vendor/pixi.mjs`, and that copied file is committed. Import it as `../vendor/pixi.mjs` (relative path), never from a CDN, so tests in the cloud and the Pages site load the same file.
+- **The 3D graphics engine is three.js, vendored the same way, behind a feature flag.** `three@0.170.0` (the last release with a single-file `three.module.min.js`) is a dev dependency; `npm run vendor:three` copies it to `vendor/three.mjs`, committed. It is imported only with a dynamic `import()` from `src/render3d/`, once the 3D graphics flag (`src/flags.js`) is on, so the default 2D game never downloads it. The 2D PixiJS look stays the default until the owner switches it. No other runtime libraries: pan and pinch-zoom are implemented directly with pointer events.
 - **The sim (`src/sim/`) is pure.** It never touches the DOM, `window`, `document`, PixiJS, timers or `Date`. It must run unchanged in Node (unit tests, `tools/headless.js`) and in a Web Worker.
 - **All randomness in the sim comes from `Rng` (`src/sim/rng.js`).** Never `Math.random()` in `src/sim/`, except UI helpers that pick a new setup (`randomSeedString`, `randomParams`), which are never used during a run. Each subsystem uses its own `rng.fork(label)` stream so adding draws in one place does not reshuffle another.
 - **Determinism:** same params + seed give the same state hash on every engine. Sim maths uses only `+ - * /`, `Math.sqrt`, `Math.floor`/`round`/`min`/`max`/`abs`; no `Math.exp/pow/log/sin/cos` (their precision is implementation-defined; noise uses smoothstep, not trigonometry). Iterate in index order; decide-then-apply for anything that moves between hexes so iteration order never biases outcomes.
@@ -26,12 +27,14 @@ The game design and phases are in [project/ROADMAP.md](project/ROADMAP.md). The 
 
 ```
 index.html, manifest.webmanifest, icons/, styles/   static shell
-vendor/                 vendored PixiJS ES module (committed, not edited by hand)
+vendor/                 vendored PixiJS and three.js ES modules (committed, not edited by hand)
 src/main.js             wiring: screens → SimHost → Loop → renderer and UI
 src/loop.js             fixed-timestep driver and speed table
 src/sim/                pure simulation
 src/host/simHost.js     UI ↔ sim boundary
 src/render/             PixiJS renderer, camera maths, palette
+src/render3d/           three.js 3D graphics (behind the 3D flag) and their pure diorama maths
+src/flags.js            feature flags (kept on the device, off by default)
 src/input/              pointer pan, pinch and tap
 src/ui/                 screens (home, How to play, map generation, setup, end), bottom sheet, inspector, stats, levels
 tests/unit/             node:test unit tests (pure logic only)

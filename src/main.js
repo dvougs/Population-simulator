@@ -5,6 +5,8 @@ import { Loop } from './loop.js';
 import { Camera, FLY_MS, flightAt } from './render/camera.js';
 import { Renderer } from './render/renderer.js';
 import { MenuScene } from './render/menuScene.js';
+import { HomeScene3D } from './render3d/homeScene3d.js';
+import { createFlags } from './flags.js';
 import { peopleShown, PEOPLE_ZOOM_PX, PEOPLE_FLY_PX } from './render/peopleLayer.js';
 import { hexAtWorld, hexCentre, worldBounds, HEX_SIZE } from './render/layout.js';
 import { attachGestures } from './input/gestures.js';
@@ -32,6 +34,9 @@ const ui = {
   sheet: $('sheet'), handle: $('sheet-handle'), stats: $('stats'), civStats: $('civ-stats'),
   civLevels: $('civ-levels'), levelGuide: $('level-guide-body'),
 };
+
+/** Feature flags (RULES.md "Feature flags"), kept on this device. */
+const flags = createFlags((() => { try { return window.localStorage; } catch { return null; } })(), location.search);
 
 const host = new LocalSimHost();
 const camera = new Camera();
@@ -76,7 +81,11 @@ let screen = null;
 // The menu screens' animated backdrop: the page's second (and last) WebGL context, made on first use.
 const menu = new MenuScene($('menu-bg'));
 const heroFigure = document.querySelector('.home-world');
-const home = new HomeScreen({ canvas: $('home-canvas'), caption: $('home-caption'), points: $('home-points'), figure: heroFigure }, menu);
+const home3d = new HomeScene3D($('home-3d'));
+const home = new HomeScreen(
+  { canvas: $('home-canvas'), caption: $('home-caption'), points: $('home-points'), figure: heroFigure, toggle: $('btn-3d') },
+  menu, { scene3d: home3d, flags },
+);
 menu.trackHero(heroFigure, ui.home);
 const how = new HowScreen($('how-body'), { onNewGame: () => newGame(), nav: $('how-nav'), progress: $('how-progress') });
 
@@ -473,6 +482,7 @@ $('btn-how').addEventListener('click', openHow);
 $('btn-how-new').addEventListener('click', newGame);
 $('btn-how-back').addEventListener('click', goHome);
 $('btn-home').addEventListener('click', goHome);
+$('btn-setup-home').addEventListener('click', goHome);
 ui.homeResume.addEventListener('click', () => { showScreen('game'); resize(); });
 
 showScreen(routeFromHash());
@@ -482,6 +492,10 @@ showScreen(routeFromHash());
 // Exposed for the browser tests and for poking at the sim from devtools.
 window.popsim = {
   host, loop, camera, startGame,
+  /** Feature flags: get(name), set(name, on), all(). */
+  flags: { get: (name) => flags.get(name), set: (name, on) => flags.set(name, on), all: () => flags.all() },
+  /** The home page's 3D world: whether it draws, on a software renderer, and its transition progress (0 flat to 1 risen). */
+  home3d: () => ({ live: home3d.live, failed: home3d.failed, lite: home3d.lite, progress: home3d.u, target: home3d.target, opacity: home3d.blend }),
   /** The screen on show: 'home', 'how', 'mapgen', 'setup', 'game' or 'end'. */
   screen: () => screen,
   /** Current year of the running game (0 before a game starts). */
