@@ -37,6 +37,7 @@ import { DEEP_WATER } from '../sim/terrain.js';
 import { PeopleLayer, peopleShown } from './peopleLayer.js';
 import { TerritoryLayer } from './territoryLayer.js';
 import { BuildingLayer } from './buildingLayer.js';
+import { SettlementLayer } from './settlementLayer.js';
 
 const SOFTWARE_MAX_DPR = 1; // backing resolution cap on a software WebGL renderer (gpu.js)
 const SHIMMER_PERIOD_MS = 8000; // one full swell: slow, like a tide
@@ -61,6 +62,7 @@ export class Renderer {
     this.motionChanged = false;
     this.territory = null;
     this.buildings = null;
+    this.settlements = null;
     this.lastTerritory = -Infinity;
     this.moving = false;
     this.driftT = 0;
@@ -150,16 +152,22 @@ export class Renderer {
     this.people = new PeopleLayer(map);
     this.territory = new TerritoryLayer(map);
     this.buildings = new BuildingLayer(map, types);
+    this.settlements = new SettlementLayer(map, types);
     this.lastTerritory = -Infinity;
     this.world.addChild(terrain, this.territory.tint, rivers);
     if (this.shimmer) this.world.addChild(this.shimmer);
-    this.world.addChild(grid, this.territory.rings, this.territory.outlines, this.selection, this.people.container, this.buildings.container);
+    this.world.addChild(grid, this.territory.rings, this.territory.outlines, this.settlements.container, this.selection, this.people.container, this.buildings.container);
     this.selected = -1;
   }
 
   /** New SimHost.buildings() list; returns true if the map needs a redraw. */
   setBuildings(list) {
     return this.buildings ? this.buildings.setBuildings(list) : false;
+  }
+
+  /** New SimHost.settlements() snapshot; returns true if the map needs a redraw. */
+  setSettlements(data) {
+    return this.settlements ? this.settlements.setSettlements(data) : false;
   }
 
   /** New population snapshot from SimHost.population(); `now` is render time in ms. */
@@ -229,6 +237,7 @@ export class Renderer {
     this.world.scale.set(camera.scale);
     this.people?.update(camera, now, this.driftT);
     this.buildings?.update(this.people?.shown ?? false, camera.scale);
+    this.settlements?.update(this.people?.shown ?? false, now, this.moving && !this.reducedMotion);
     this.app.render();
   }
 

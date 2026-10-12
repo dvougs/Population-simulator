@@ -19,6 +19,7 @@ import {
   DEEP_WATER, TERRAIN_IDS, TERRAIN_NAMES, MOVE_COST, DEFENCE_BONUS,
 } from './terrain.js';
 import { MATERIAL_COUNT, MATERIAL_IDS } from './materials.js';
+import { settlementName } from './settlements.js';
 import { TRAITS, TRAIT_COUNT, COOPERATION } from './traits.js';
 
 export class Simulation {
@@ -63,7 +64,13 @@ export class Simulation {
     this.reach = buildStepReach(map);
     this.migrationRules = migrationRules(this.civTypes, map, this.reach);
     this.contact = new Contact(map, this.civTypes);
-    this.levels = new Levels(map, this.civTypes);
+    this.levels = new Levels(map, this.civTypes, this.params.seed);
+    // Settlements set each hex's housing and imported food (read by births and migration) and its defence.
+    const settle = this.levels.settlements;
+    map.housing = settle.housing;
+    map.imported = settle.imported;
+    this.contact.hexDefence = settle.defence;
+    this.contact.hexHolder = settle.holder;
     // Kingdoms close their enclosed hexes to other civs and fight harder (see levels.js).
     this.migrationRules.inside = this.levels.inside;
     this.contact.inside = this.levels.inside;
@@ -108,6 +115,7 @@ export class Simulation {
     };
     this.onSwitch = (from, to) => st.switched(from, to);
     this.onBuild = (kind, c, era, year, other) => rec.building(kind, c, era, year, other);
+    this.levels.onSettle = (kind, c, h, year, other) => rec.settlement(kind, c, h, year, other);
     this.onLevel = (c, from, to, year) => {
       rec.level(c, to, year);
       // Boats come and go with level 4.
@@ -213,8 +221,10 @@ export class Simulation {
     const civs = this.civCount;
     // Gathering next year reads each civ's hungry people.
     const hungry = this.levels.hungry;
+    const hungryHex = this.levels.hungryHex;
     this.levels.effortGiven = true;
     hungry.fill(0);
+    hungryHex.fill(0);
     // And its gatherers' effort, counted here rather than in another pass over everyone.
     const effort = this.levels.effort;
     effort.fill(0);
@@ -227,7 +237,7 @@ export class Simulation {
       const k = hex[i] * civs + c;
       // A civ's first person in a hex adds the hex to those it holds.
       if (hexCivPop[k]++ === 0) civHexes[c]++;
-      if (hunger[i] > 0) hungry[c]++;
+      if (hunger[i] > 0) { hungry[c]++; hungryHex[hex[i]]++; }
       if (age[i] >= adultAge) effort[k] += personBase + coop[i];
       if (age[i] > civOldest[c]) civOldest[c] = age[i];
       const b = c * TRAIT_COUNT;
@@ -347,8 +357,18 @@ export class Simulation {
       deaths,
       famine: { ...FAMINE },
       history: this.history(),
-      records: this.records.data(this.people, this.tickCount),
+      records: this.namedRecords(),
+      cities: this.levels.settlements.greatest(this.map.cols),
     };
+  }
+
+  /** The end-screen records, with settlement names on the city events. */
+  namedRecords() {
+    const r = this.records.data(this.people, this.tickCount);
+    const name = (e) => { if (e.type === 'city' || e.type === 'cityTaken') e.name = settlementName(this.params.seed, e.hex); };
+    r.events.forEach(name);
+    r.chronicle.forEach(name);
+    return r;
   }
 
   /** Plain description of hex (col, row) with its people per civ, or null if it is off the map. */
@@ -372,7 +392,15 @@ export class Simulation {
     }
     // Buildings and wonders standing, being built or abandoned here.
     d.buildings = this.buildings().filter((b) => b.hex === d.index);
+    // The settlement here (tier, store, its own buildings, routes), or null.
+    d.settlement = this.levels.settlements.describe(d.index, this.map.cols);
+    d.housing = d.settlement ? d.settlement.housing : null;
     return d;
+  }
+
+  /** Settlements for drawing: per-hex tier, holder, buildings and plan, capitals and this year's routes (typed arrays). */
+  settlements() {
+    return { tick: this.tickCount, ...this.levels.settlements.snapshot() };
   }
 
   /** Every building and wonder on the map, standing, being built or abandoned (plain data; see buildings.js list). */
@@ -461,7 +489,9 @@ export class Simulation {
   /** Whole-state hash: the map, food stocks, every person and the year. */
   hash() {
     const m = this.map;
-    return fnv([m.terrain, m.lake, m.river, m.riverTo, m.food, ...this.people.views(), new Uint32Array([this.tickCount])]);
+    const st = this.levels.settlements;
+    return fnv([m.terrain, m.lake, m.river, m.riverTo, m.food, ...this.people.views(), st.store, st.built, st.tier,
+      new Uint32Array([this.tickCount])]);
   }
 
   get mapParams() { return mapParams(this.params); }

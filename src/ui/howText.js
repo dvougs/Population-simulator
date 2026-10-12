@@ -14,6 +14,7 @@ import {
 import { MATERIAL_NAMES, MATERIAL_TIER, DEPOSIT_CHANCE, RIVER_DEPOSIT_CHANCE } from '../sim/materials.js';
 import { BUILDINGS, BUILDING_COST, WONDERS, WONDER_RULES, ERAS, effectText, materialText } from '../sim/buildings.js';
 import { DEFAULT_PARAMS, LIMITS, YEAR_LIMIT_CHOICES } from '../sim/params.js';
+import { TIERS, TIER_NAMES, HAND, SETTLE, MAX_PROGRESS_BONUS } from '../sim/settlements.js';
 import { BASE_TPS, SPEEDS } from '../loop.js';
 import { CIV_STYLES } from '../render/civStyle.js';
 
@@ -122,12 +123,12 @@ export function buildingsSection() {
     title: 'Monuments of a people',
     paras: [
       `Every people builds its own way. Each civ type has one building of its own for every level from 1 to ${ERAS}, `
-        + `${CIV_TYPES.length * ERAS} in all, and a civ cannot climb past a level until that level's building stands. So it gathers for the building first, then for the next level. `
+        + `${CIV_TYPES.length * ERAS} in all. They are not needed to climb: a civ pays for its next level first and builds only with what it has to spare beyond that. `
         + 'Its bonus helps the whole civ for as long as it stands.',
       'A building rises in one hex: where the civ has the most people, sheltered by its own land and away from threats. '
         + 'The materials go when work starts. Then the years of work count only while that hex holds the people per hex the next level asks for '
         + `(${andList(eras.map((e) => String(e.perHex)))} at levels ${andList(eras.map((e) => String(e.era)))}). `
-        + 'If the civ ever leaves the hex, the building is lost with its bonus, and it must build again, at full price, before it can climb.',
+        + 'If the civ ever leaves the hex, the building is lost with its bonus, and it may build it again, at full price.',
     ],
     eras,
     types: buildingFacts(),
@@ -347,12 +348,21 @@ export function howText() {
         ],
         materials: materialFacts(),
         after: [
-          `A civ whose food is secure (at most ${G.secureHungryPct}% of its people went hungry last year) `
-            + `sends ${pct(G.gatherShare)} of its adults to gather. Each brings in ${G.yield.common} a year (${G.yield.exotic} of an exotic), `
-            + `at most ${G.cap.common} a deposit a year (${G.cap.exotic} for exotics). The stockpile never spoils; it is spent only on levels, buildings and wonders.`,
+          `Where food is secure (at most ${pct(SETTLE.secureHungry)} of the people there went hungry last year), `
+            + `${pct(G.gatherShare)} of a hex's adults gather its deposits. Deposits never run out, but by hand each gatherer brings in only ${HAND.yield.common} a year `
+            + `(${HAND.yield.exotic} of an exotic), at most ${HAND.cap.common} a deposit a year (${HAND.cap.exotic} for exotics). `
+            + 'An industry building on the deposit (Woodcutter, Quarry, Clay pit, Mine, Deep mine) gathers far faster, so rare materials pile up only where a civ has built for them.',
+          'What is gathered stays in that settlement\'s store. Carriers take it along routes over the civ\'s land to where it is needed: '
+            + 'to settlements putting up a building, and to the capital, whose store pays for levels, era buildings and wonders.',
           'Each level needs years at the level below, enough hexes (a share of the land per civ: the map\'s land hexes ÷ the civs that started) '
-            + 'with enough people on them, its own building for the level standing, '
-            + `and materials. A civ that stays below its level's people for ${E.fallBackYears} years in a row falls back a level.`,
+            + `with enough people on them, and materials in the capital's store. A civ that stays below its level's people for ${E.fallBackYears} years in a row falls back a level.`,
+          `Every lived-in hex is a settlement: ${andList(TIERS.map((t, k) => `${lower(TIER_NAMES[k])} from ${t.people}`))} people, `
+            + `as far as the civ's level allows (a town needs level ${TIERS[2].level}, a megapolis level ${TIERS[5].level}). Bigger places house more people, `
+            + `grow more food (up to +${pct(TIERS[5].food)} for a megapolis), store more and send carriers farther. A place shrinks after ${SETTLE.shrinkYears} years too small for its size.`,
+          'Each settlement puts up its own buildings, one at a time, paid from its store: huts and houses, fields, docks, granaries and irrigation, '
+            + 'industry on its deposits, warehouses and markets, shrines, schools and libraries, palisades and walls. '
+            + `Civic buildings make every year at a level count for more, up to +${pct(MAX_PROGRESS_BONUS)}. Hungry places get food from neighbours with food to spare. `
+            + `A hex that changes hands loses ${pct(SETTLE.looted)} of its store to looting.`,
         ],
         levels: levelFacts(),
         buildings: buildingsSection(),
@@ -381,8 +391,9 @@ export function howText() {
         title: 'At your fingertips',
         points: [
           'Drag to pan, pinch or scroll to zoom, and ⤢ fits the whole map again.',
-          'Tap a hex to fly in and see its terrain, food, deposits, people and any building or wonder there. Tap a person for their age, health, family and traits.',
-          'Swipe up the bottom sheet for each civ\'s people, hexes, level, buildings, wonders and stockpile, and a guide to every level.',
+          'Zoom in to see each settlement drawn by its size, its buildings, and carts on the routes between them.',
+          'Tap a hex to fly in and see its terrain, food, deposits, people, its settlement (store, buildings and routes) and any building or wonder there. Tap a person for their age, health, family and traits.',
+          'Swipe up the bottom sheet for each civ\'s people, hexes, level, buildings, wonders and capital store, and a guide to every level and settlement.',
           'The ☰ button pauses and goes back to setup. Add the page to your Home Screen for a full-screen app.',
         ],
       },

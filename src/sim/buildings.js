@@ -1,8 +1,8 @@
 // Buildings and wonders. Every number here is listed in RULES.md ("Buildings
 // and wonders").
 //
-// Each era (levels 1 to 4) every civ type has its own building, which a civ
-// must have standing to climb to the next level; each era also has one wonder
+// Each era (levels 1 to 4) every civ type has its own building, optional: its
+// bonus helps, but a civ can climb without it; each era also has one wonder
 // that only the first civ to finish it gets. A building or wonder stands in one
 // hex and lasts while its civ keeps people there. Their bonuses are civ-wide.
 //
@@ -365,7 +365,8 @@ export class Buildings {
       const k = c * E + L - 1;
       const need = lv.perHexFor(L);
       const danger = hostile[c] & ~beats[c];
-      if (this.state[k] === NONE && this.affords(stock, c, this.buildingCost(c, L, cost))) {
+      // The era building is optional: it waits until the capital also keeps what the next level costs.
+      if (this.state[k] === NONE && this.affords(stock, c, this.buildingCost(c, L, cost), lv.reserve)) {
         const h = this.site(c, cnt, need, hostile[c]);
         if (h >= 0) {
           for (let m = 0; m < MATERIAL_COUNT; m++) stock[c * MATERIAL_COUNT + m] -= cost[m];
@@ -406,8 +407,12 @@ export class Buildings {
     return lean * this.safety(c, cnt, danger) * land;
   }
 
-  affords(stock, c, list) {
-    for (let m = 0; m < MATERIAL_COUNT; m++) if (stock[c * MATERIAL_COUNT + m] < list[m]) return false;
+  /** Civ c's stock holds list, beyond reserve[c × MATERIAL_COUNT + m] when given. */
+  affords(stock, c, list, reserve = null) {
+    for (let m = 0; m < MATERIAL_COUNT; m++) {
+      const keep = reserve ? reserve[c * MATERIAL_COUNT + m] : 0;
+      if (stock[c * MATERIAL_COUNT + m] - keep < list[m]) return false;
+    }
     return true;
   }
 

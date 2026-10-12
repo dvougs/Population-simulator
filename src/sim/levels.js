@@ -1,13 +1,15 @@
-// Gathering, stockpiles and levels 1 to 5. Every number here is listed in
-// RULES.md ("Gathering and levels").
+// Gathering, stores and levels 1 to 5. Every number here is listed in
+// RULES.md ("Gathering and levels" and "Settlements").
 //
 // Once a year, first thing, from the counts taken at the end of last year:
+// settlements are updated (who holds each hex, its tier, each civ's capital);
 // civs whose food is secure send a share of their adults to gather the
-// deposits in their hexes, favouring what their next level needs; the yield
-// goes into a civ-wide stockpile that never decays and is spent only on
-// levelling. Then each civ levels up or falls back, Kingdoms absorb every
-// other civ's people in the hexes they enclose, and food capacities follow
-// the levels of the civs living in each hex.
+// deposits in the hexes they hold, favouring what their next spend needs; the
+// yield goes into that hex's store. Settlements build, the civ's era building,
+// wonder and level are paid from its capital's store, each civ levels up or
+// falls back, Kingdoms absorb every other civ's people in the hexes they
+// enclose, food capacities follow levels, tiers and buildings, and last the
+// supply routes carry food and materials to where they are wanted.
 //
 // The per-hex people per civ and each civ's hungry people come from the
 // Simulation's end-of-year count; the people are scanned again (for the
@@ -20,6 +22,9 @@ import { MATERIAL_COUNT, MATERIAL_TIER, MATERIAL_IDS } from './materials.js';
 import { PLAINS, DEEP_WATER } from './terrain.js';
 import { COOPERATION } from './traits.js';
 import { Buildings, ERAS, WONDERS, reduce } from './buildings.js';
+import { Settlements, TIERS, SETTLE } from './settlements.js';
+
+const SETTLE_CARRY_COST = SETTLE.carryGatherCost;
 
 export const LEVEL_NAMES = Object.freeze(['Foragers', 'Farmers', 'Builders', 'Organised', 'Kingdom']);
 export const MAX_LEVEL = 5;
@@ -51,9 +56,6 @@ export const GATHER = Object.freeze({
   adultAge: 16,
   /** A gatherer's yield is multiplied by (personBase + their cooperation): 1 at cooperation 0.5. */
   personBase: 0.5,
-  /** Yield per gatherer a year, and the most one deposit gives in a year (all civs together), by tier. */
-  yield: Object.freeze({ common: 0.5, uncommon: 0.5, exotic: 0.125 }),
-  cap: Object.freeze({ common: 10, uncommon: 10, exotic: 2.5 }),
 });
 
 /** Per-type changes to levelling and gathering, in whole percent. */
@@ -86,8 +88,6 @@ export const LEVEL_EFFECTS = Object.freeze({
   fallBackYears: 100,
 });
 
-const MATERIAL_YIELD = MATERIAL_TIER.map((t) => GATHER.yield[t]);
-const MATERIAL_CAP = MATERIAL_TIER.map((t) => GATHER.cap[t]);
 const MATERIAL_RARE = MATERIAL_TIER.map((t) => (t === 'common' ? 0 : 1));
 
 /**
@@ -127,8 +127,8 @@ export function capacityFactor(level, terrain, river) {
 }
 
 export class Levels {
-  /** types[c]: civ c's type id. map: the generated map (its foodCap is taken as the base capacity). */
-  constructor(map, types) {
+  /** types[c]: civ c's type id. map: the generated map (its foodCap is taken as the base capacity). seed: names settlements. */
+  constructor(map, types, seed = '') {
     const n = map.count;
     const civs = types.length;
     this.civs = civs;
@@ -145,10 +145,16 @@ export class Levels {
       this.minPeople[L] = m.pop;
     }
     this.level = new Uint8Array(civs).fill(1);
-    this.yearsAt = new Int32Array(civs);
+    /** Progress at the current level: + 1 a year, more with civic buildings (Settlements.progress). */
+    this.yearsAt = new Float64Array(civs);
     this.belowYears = new Int32Array(civs);
-    /** stock[civ × MATERIAL_COUNT + material]. */
+    /**
+     * stock[civ × MATERIAL_COUNT + material]: the civ's capital store while its spending is
+     * worked out each year (copied in before, written back after), otherwise its last value.
+     */
     this.stock = new Float64Array(civs * MATERIAL_COUNT);
+    /** Each civ's materials in all the stores of the hexes it holds (what it gathers against). */
+    this.held = new Float64Array(civs * MATERIAL_COUNT);
     /** First year each civ reached each level: reached[civ × 6 + level], −1 if never (level 1 is year 0). */
     this.reached = new Int32Array(civs * 6).fill(-1);
     for (let c = 0; c < civs; c++) this.reached[c * 6 + 1] = 0;
@@ -169,7 +175,6 @@ export class Levels {
         this.needMat.set(materialsNeeded(L, types[c]), (c * 6 + L) * MATERIAL_COUNT);
       }
     }
-    this.raised = false;
     /** Per-civ effects read by eating, deaths, births and migration. */
     this.birthBonus = new Float64Array(civs);
     /** Multiplier of hunger's health loss in desert, tundra and mountain (1, or shelterFactor from level 3). */
@@ -191,25 +196,35 @@ export class Levels {
     this.civPop = new Int32Array(civs);
     this.civHexes = new Int32Array(civs);
     this.nextMask = new Uint16Array(civs);
+    this.wantMask = new Uint16Array(civs);
+    this.planWant = new Uint16Array(civs);
+    this.neighbours = map.neighbours;
     this.laterMask = new Uint16Array(civs);
-    this.raw = new Float64Array(MATERIAL_COUNT);
-    this.heads = new Int32Array(MATERIAL_COUNT);
     /**
      * The Kingdom enclosing each hex, or −1: one with people (at the end of last year) in every land
      * neighbour. Other civs' people there join it, and no other civ may move in (see migration, fleeing).
      */
     this.inside = new Int8Array(n).fill(-1);
     this.hexLevel = new Uint8Array(n);
-    /** Each civ's era buildings and the wonders (buildings.js); levelling needs the era's building. */
+    /** Each civ's era buildings and the wonders (buildings.js). */
     this.buildings = new Buildings(map, types);
+    /** Every lived-in hex's settlement, store, buildings and supply routes (settlements.js). */
+    this.settlements = new Settlements(map, types, seed);
+    /** Filled at the end of each year by the Simulation: people who went hungry in each hex that year. */
+    this.hungryHex = new Int32Array(n);
+    this.onSettle = null;
     /** What each civ gathers for, in spending order (buildings.js "Gathering order"): target[civ × MATERIAL_COUNT + material]. */
     this.target = new Float64Array(civs * MATERIAL_COUNT);
     this.later = new Float64Array(civs * MATERIAL_COUNT);
     this.costScratch = new Float64Array(MATERIAL_COUNT);
+    this.reserve = new Float64Array(civs * MATERIAL_COUNT);
     /** Per-civ effects of buildings and wonders, read by eating, contact and capacities. */
     this.hungerMul = new Float64Array(civs).fill(1);
     this.setEffects();
     for (let c = 0; c < civs; c++) this.targets(c);
+    // A capital keeps what its civ is saving for when other settlements ask it for materials.
+    this.settlements.keep = this.target;
+    this.capitalNeeds();
   }
 
   /** People per hex the step up from level `level` asks for (work on that era's building and wonder needs as many). */
@@ -241,10 +256,10 @@ export class Levels {
   }
 
   /**
-   * What civ c gathers for, in spending order: first its era building (unless it is
-   * standing or being built), then the era's wonder if it is committed and has not
-   * started it, then the next level. target: the first of those still to be paid
-   * for; later: all of them plus every later level and its building.
+   * What civ c gathers for, in spending order: the era's wonder first if it is committed and
+   * has not started it (its level waits for that), then its next level, then its era building
+   * (optional; unless it is standing or being built). target: the first of those still to be
+   * paid for; later: all of them plus every later level and its building.
    */
   targets(c) {
     const L = this.level[c];
@@ -260,10 +275,19 @@ export class Levels {
       first = false;
     };
     for (let l = L; l < MAX_LEVEL; l++) {
-      if (l <= ERAS && bd.state[c * ERAS + l - 1] === 0) take(bd.buildingCost(c, l, cost));
       if (l === L && bd.waitingForWonder(c, L)) take(WONDERS[L - 1].materials);
       for (let m = 0; m < MATERIAL_COUNT; m++) cost[m] = this.levelCost(c, l, m);
       take(cost);
+      if (l <= ERAS && bd.state[c * ERAS + l - 1] === 0) take(bd.buildingCost(c, l, cost));
+    }
+  }
+
+  /** Into reserve: what civ c keeps in its capital store for its next level before it starts its era building. */
+  reserveFor() {
+    const r = this.reserve;
+    for (let c = 0; c < this.civs; c++) {
+      const L = this.level[c];
+      for (let m = 0; m < MATERIAL_COUNT; m++) r[c * MATERIAL_COUNT + m] = L < MAX_LEVEL ? this.levelCost(c, L, m) : 0;
     }
   }
 
@@ -287,7 +311,7 @@ export class Levels {
       let mask = 0;
       if (L < MAX_LEVEL) {
         const b = c * MATERIAL_COUNT;
-        for (let m = 0; m < MATERIAL_COUNT; m++) if (this.stock[b + m] < this.target[b + m]) mask |= 1 << m;
+        for (let m = 0; m < MATERIAL_COUNT; m++) if (this.held[b + m] < this.target[b + m]) mask |= 1 << m;
       }
       out[c] = mask;
     }
@@ -308,7 +332,10 @@ export class Levels {
     const civs = this.civs;
     const n = map.count;
     const { pop, stock } = this;
+    const st = this.settlements;
     this.cnt = cnt;
+    hostile = hostile ?? this.noMask();
+    beats = beats ?? this.noMask();
 
     // Per civ: people and hexes held.
     this.civPop.fill(0); this.civHexes.fill(0);
@@ -325,25 +352,36 @@ export class Levels {
         this.civHexes[c]++;
       }
     }
+    st.update(cnt, fightWinner, this.level, year, this.onSettle);
+    st.totals(this.held);
     for (let c = 0; c < civs; c++) {
       this.secure[c] = this.civPop[c] > 0 && this.hungry[c] * 100 <= GATHER.secureHungryPct * this.civPop[c] ? 1 : 0;
       this.nextMask[c] = 0;
       this.laterMask[c] = 0;
       this.targets(c);
-      if (!this.secure[c] || this.level[c] >= MAX_LEVEL) continue;
+      if (this.level[c] >= MAX_LEVEL) continue;
       for (let m = 0; m < MATERIAL_COUNT; m++) {
-        const have = stock[c * MATERIAL_COUNT + m];
+        const have = this.held[c * MATERIAL_COUNT + m];
         if (have < this.target[c * MATERIAL_COUNT + m]) this.nextMask[c] |= 1 << m;
         if (have < this.later[c * MATERIAL_COUNT + m]) this.laterMask[c] |= 1 << m;
       }
     }
 
+    for (let c = 0; c < civs; c++) this.wantMask[c] = this.nextMask[c] | this.laterMask[c];
+    st.choose(year, map.deposits, this.level, this.wantMask, this.hungryHex, (h, c) => this.threatNear(h, c, hostile[c] & ~beats[c]));
+    // Materials any of a civ's settlements is saving for: its hexes with those deposits gather them too.
+    this.planWant.fill(0);
+    for (let h = 0; h < n; h++) if (st.holder[h] >= 0) this.planWant[st.holder[h]] |= st.planMask(h);
     this.gather(people, map, fightWinner);
-    this.buildings.year(this, cnt, year, hostile ?? this.noMask(), beats ?? this.noMask(), onBuild);
+    st.build(year, this.onSettle);
+    // Era buildings, wonders and levels are paid from each civ's capital store.
+    this.loadStock();
+    this.reserveFor();
+    this.buildings.year(this, cnt, year, hostile, beats, onBuild);
     let kingdom = false;
     for (let c = 0; c < civs; c++) {
       if (this.civPop[c] === 0) continue;
-      this.yearsAt[c]++;
+      this.yearsAt[c] += 1 + st.progress[c];
       const L = this.level[c];
       if (L < MAX_LEVEL && this.canLevel(c)) {
         for (let m = 0; m < MATERIAL_COUNT; m++) stock[c * MATERIAL_COUNT + m] -= this.levelCost(c, L, m);
@@ -365,21 +403,84 @@ export class Levels {
       this.kingdomCiv = best;
       this.kingdomYear = year;
     }
+    this.saveStock();
     this.setEffects();
     // Spending this year may have moved what each civ gathers for (read by migration).
     for (let c = 0; c < civs; c++) this.targets(c);
     this.enclose(map);
     this.absorb(people, onSwitch);
     this.capacities(map);
+    this.capitalNeeds();
+    st.carry(map, this.target, year);
+    st.totals(this.held);
     return kingdom;
+  }
+
+  /**
+   * The least each civ's capital store holds of any one material: capitalNeed × the largest single
+   * cost among its next level, its era building and the era's wonder (while nobody has finished it).
+   */
+  capitalNeeds() {
+    const bd = this.buildings;
+    const cost = this.costScratch;
+    for (let c = 0; c < this.civs; c++) {
+      const L = this.level[c];
+      let top = 0;
+      if (L < MAX_LEVEL) {
+        for (let m = 0; m < MATERIAL_COUNT; m++) top = Math.max(top, this.levelCost(c, L, m));
+        if (L <= ERAS) {
+          bd.buildingCost(c, L, cost);
+          for (let m = 0; m < MATERIAL_COUNT; m++) top = Math.max(top, cost[m]);
+          if (bd.wYear[L - 1] < 0) for (let m = 0; m < MATERIAL_COUNT; m++) top = Math.max(top, WONDERS[L - 1].materials[m]);
+        }
+      }
+      this.settlements.capitalMin[c] = SETTLE.capitalNeed * top;
+    }
+  }
+
+  /** Copy each civ's capital store into stock (empty for a civ with no capital). */
+  loadStock() {
+    const st = this.settlements;
+    for (let c = 0; c < this.civs; c++) {
+      const h = st.capital[c];
+      for (let m = 0; m < MATERIAL_COUNT; m++) this.stock[c * MATERIAL_COUNT + m] = h >= 0 ? st.store[h * MATERIAL_COUNT + m] : 0;
+    }
+  }
+
+  /** Write stock back into each civ's capital store (up to its cap; refunds above it are lost). */
+  saveStock() {
+    const st = this.settlements;
+    for (let c = 0; c < this.civs; c++) {
+      const h = st.capital[c];
+      if (h < 0) continue;
+      for (let m = 0; m < MATERIAL_COUNT; m++) {
+        const v = this.stock[c * MATERIAL_COUNT + m];
+        st.store[h * MATERIAL_COUNT + m] = v > st.storeCap[h] ? st.storeCap[h] : v < 0 ? 0 : v;
+      }
+    }
+  }
+
+  /** A civ in `danger` (bitmask) has people in hex h or next to it. */
+  threatNear(h, c, danger) {
+    if (!danger) return false;
+    const civs = this.civs;
+    const { cnt } = this;
+    const near = (x) => { for (let o = 0; o < civs; o++) if ((danger & (1 << o)) && cnt[x * civs + o] > 0) return true; return false; };
+    if (near(h)) return true;
+    const nb = this.neighbours;
+    for (let d = 0; d < 6; d++) {
+      const t = nb[h * 6 + d];
+      if (t >= 0 && near(t)) return true;
+    }
+    return false;
   }
 
   canLevel(c) {
     const L = this.level[c];
     if (this.yearsAt[c] < this.yearsFor(c, L)) return false;
     if (this.civPop[c] < this.minPopFor(c, L + 1) || this.civHexes[c] < this.minHexesFor(c, L + 1)) return false;
-    // The era's building must stand, and a civ going for the era's wonder starts it first.
-    if (L <= ERAS && (!this.buildings.standing(c, L) || this.buildings.waitingForWonder(c, L))) return false;
+    // A civ going for the era's wonder starts it first (the era building is not needed).
+    if (L <= ERAS && this.buildings.waitingForWonder(c, L)) return false;
     for (let m = 0; m < MATERIAL_COUNT; m++) if (this.stock[c * MATERIAL_COUNT + m] < this.levelCost(c, L, m)) return false;
     return true;
   }
@@ -399,65 +500,50 @@ export class Levels {
   }
 
   /**
-   * Each secure civ's gatherers in a hex work the deposits there its next
-   * level still needs (or, with none of those, the ones a later level needs),
-   * split equally. A deposit yields min(cap, Σ gatherers × yield), shared by
-   * headcount among the civs working it, or all to the hex's fight winner.
+   * In each hex, the civ that holds it (settlements.js) gathers, if its food is secure: its
+   * gatherers work the deposits there that its next spend or any of its settlements' planned
+   * buildings still needs (or, with none of those, the ones a later spend needs), split equally. A deposit
+   * yields min(cap, gatherers × yield), by hand or with an industry building, into the hex's
+   * store. Hexes that carried goods last year gather less (their carriers did not gather).
    */
   gather(people, map, fightWinner) {
     const civs = this.civs;
-    const { cnt, effort, raw, heads, stock, gatherMask, gatherers, gathered } = this;
+    const st = this.settlements;
+    const { cnt, effort, gatherMask, gatherers, gathered } = this;
     gatherMask.fill(0); gatherers.fill(0); gathered.fill(0);
-    let anyone = false;
-    for (let c = 0; c < civs; c++) if (this.nextMask[c] || this.laterMask[c]) anyone = true;
-    if (!anyone) return;
     if (!this.effortGiven) {
       effort.fill(0);
       const { alive, hex, civ, age } = people;
       const coop = people.traits[COOPERATION];
       for (let i = 0; i < people.high; i++) {
         if (!alive[i] || age[i] < GATHER.adultAge) continue;
-        const c = civ[i];
-        if (this.nextMask[c] || this.laterMask[c]) effort[hex[i] * civs + c] += GATHER.personBase + coop[i];
+        effort[hex[i] * civs + civ[i]] += GATHER.personBase + coop[i];
       }
     }
     for (let h = 0; h < map.count; h++) {
       const dep = map.deposits[h];
-      if (dep === 0 || this.pop[h] === 0) continue;
+      const c = st.holder[h];
+      // A hex gathers while its food is secure: few of its people went hungry last year.
+      if (dep === 0 || c < 0 || this.hungryHex[h] > SETTLE.secureHungry * this.pop[h]) continue;
       const b0 = h * civs;
-      let any = false;
-      raw.fill(0); heads.fill(0);
-      for (let c = 0; c < civs; c++) {
-        if (cnt[b0 + c] === 0 || !this.secure[c]) continue;
-        let mask = dep & this.nextMask[c];
-        if (!mask) mask = dep & this.laterMask[c];
-        if (!mask || effort[b0 + c] === 0) continue;
-        const g = (GATHER.gatherShare * effort[b0 + c] * this.gatherPct[c] * (1 + this.buildings.eff.gather[c])) / 100;
-        const rare = 1 + this.buildings.eff.gatherRare[c];
-        let k = 0;
-        for (let m = 0; m < MATERIAL_COUNT; m++) if (mask & (1 << m)) k++;
-        for (let m = 0; m < MATERIAL_COUNT; m++) {
-          if (!(mask & (1 << m))) continue;
-          raw[m] += (MATERIAL_YIELD[m] * g * (MATERIAL_RARE[m] ? rare : 1)) / k;
-          heads[m] += cnt[b0 + c];
-        }
-        gatherMask[b0 + c] = mask;
-        gatherers[b0 + c] = g;
-        any = true;
-      }
-      if (!any) continue;
-      const w = fightWinner[h];
+      let mask = dep & (this.nextMask[c] | this.planWant[c]);
+      if (!mask) mask = dep & this.laterMask[c];
+      if (!mask || effort[b0 + c] === 0) continue;
+      const g = (GATHER.gatherShare * effort[b0 + c] * this.gatherPct[c] * (1 + this.buildings.eff.gather[c])
+        * (1 - SETTLE_CARRY_COST * st.used[h])) / 100;
+      const rare = 1 + this.buildings.eff.gatherRare[c];
+      let k = 0;
+      for (let m = 0; m < MATERIAL_COUNT; m++) if (mask & (1 << m)) k++;
+      let got = 0;
       for (let m = 0; m < MATERIAL_COUNT; m++) {
-        if (raw[m] <= 0) continue;
-        const y = Math.min(MATERIAL_CAP[m], raw[m]);
-        if (w >= 0) { stock[w * MATERIAL_COUNT + m] += y; gathered[b0 + w] += y; continue; }
-        for (let c = 0; c < civs; c++) {
-          if (!(gatherMask[b0 + c] & (1 << m))) continue;
-          const share = (y * cnt[b0 + c]) / heads[m];
-          stock[c * MATERIAL_COUNT + m] += share;
-          gathered[b0 + c] += share;
-        }
+        if (!(mask & (1 << m))) continue;
+        const raw = (st.yieldOf(h, m) * g * (MATERIAL_RARE[m] ? rare : 1)) / k;
+        const y = Math.min(st.capOf(h, m), raw);
+        got += st.put(h, m, y);
       }
+      gatherMask[b0 + c] = mask;
+      gatherers[b0 + c] = g;
+      gathered[b0 + c] = got;
     }
   }
 
@@ -517,22 +603,18 @@ export class Levels {
 
   /**
    * Food capacity of each land hex from the highest level of the civs living
-   * there (counted when the step started). Food above a lowered capacity is lost.
+   * there (counted when the step started), its settlement tier and buildings,
+   * and the civs' building and wonder bonuses. Food above a lowered capacity is lost.
    */
   capacities(map) {
     const civs = this.civs;
-    let top = 1;
-    let fed = false;
     const bd = this.buildings;
-    for (let c = 0; c < civs; c++) {
-      if (this.level[c] > top) top = this.level[c];
-      if (bd.eff.food[c] > 0 || bd.eff.foodHarsh[c] > 0) fed = true;
-    }
-    // Nothing to do while every civ is at level 1 with no food bonus and no hex was ever raised.
-    if (top === 1 && !fed && !this.raised) return;
-    this.raised = true;
+    const st = this.settlements;
+    let fed = false;
+    for (let c = 0; c < civs; c++) if (bd.eff.food[c] > 0 || bd.eff.foodHarsh[c] > 0) fed = true;
     const { foodCap, food, terrain, river } = map;
     for (let h = 0; h < map.count; h++) {
+      if (terrain[h] === DEEP_WATER) continue;
       let L = 1;
       let extra = 0;
       if (this.pop[h] > 0) {
@@ -545,7 +627,7 @@ export class Levels {
         }
       }
       this.hexLevel[h] = L;
-      const cap = this.baseCap[h] * (capacityFactor(L, terrain[h], river[h]) + extra);
+      const cap = this.baseCap[h] * (capacityFactor(L, terrain[h], river[h]) + extra + st.foodShare[h]) + st.foodFlat[h];
       foodCap[h] = cap;
       if (food[h] > foodCap[h]) food[h] = foodCap[h];
     }
@@ -559,14 +641,24 @@ export class Levels {
       level: L,
       levelName: LEVEL_NAMES[L - 1],
       foodSecure: this.secure[c] === 1,
-      yearsAtLevel: this.yearsAt[c],
+      yearsAtLevel: Math.floor(this.yearsAt[c]),
       yearsBelowMinimum: this.belowYears[c],
       minPop: this.minPopFor(c, L),
       stockpile,
       reached: Array.from({ length: MAX_LEVEL }, (_, k) => (this.reached[c * 6 + k + 1] >= 0 ? this.reached[c * 6 + k + 1] : null)),
       next: null,
     };
-    for (let m = 0; m < MATERIAL_COUNT; m++) stockpile[MATERIAL_IDS[m]] = this.stock[c * MATERIAL_COUNT + m];
+    // The capital's store pays for levels, era buildings and wonders; held is everything in the civ's stores.
+    const st = this.settlements;
+    const cap = st.capital[c];
+    const held = {};
+    for (let m = 0; m < MATERIAL_COUNT; m++) {
+      stockpile[MATERIAL_IDS[m]] = cap >= 0 ? st.store[cap * MATERIAL_COUNT + m] : 0;
+      held[MATERIAL_IDS[m]] = this.held[c * MATERIAL_COUNT + m];
+    }
+    out.held = held;
+    out.capital = cap >= 0 ? st.describeBrief(cap) : null;
+    out.progressBonus = st.progress[c];
     if (L < MAX_LEVEL) {
       const need = Object.fromEntries(MATERIAL_IDS.map((id, m) => [id, this.levelCost(c, L, m)]));
       out.next = {
@@ -576,7 +668,7 @@ export class Levels {
         pop: this.minPopFor(c, L + 1),
         hexes: this.minHexesFor(c, L + 1),
         materials: need,
-        /** The era building that must stand first (null for none), and whether the civ waits to start the era's wonder. */
+        /** The era building (optional; null for none), and whether the civ waits to start the era's wonder. */
         building: L <= ERAS ? this.buildings.summary(c).eras[L - 1].building.name : null,
         buildingStanding: L <= ERAS ? this.buildings.standing(c, L) : true,
         waitingForWonder: this.buildings.waitingForWonder(c, L),

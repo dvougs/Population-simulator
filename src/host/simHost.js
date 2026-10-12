@@ -85,6 +85,11 @@ export class LocalSimHost {
    * Empty without a game.
    */
   buildings() { return this.sim?.buildings() ?? []; }
+  /**
+   * Settlements for drawing: { tick, tier, holder, built, plan, started (typed arrays per hex),
+   * capital (hex per civ), routes: { from, to, food, materials } }, or null without a game.
+   */
+  settlements() { return this.sim?.settlements() ?? null; }
   /** People per civ per hex and every person's slot, id, hex and civ (typed array copies), for drawing. */
   population() { return this.sim?.population() ?? null; }
   /** Details of the person in pool slot `slot` with id `id`, or null if they are no longer alive. */

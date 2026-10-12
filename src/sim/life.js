@@ -215,7 +215,7 @@ export function births(people, map, rng, pop, parents, onBirth, traitRng = null,
   for (let i = 0; i < people.high; i++) {
     if (!alive[i] || hunger[i] !== 0) continue;
     if (age[i] < LIFE.fertileMin || age[i] > LIFE.fertileMax) continue;
-    if (pop[hex[i]] >= map.foodCap[hex[i]]) continue;
+    if (pop[hex[i]] >= room(map, hex[i])) continue;
     const chance = birthChance(fert[i], meta[i]) + (bonus ? bonus[civ[i]] : 0);
     if (rng.next() < chance) parents[n++] = i;
   }
@@ -233,6 +233,27 @@ export function births(people, map, rng, pop, parents, onBirth, traitRng = null,
     onBirth(child);
   }
   return n;
+}
+
+/**
+ * Most people hex h has room for (births stop there): its food capacity plus twice the food
+ * carried in this year (regrowth gives half the capacity a year, so imports count double),
+ * and never above its settlement's housing (see settlements.js). A map without settlements
+ * (tests, previews) uses the food capacity alone.
+ */
+export function room(map, h) {
+  const support = map.imported ? map.foodCap[h] + 2 * map.imported[h] : map.foodCap[h];
+  return map.housing && map.housing[h] < support ? map.housing[h] : support;
+}
+
+/**
+ * The people above which hex h is crowded for a civ whose crowding share is `share`: share ×
+ * (food capacity + twice the food carried in), and never above its housing.
+ */
+export function crowdLine(map, h, share) {
+  const support = map.imported ? map.foodCap[h] + 2 * map.imported[h] : map.foodCap[h];
+  const line = share * support;
+  return map.housing && map.housing[h] < line ? map.housing[h] : line;
 }
 
 /** Food grows back by foodRegrowth × capacity, never above capacity. */

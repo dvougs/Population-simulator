@@ -240,6 +240,7 @@ function updatePanels() {
   renderHudCivs(ui.hudCivs, stats);
   renderStats(ui.stats, stats);
   if (renderer.setBuildings(host.buildings())) dirty = true;
+  if (renderer.setSettlements(host.settlements())) dirty = true;
   // Keep the open card's values current.
   if (selected >= 0) showHexCard();
   else if (person) showPersonCard();
@@ -509,6 +510,8 @@ window.popsim = {
   peopleShown: () => renderer.people?.shown ?? false,
   /** Every building and wonder on the map (SimHost.buildings()). */
   buildings: () => host.buildings(),
+  /** Every settlement and this year's supply routes (SimHost.settlements()). */
+  settlements: () => host.settlements(),
   /** Whether the camera is flying to a tapped hex. */
   flying: () => flight !== null,
 };
