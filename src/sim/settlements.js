@@ -122,8 +122,8 @@ export const SETTLEMENT_BUILDINGS = Object.freeze([
 export const SB_COUNT = SETTLEMENT_BUILDINGS.length;
 export const SB_INDEX = Object.freeze(Object.fromEntries(SETTLEMENT_BUILDINGS.map((b, k) => [b.id, k])));
 
-/** Progress bonuses from civic buildings add up to at most this (+50%) … */
-export const MAX_PROGRESS_BONUS = 0.5;
+/** Progress bonuses from civic buildings add up to at most this (+20%) … */
+export const MAX_PROGRESS_BONUS = 0.2;
 /** … and each kind of civic building counts in at most this many of a civ's settlements. */
 export const CIVIC_COUNTED = 5;
 
@@ -285,6 +285,10 @@ export class Settlements {
     // Scratch for the supply search.
     this.dist = new Int16Array(n).fill(-1);
     this.queue = new Int32Array(n);
+    /** Water hexes in a row a search has sailed to reach each water hex. */
+    this.sea = new Uint8Array(n);
+    /** Per civ, water hexes in a row its boats cross (levels.js boatRange; set by Levels), 0 for none. */
+    this.boats = null;
     this.left = new Float64Array(n);
     this.need = new Float64Array(MATERIAL_COUNT);
     this.civNeed = new Float64Array(MATERIAL_COUNT);
@@ -740,6 +744,7 @@ export class Settlements {
       if (!wantPlan && !wantCiv) continue;
       const myReach = TIERS[tier[h]].reach;
       const near = Math.max(myReach, this.topReach[c]);
+      const range = this.boats ? this.boats[c] : 0;
       let head = 0;
       let tail = 0;
       let ringStart = 0;
@@ -757,9 +762,16 @@ export class Settlements {
         }
         // Past every reach that matters, only a capital's civ materials keep the search going.
         if (d >= near && !wantCiv) continue;
+        // Over held land, and with boats across up to their range of water hexes in a row.
+        const wet = terrain[sp] === DEEP_WATER;
         for (let k = 0; k < 6; k++) {
           const t = neighbours[sp * 6 + k];
-          if (t < 0 || dist[t] >= 0 || terrain[t] === DEEP_WATER || holder[t] !== c) continue;
+          if (t < 0 || dist[t] >= 0) continue;
+          if (terrain[t] === DEEP_WATER) {
+            const run = wet ? this.sea[sp] + 1 : 1;
+            if (run > range) continue;
+            this.sea[t] = run;
+          } else if (holder[t] !== c) continue;
           dist[t] = d + 1;
           queue[tail++] = t;
         }

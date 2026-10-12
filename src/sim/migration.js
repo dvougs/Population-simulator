@@ -41,14 +41,21 @@ export const MIGRATION = Object.freeze({
 
 /**
  * One-hex reach: for each land hex, its land neighbours in index order. With
- * boats, also the land hexes next to a water neighbour (one water hex
- * crossed), never the hex itself. Same CSR shape as buildReach.
+ * boats (`boatRange` water hexes, 0 for none; `true` counts as 1), also the
+ * land hexes next to water that can be sailed to from it across at most
+ * boatRange water hexes in a row, never the hex itself. Same CSR shape as buildReach.
  */
-export function buildStepReach(map, boats = false) {
+export function buildStepReach(map, boatRange = 0) {
+  const range = Number(boatRange) || 0;
   const { count, terrain, neighbours } = map;
   const offsets = new Int32Array(count + 1);
   const lists = [];
   const seen = new Uint8Array(count);
+  // Water hexes sailed through from the current hex (breadth first, by depth).
+  const sailed = new Uint8Array(count);
+  let wave = [];
+  let next = [];
+  const visited = [];
   for (let h = 0; h < count; h++) {
     const out = [];
     if (terrain[h] !== DEEP_WATER) {
@@ -56,12 +63,22 @@ export function buildStepReach(map, boats = false) {
         const v = neighbours[h * 6 + d];
         if (v < 0) continue;
         if (terrain[v] !== DEEP_WATER) { if (!seen[v]) { seen[v] = 1; out.push(v); } continue; }
-        if (!boats) continue;
-        for (let e = 0; e < 6; e++) {
-          const u = neighbours[v * 6 + e];
-          if (u >= 0 && u !== h && terrain[u] !== DEEP_WATER && !seen[u]) { seen[u] = 1; out.push(u); }
-        }
+        if (range > 0 && !sailed[v]) { sailed[v] = 1; visited.push(v); wave.push(v); }
       }
+      for (let depth = 1; wave.length; depth++) {
+        for (const w of wave) {
+          for (let e = 0; e < 6; e++) {
+            const u = neighbours[w * 6 + e];
+            if (u < 0) continue;
+            if (terrain[u] !== DEEP_WATER) { if (u !== h && !seen[u]) { seen[u] = 1; out.push(u); } }
+            else if (depth < range && !sailed[u]) { sailed[u] = 1; visited.push(u); next.push(u); }
+          }
+        }
+        [wave, next] = [next, wave];
+        next.length = 0;
+      }
+      for (const v of visited) sailed[v] = 0;
+      visited.length = 0;
       for (const v of out) seen[v] = 0;
       out.sort((a, b) => a - b);
     }
@@ -74,17 +91,49 @@ export function buildStepReach(map, boats = false) {
 }
 
 /**
+ * The pieces of land a reach table connects: id[h] for each land hex (−1 for
+ * water) and size[id], the land hexes in that piece. Built once per boat range.
+ */
+export function landPieces(map, reach) {
+  const { count, terrain } = map;
+  const id = new Int32Array(count).fill(-1);
+  const size = [];
+  const stack = [];
+  for (let h = 0; h < count; h++) {
+    if (terrain[h] === DEEP_WATER || id[h] >= 0) continue;
+    const k = size.length;
+    let n = 0;
+    id[h] = k;
+    stack.push(h);
+    while (stack.length) {
+      const u = stack.pop();
+      n++;
+      for (let j = reach.offsets[u]; j < reach.offsets[u + 1]; j++) {
+        const v = reach.targets[j];
+        if (id[v] < 0) { id[v] = k; stack.push(v); }
+      }
+    }
+    size.push(n);
+  }
+  return { id, size };
+}
+
+/**
  * For each land hex, the land hexes reachable in one year (cheapest path cost
  * ≤ movePoints), excluding itself, in index order. Without boats a path never
- * enters water; with boats (`boatCost` > 0) a path may cross one sea or lake
- * hex, which costs boatCost, and must step back onto land to end.
+ * enters water; with boats (`boatCost` > 0) a path may make one voyage of up to
+ * `boatRange` sea or lake hexes in a row, each costing boatCost, and must step
+ * back onto land to end.
  * Returned as offsets/targets (CSR): targets[offsets[h] … offsets[h + 1] − 1].
  */
-export function buildReach(map, movePoints = MIGRATION.movePoints, boatCost = 0) {
+export function buildReach(map, movePoints = MIGRATION.movePoints, boatCost = 0, boatRange = 1) {
   const { count, terrain, neighbours } = map;
   const lists = [];
-  // State s = hex + count × (water hexes crossed so far, 0 or 1).
-  const cost = new Float64Array(2 * count).fill(Infinity);
+  // State s = hex + count × phase: 0 not sailed yet, 1 … R at sea after that many
+  // water hexes, R + 1 landed after the voyage (no second voyage).
+  const R = boatCost ? Math.max(1, boatRange) : 0;
+  const landed = R + 1;
+  const cost = new Float64Array((R + 2) * count).fill(Infinity);
   const touched = [];
   const found = new Uint8Array(count);
   for (let h = 0; h < count; h++) {
@@ -104,19 +153,19 @@ export function buildReach(map, movePoints = MIGRATION.movePoints, boatCost = 0)
       }
       const s = frontier.splice(bi, 1)[0];
       const u = s % count;
-      const crossed = s >= count ? 1 : 0;
+      const phase = (s - u) / count;
       for (let d = 0; d < 6; d++) {
         const v = neighbours[u * 6 + d];
         if (v < 0) continue;
         let t;
         let c;
         if (terrain[v] === DEEP_WATER) {
-          // Only by boat, only one water hex, and never two in a row.
-          if (!boatCost || crossed || terrain[u] === DEEP_WATER) continue;
-          t = v + count;
+          // Only by boat, at most R water hexes, and only one voyage.
+          if (!R || phase >= R) continue;
+          t = v + (phase + 1) * count;
           c = cost[s] + boatCost;
         } else {
-          t = v + crossed * count;
+          t = v + (phase === 0 ? 0 : landed) * count;
           c = cost[s] + MOVE_COST[terrain[v]];
         }
         if (c > movePoints || c >= cost[t]) continue;
@@ -194,7 +243,7 @@ export function migrationRules(types, map, reach) {
     near: new Uint32Array(map.count),
     threat: new Int8Array(map.count * n),
   };
-  // Reach tables by kind ('step', '5', 'stepb1', …), built as civs need them.
+  // Reach tables by kind ('step', '5', 'stepr3b1', …), built as civs need them.
   rules.byPoints = new Map();
   rules.movePoints = new Int32Array(n);
   rules.boats = new Uint8Array(n);
@@ -206,22 +255,24 @@ export function migrationRules(types, map, reach) {
     rules.crowdedShare[c] = t.crowdedShare ?? MIGRATION.crowdedShare;
     // 0: one hex a year (buildStepReach).
     rules.movePoints[c] = t.movePoints ?? 0;
-    setReach(rules, c, map, false);
+    setReach(rules, c, map, 0);
   }
   return rules;
 }
 
 /**
- * Give civ c the reach table for its movement points, with or without boats
- * (boatCost: movement points to cross one water hex). Tables are built once
- * per kind and shared; only called when a civ gains or loses boats.
+ * Give civ c the reach table for its movement points and boat range (water hexes
+ * a voyage may cross, 0 for none; boatCost: movement points per water hex).
+ * Tables are built once per kind and shared; only called when a civ's boats or
+ * movement points change.
  */
-export function setReach(rules, c, map, boats, boatCost = 1) {
+export function setReach(rules, c, map, boatRange, boatCost = 1) {
+  const range = Number(boatRange) || 0;
   const mp = rules.movePoints[c];
   const base = mp === 0 ? 'step' : `${mp}`;
-  const key = boats ? `${base}b${boatCost}` : base;
-  if (!rules.byPoints.has(key)) rules.byPoints.set(key, mp === 0 ? buildStepReach(map, boats) : buildReach(map, mp, boats ? boatCost : 0));
-  rules.boats[c] = boats ? 1 : 0;
+  const key = range ? `${base}r${range}b${boatCost}` : base;
+  if (!rules.byPoints.has(key)) rules.byPoints.set(key, mp === 0 ? buildStepReach(map, range) : buildReach(map, mp, range ? boatCost : 0, range));
+  rules.boats[c] = range;
   rules.reach[c] = rules.byPoints.get(key);
   rules.cum[c] = new Float64Array(rules.reach[c].targets.length);
 }
