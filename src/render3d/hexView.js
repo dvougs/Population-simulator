@@ -18,6 +18,7 @@ import { daylight, arcAt, partOfDay } from './dayNight.js';
 import { TERRAIN_RGB, RIVER_RGB, LAKE_RGB, rgbToHex } from '../render/palette.js';
 import { civStyle } from '../render/civStyle.js';
 import { TERRAIN_IDS } from '../sim/terrain.js';
+import { seasonRgb, SNOW_RGB, AUTUMN_RGB, SPRING_RGB } from './seasons.js';
 
 const ENTER_MS = 1600;
 const SOFT_FRAME_MS = 250;
@@ -26,6 +27,7 @@ const PITCH = 0.72; // radians above the ground, once in
 const SKY_DAY = 0x9fcfff; const SKY_NIGHT = 0x0a1328;
 const STONE = 0xe9dfcb; const WOOD = 0x7a5232; const GOLD = 0xf2c14e;
 const WINDOW = 0xffc46b;
+const MUD = 0xa58660; const THATCH = 0xb08a4e; const FLAME = 0xff8a2a;
 const SMOKE = 14; const SPARKS = 18;
 
 const easeOut = (t) => (t >= 1 ? 1 : 1 - (1 - t) ** 3);
@@ -67,10 +69,15 @@ export class HexView {
     return this.ready;
   }
 
-  /** Show hex `hex` (SimHost.inspect) with its people (SimHost.hexPeople list); `clock` starts the day/night clock (seconds). */
-  async enter(hex, people = [], clock = 4) {
+  /**
+   * Show hex `hex` (SimHost.inspect) with its people (SimHost.hexPeople list);
+   * `clock` starts the day/night clock (seconds) and `look` is the season's
+   * look on the map (seasons.seasonLook), or null for none.
+   */
+  async enter(hex, people = [], clock = 4, look = null) {
     if (!(await this.init())) return false;
     this.layout = layoutHex(hex, people);
+    this.look = look ?? { snow: 0, autumn: 0, spring: 0 };
     this.build(hex);
     this.open = true;
     this.t0 = performance.now();
@@ -133,8 +140,15 @@ export class HexView {
     scene.fog = new T.Fog(SKY_DAY, 45, 120);
 
     // The plate: the hex's ground standing on a dark base, with water round it for coasts.
-    const terrainId = TERRAIN_IDS.indexOf(hex.terrain);
-    const groundRgb = hex.water && hex.lake ? LAKE_RGB : TERRAIN_RGB[terrainId] ?? TERRAIN_RGB[2];
+    const found = TERRAIN_IDS.indexOf(hex.terrain);
+    const terrainId = found < 0 ? 2 : found;
+    const look = this.look;
+    const groundRgb = hex.water ? (hex.lake ? LAKE_RGB : TERRAIN_RGB[terrainId]) : seasonRgb(terrainId, TERRAIN_RGB[terrainId] ?? TERRAIN_RGB[2], look);
+    // Plants and fields turn with the season too: leaves gold in autumn and bare in winter, snow on pines and fields.
+    const turn = (col, toward, t) => mixHex(col, rgbToHex(toward), t);
+    const BARE_RGB = [138, 122, 98];
+    const leaves = (col) => turn(turn(turn(col, SPRING_RGB, look.spring * 0.3), AUTUMN_RGB, look.autumn * 0.6), BARE_RGB, look.snow * 0.6);
+    const snowy = (col, t) => turn(col, SNOW_RGB, look.snow * t);
     const plate = add(new T.Mesh(new T.CylinderGeometry(HEX_R, HEX_R, 1.2, 6), mat(rgbToHex(groundRgb))));
     plate.position.y = -0.6;
     const base = new T.Mesh(new T.CylinderGeometry(HEX_R + 0.25, HEX_R + 0.6, 2.5, 6), mat(0x0a1422));
@@ -156,11 +170,46 @@ export class HexView {
     }
 
     // Fields: golden strips with darker furrows.
-    const fields = inst(new T.BoxGeometry(1, 0.08, 1), mat(0xd9b65a), L.fields.length, false);
+    const fields = inst(new T.BoxGeometry(1, 0.08, 1), mat(snowy(turn(0xd9b65a, SPRING_RGB, look.spring * 0.5), 0.7)), L.fields.length, false);
     L.fields.forEach((f, k) => put(fields, k, f.x, 0.04, f.z, f.w, 1, f.d, f.rot));
 
     // Homes: stone walls under roofs in the holder's colour; tents for people with no settlement.
-    const homes = L.homes.filter((h) => !h.tent); const tents = L.homes.filter((h) => h.tent);
+    const homes = L.homes.filter((h) => !h.tent && !L.huts); const tents = L.homes.filter((h) => h.tent);
+    // Foragers (civ level 1) live in round huts: a mud wall under a thatch cone, and no windows.
+    const huts = L.huts ? L.homes.filter((h) => !h.tent) : [];
+    const hutWalls = inst(new T.CylinderGeometry(0.55, 0.6, 0.5, 9).translate(0, 0.25, 0), mat(MUD), huts.length);
+    const hutRoofs = inst(new T.ConeGeometry(0.78, 0.95, 9).translate(0, 0.475, 0), mat(0xffffff), huts.length);
+    huts.forEach((h, k) => {
+      put(hutWalls, k, h.x, 0, h.z, h.s, h.s, h.s, h.rot);
+      put(hutRoofs, k, h.x, 0.42 * h.s, h.z, h.s, h.s, h.s, h.rot);
+      hutRoofs.setColorAt(k, c.setHex(mixHex(THATCH, civHex(h.civ), 0.3)));
+    });
+    // Their bonfire: a ring of stones, crossed logs and a flame that burns brighter at night.
+    this.fire = null;
+    if (L.fire) {
+      const g = new T.Group();
+      g.position.set(L.fire.x, 0, L.fire.z);
+      for (let k = 0; k < 7; k++) {
+        const a = (k / 7) * Math.PI * 2;
+        const stone = new T.Mesh(new T.DodecahedronGeometry(0.13, 0), mat(0x7d776e));
+        stone.position.set(0.42 * Math.cos(a), 0.06, 0.42 * Math.sin(a));
+        g.add(stone);
+      }
+      for (const r of [0.4, 1.4, 2.4]) {
+        const log = new T.Mesh(new T.CylinderGeometry(0.05, 0.05, 0.7, 5), mat(WOOD));
+        log.rotation.set(Math.PI / 2 - 0.35, r, 0); log.position.y = 0.12;
+        g.add(log);
+      }
+      const flame = new T.Mesh(new T.ConeGeometry(0.22, 0.6, 6).translate(0, 0.3, 0), new T.MeshBasicMaterial({ color: FLAME, transparent: true, opacity: 0.5 }));
+      flame.position.y = 0.1;
+      const core = new T.Mesh(new T.ConeGeometry(0.11, 0.35, 5).translate(0, 0.175, 0), new T.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.6 }));
+      core.position.y = 0.1;
+      const light = new T.PointLight(0xff8a3a, 0, 12, 1.6);
+      light.position.y = 0.8;
+      g.add(flame, core, light);
+      scene.add(g);
+      this.fire = { flame, core, light };
+    }
     const walls = inst(new T.BoxGeometry(0.9, 0.7, 0.8).translate(0, 0.35, 0), mat(STONE), homes.length);
     const roofs = inst(new T.ConeGeometry(0.78, 0.6, 4).rotateY(Math.PI / 4).translate(0, 0.3, 0), mat(0xffffff), homes.length);
     const windows = inst(new T.BoxGeometry(0.22, 0.2, 0.04), new T.MeshBasicMaterial({ color: WINDOW, transparent: true, opacity: 0 }), homes.length, false);
@@ -233,9 +282,9 @@ export class HexView {
 
     // Nature: one instanced mesh per kind, swaying on its own.
     const kinds = {
-      pine: [new T.ConeGeometry(0.45, 1.5, 6).translate(0, 1.05, 0), 0x2f6b3a],
-      snowpine: [new T.ConeGeometry(0.45, 1.4, 6).translate(0, 1.0, 0), 0x9fb9b0],
-      tree: [new T.IcosahedronGeometry(0.6, 0).translate(0, 1.1, 0), 0x4f8f3e],
+      pine: [new T.ConeGeometry(0.45, 1.5, 6).translate(0, 1.05, 0), snowy(0x2f6b3a, 0.4)],
+      snowpine: [new T.ConeGeometry(0.45, 1.4, 6).translate(0, 1.0, 0), snowy(0x9fb9b0, 0.5)],
+      tree: [new T.IcosahedronGeometry(0.6, 0).translate(0, 1.1, 0), leaves(0x4f8f3e)],
       palm: [new T.ConeGeometry(0.75, 0.3, 7).translate(0, 1.5, 0), 0x3f8a4a],
       cactus: [new T.CylinderGeometry(0.15, 0.18, 1.0, 6).translate(0, 0.5, 0), 0x5c8a45],
       rock: [new T.DodecahedronGeometry(0.5, 0).translate(0, 0.25, 0), 0x8d8a86],
@@ -345,7 +394,15 @@ export class HexView {
     const glow = this.layout.lit ? 1 - day : 0;
     this.windows.material.opacity = glow;
     this.towerLights.material.opacity = glow;
-    this.lamp.intensity = 30 * glow * (this.layout.homes.length > 0 ? 1 : 0.3);
+    // Foragers have no lamps in windows: their light is the bonfire, burning all day and brightest at night.
+    this.lamp.intensity = this.fire ? 0 : 30 * glow * (this.layout.homes.length > 0 ? 1 : 0.3);
+    if (this.fire) {
+      const flicker = this.reduced ? 1 : 0.85 + 0.15 * Math.sin(clock * 11) * Math.sin(clock * 7.3 + 1);
+      this.fire.light.intensity = (4 + 26 * (1 - day)) * flicker;
+      this.fire.flame.material.opacity = (0.55 + 0.4 * (1 - day)) * flicker;
+      this.fire.flame.scale.set(1, flicker, 1);
+      this.fire.core.material.opacity = 0.6 + 0.4 * (1 - day);
+    }
     this.onPart?.(partOfDay(clock));
     return day;
   }

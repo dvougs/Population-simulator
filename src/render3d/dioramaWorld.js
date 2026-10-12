@@ -3,7 +3,9 @@
 // hex tiles standing by terrain and elevation on a dark base, trees, peaks,
 // rivers, settled land tinted in its civ's colour, homes and towers by
 // settlement tier, buildings and wonders as monuments, and a few people per
-// settled hex. Each kind of thing is one instanced mesh, so the whole world is
+// settled hex. The seasons tint the land (seasons.js), and at night windows,
+// tents and towers glow where people live. A civ still at level 1 (Foragers)
+// lives in round thatched huts, lit at night by a bonfire, not windows. Each kind of thing is one instanced mesh, so the whole world is
 // about a dozen draw calls whatever the map size.
 //
 // The world knows nothing of cameras or lights: its owner places it (place(),
@@ -14,6 +16,7 @@ import { rgbToHex, RIVER_RGB } from '../render/palette.js';
 import { civStyle } from '../render/civStyle.js';
 import { hexTotal, largestCiv } from '../render/peopleMaths.js';
 import { DEEP_WATER, FOREST, MOUNTAIN } from '../sim/terrain.js';
+import { seasonRgb, SNOW_RGB } from './seasons.js';
 import { tileHeight, homesFor, HOME_SLOTS, MONUMENT_SLOT, MAX_HOMES, TILE_BASE, boardBounds } from './diorama.js';
 
 const GROW_MS = 380; // a new home growing out of the ground
@@ -26,6 +29,12 @@ const SNOW = 0xf4f7fb;
 const GOLD = 0xf2c14e;
 const BASE = 0x0a1422;
 const FLAT = 0.002; // a flat tile's top, just above the base
+const WINDOW = 0xffc46b;
+const HALO = 0xff9d42;
+const TREE_SNOW = 0.4; // how white the pines turn at full snow
+const THATCH = 0xb08a4e;
+const MUD = 0xa58660;
+const FIRE = 0xff8a2a;
 
 const easeOut = (t) => (t >= 1 ? 1 : t <= 0 ? 0 : 1 - (1 - t) * (1 - t) * (1 - t));
 const clamp01 = (t) => (t < 0 ? 0 : t > 1 ? 1 : t);
@@ -47,7 +56,15 @@ function buildGeometries(T) {
   const step = up(new T.BoxGeometry(1, 1, 1), 0.5);
   const river = new T.BoxGeometry(1, 1, 1);
   const pawn = up(new T.CylinderGeometry(0.045, 0.065, 0.16, 6), 0.08);
-  return { tile, base, tree, peak, snow, wall, roof, tent, tower, spire, step, river, pawn };
+  // A lit window on a home's front, and the warm pool of light round a lived-in hex at night.
+  const pane = up(new T.BoxGeometry(0.15, 0.11, 0.02), 0.055);
+  const halo = new T.CircleGeometry(0.9, 6, Math.PI / 6);
+  halo.rotateX(-Math.PI / 2);
+  // A forager's hut: a low round mud wall under a steep thatch cone; and the bonfire between the huts.
+  const hut = up(new T.CylinderGeometry(0.13, 0.14, 0.12, 7), 0.06);
+  const thatch = up(new T.ConeGeometry(0.19, 0.22, 7), 0.11);
+  const fire = up(new T.OctahedronGeometry(0.06, 0), 0.06);
+  return { tile, base, tree, peak, snow, wall, roof, tent, tower, spire, step, river, pawn, pane, halo, hut, thatch, fire };
 }
 
 export class DioramaWorld {
@@ -61,7 +78,9 @@ export class DioramaWorld {
     this.map = null;
     this.tiles = null;
     this.show = null;
-    this.tmp = { o: new T.Object3D(), c: new T.Color() };
+    this.tmp = { o: new T.Object3D(), c: new T.Color(), civ: new T.Color(), rgb: [0, 0, 0] };
+    /** The seasons' look (seasons.seasonLook), or null for plain terrain colours. */
+    this.look = null;
   }
 
   /** Build the meshes for a map (colours: palette.hexColours(map)); returns the Group to add to a scene. */
@@ -105,7 +124,15 @@ export class DioramaWorld {
       spire: mesh(g.spire, n, white),
       step: mesh(g.step, n * 3, white),
       pawn: mesh(g.pawn, n * PAWNS_PER_HEX, white, false),
+      pane: mesh(g.pane, n * (MAX_HOMES + 2), new T.MeshBasicMaterial({ color: WINDOW, transparent: true, opacity: 0, depthWrite: false }), false),
+      hut: mesh(g.hut, n * MAX_HOMES, mat({ color: MUD })),
+      thatch: mesh(g.thatch, n * MAX_HOMES, white),
+      fire: mesh(g.fire, n, new T.MeshBasicMaterial({ color: FIRE, transparent: true, opacity: 0, depthWrite: false }), false),
+      halo: mesh(g.halo, n, new T.MeshBasicMaterial({ color: HALO, transparent: true, opacity: 0, depthWrite: false, blending: T.AdditiveBlending }), false),
     };
+    this.m.pane.receiveShadow = false; this.m.halo.receiveShadow = false;
+    this.m.pane.visible = false; this.m.halo.visible = false; this.m.fire.visible = false;
+    this.treeRgb = new T.Color(TRUNK_GREEN);
 
     // Per-tile facts that never change for this map.
     const cx = new Float32Array(n); const cz = new Float32Array(n);
@@ -153,12 +180,13 @@ export class DioramaWorld {
   /** Top of tile i at full rise (hex radii). */
   topOf(i) { return this.tiles.top[i]; }
 
-  /** Tile colours: terrain colour, with a little of the civ's colour where a civ lives (civ per hex, or null). */
+  /** Tile colours: terrain colour in this season, with a little of the civ's colour where a civ lives (civ per hex, or null). */
   paintTiles(civOf) {
-    const { c } = this.tmp;
+    const { c, rgb } = this.tmp;
     const { n, colours } = this.tiles;
+    const { terrain } = this.map;
     for (let i = 0; i < n; i++) {
-      const [r, g, bl] = colours[i];
+      const [r, g, bl] = this.look ? seasonRgb(terrain[i], colours[i], this.look, rgb) : colours[i];
       let rr = r; let gg = g; let bb = bl;
       const civ = civOf ? civOf[i] : -1;
       if (civ >= 0) {
@@ -170,15 +198,34 @@ export class DioramaWorld {
     this.m.tile.instanceColor.needsUpdate = true;
   }
 
-  /** A new year: { pop, settlements, buildings } (SimHost data); `t` is the scene clock (seconds), for homes growing in. */
-  setYear({ pop, settlements, buildings }, t = 0) {
+  /** Show the seasons' look (seasons.seasonLook): repaints the land and the trees. */
+  setLook(look) {
+    if (!this.tiles) return;
+    this.look = look;
+    this.paintTiles(this.show ? this.show.civ : null);
+    const w = (look?.snow ?? 0) * TREE_SNOW;
+    this.m.tree.material.color.setHex(TRUNK_GREEN).lerp(this.tmp.c.setRGB(SNOW_RGB[0] / 255, SNOW_RGB[1] / 255, SNOW_RGB[2] / 255, this.T.SRGBColorSpace), w);
+  }
+
+  /** How strongly the lights where people live glow (0 by day to 1 at night). */
+  setGlow(glow) {
+    if (!this.m) return;
+    const on = glow > 0.01;
+    this.m.pane.visible = on; this.m.halo.visible = on; this.m.fire.visible = on;
+    this.m.pane.material.opacity = glow;
+    this.m.fire.material.opacity = glow;
+    this.m.halo.material.opacity = 0.5 * glow;
+  }
+
+  /** A new year: { pop, settlements, buildings, levels } (levels: each civ's level, 1 to 5) (SimHost data); `t` is the scene clock (seconds), for homes growing in. */
+  setYear({ pop, settlements, buildings, levels }, t = 0) {
     if (!this.tiles || !pop) return;
     const { map } = this;
     const { n } = this.tiles;
     const civs = pop.civs; const counts = pop.hexCivPop;
     const show = this.show ??= {
       civ: new Int8Array(n), people: new Int32Array(n), homes: new Int8Array(n),
-      tents: new Uint8Array(n), tower: new Uint8Array(n), monument: new Int8Array(n),
+      tents: new Uint8Array(n), tower: new Uint8Array(n), monument: new Int8Array(n), huts: new Uint8Array(n),
     };
     show.monument.fill(-1);
     for (const bd of buildings ?? []) {
@@ -197,6 +244,7 @@ export class DioramaWorld {
       this.homes.shown[i] = h.homes;
       show.civ[i] = civ; show.people[i] = people; show.homes[i] = h.homes;
       show.tents[i] = h.tents ? 1 : 0; show.tower[i] = h.tower ? 1 : 0;
+      show.huts[i] = civ >= 0 && (levels?.[civ] ?? 2) <= 1 ? 1 : 0;
     }
     this.paintTiles(show.civ);
   }
@@ -253,11 +301,13 @@ export class DioramaWorld {
 
   placeSettled(put, t, still) {
     const { show, m } = this;
-    if (!show) { for (const key of ['wall', 'roof', 'tent', 'tower', 'spire', 'step', 'pawn']) m[key].count = 0; return; }
+    if (!show) { for (const key of ['wall', 'roof', 'tent', 'tower', 'spire', 'step', 'pawn', 'pane', 'halo', 'hut', 'thatch', 'fire']) m[key].count = 0; return; }
     const { c } = this.tmp;
     const { n, cx, cz, top, rise } = this.tiles;
     const T = this.T;
-    let walls = 0; let tents = 0; let towers = 0; let steps = 0; let pawns = 0;
+    let walls = 0; let tents = 0; let towers = 0; let steps = 0; let pawns = 0; let panes = 0; let halos = 0; let huts = 0; let fires = 0;
+    // A pane on the front of a thing at (x, z) turned ry, `d` out from its middle and `y` up.
+    const pane = (x, y, z, d, ry, sc) => put(m.pane, panes++, x + Math.sin(ry) * d * sc, y, z + Math.cos(ry) * d * sc, sc, sc, sc, ry);
     const tint = (mesh, idx, civ, dim = 1) => {
       const [r, g, b] = civStyle(civ).rgb;
       mesh.setColorAt(idx, c.setRGB((r * dim) / 255, (g * dim) / 255, (b * dim) / 255, T.SRGBColorSpace));
@@ -282,8 +332,29 @@ export class DioramaWorld {
         }
       }
       if (civ < 0) continue;
+      // Lights only where people live.
+      const lit = show.people[i] > 0;
+      if (lit) {
+        const sz = 0.55 + 0.1 * Math.min(4, show.homes[i] / 4);
+        put(m.halo, halos++, x, h + 0.01, z, sz * g, 1, sz * g);
+      }
+      // Foragers light a bonfire among their huts or tents, not windows.
+      const fireLit = lit && show.huts[i];
+      if (fireLit) put(m.fire, fires++, x, h, z + 0.12, g, g, g);
       if (show.tents[i]) {
         put(m.tent, tents, x + HOME_SLOTS[0][0], h, z + HOME_SLOTS[0][1], g, g, g);
+        if (lit && !fireLit) pane(x + HOME_SLOTS[0][0], h + 0.02 * g, z + HOME_SLOTS[0][1], 0.15, 0, g);
+      } else if (show.huts[i]) {
+        const homes = show.homes[i];
+        for (let s = 0; s < homes; s++) {
+          const newest = s === homes - 1;
+          const grow = newest && !still ? easeOut((t - this.homes.grownAt[i]) / (GROW_MS / 1000)) : 1;
+          const sc = g * grow * (0.9 + 0.12 * (((i + s * 5) % 4) / 3));
+          const [ox, oz] = HOME_SLOTS[s];
+          put(m.hut, huts, x + ox, h, z + oz, sc, sc, sc);
+          put(m.thatch, huts, x + ox, h + 0.1 * sc, z + oz, sc, sc, sc);
+          m.thatch.setColorAt(huts++, c.setHex(THATCH).lerp(this.tmp.civ.setRGB(...civStyle(civ).rgb.map((v) => v / 255), T.SRGBColorSpace), 0.3));
+        }
         tint(m.tent, tents++, civ);
       } else {
         const homes = show.homes[i];
@@ -298,6 +369,7 @@ export class DioramaWorld {
           m.wall.setColorAt(walls, c.setHex(STONE));
           put(m.roof, walls, x + ox, h + 0.26 * sc, z + oz, sc, sc, sc, ry);
           tint(m.roof, walls++, civ);
+          if (lit) pane(x + ox, h + 0.07 * sc, z + oz, 0.145, ry, sc);
         }
         if (show.tower[i]) {
           const tx = show.monument[i] >= 0 ? x + 0.1 : x;
@@ -305,6 +377,7 @@ export class DioramaWorld {
           put(m.tower, towers, tx, h, tz, g, g, g);
           put(m.spire, towers, tx, h + 0.52 * g, tz, g, g, g);
           tint(m.spire, towers++, civ);
+          if (lit) pane(tx, h + 0.32 * g, tz, 0.115, 0, g);
         }
       }
       // A few people walk round the hex (one per 8, up to 4), on render time only.
@@ -318,7 +391,8 @@ export class DioramaWorld {
     }
     m.wall.count = walls; m.roof.count = walls; m.tent.count = tents;
     m.tower.count = towers; m.spire.count = towers; m.step.count = steps; m.pawn.count = pawns;
-    for (const mesh of [m.wall, m.roof, m.tent, m.spire, m.step, m.pawn]) if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    m.pane.count = panes; m.halo.count = halos; m.hut.count = huts; m.thatch.count = huts; m.fire.count = fires;
+    for (const mesh of [m.wall, m.roof, m.tent, m.spire, m.step, m.pawn, m.thatch]) if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   }
 
   /** Whether homes are still growing in at scene time t (so the owner keeps drawing). */

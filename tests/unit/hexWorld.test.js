@@ -99,3 +99,16 @@ test('a day and a night last 30 seconds each, with smooth dusk and dawn', () => 
   assert.ok(daylight(DAY_S - TWILIGHT_S / 2 + 0.5) < 1 && daylight(DAY_S + TWILIGHT_S / 2 - 0.5) > 0);
   assert.deepEqual([2, 10, 30, 45, 59].map(partOfDay), ['dawn', 'day', 'dusk', 'night', 'dawn']);
 });
+
+test('at level 1 (Foragers) homes are huts round a bonfire, from level 2 houses with windows', () => {
+  const foragers = layoutHex({ ...town(1, 20), level: 1 });
+  assert.equal(foragers.huts, true);
+  assert.ok(foragers.fire);
+  assert.ok(inHex(foragers.fire.x, foragers.fire.z));
+  for (const h of foragers.homes) assert.ok(Math.hypot(h.x - foragers.fire.x, h.z - foragers.fire.z) >= 0.9 + 0.75 - 1e-9);
+  const farmers = layoutHex({ ...town(1, 20), level: 2 });
+  assert.equal(farmers.huts, false);
+  assert.equal(farmers.fire, null);
+  // Nobody home, no fire.
+  assert.equal(layoutHex({ ...town(1, 0), peopleByCiv: [0, 0, 0, 0], level: 1 }).fire, null);
+});

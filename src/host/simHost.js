@@ -79,6 +79,9 @@ export class LocalSimHost {
   map() { return this.sim ? mapData(this.sim.map) : null; }
   /** Live totals: year, population, per-civ summary (plain data). */
   stats() { return this.sim?.stats() ?? null; }
+
+  /** Day of the year (0 = first day of spring), or -1 before the first day. */
+  dayOfYear() { return this.sim ? this.sim.dayOfYear : -1; }
   /** Per-civ yearly history recorded during the run: plain data and typed arrays (copies). */
   history() { return this.sim?.history() ?? null; }
   /** End-screen data: header, per-civ summary, history, records and events (plain data and typed arrays). */

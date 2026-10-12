@@ -63,14 +63,17 @@ export function inHex(x, z, r = HEX_R) {
  *   wall: radius or 0, monuments: [{ x, z, kind: 'wonder'|'building'|'site'|'ruin', civ }],
  *   fields: [{ x, z, w, d, rot }], nature: [{ x, z, s, rot, kind }],
  *   walkers: [{ x, z, r, speed, phase, civ, child }], war: bool, lit: bool,
+ *   huts: bool, fire: { x, z } or null,
  * }
+ * `hex.level` is the level (1 to 5) of the civ living there: at level 1
+ * (Foragers) homes are huts, and at night a bonfire burns instead of windows.
  */
 export function layoutHex(hex, people = []) {
   const rnd = seeded(0x9e3779b1 ^ (hex.index * 2654435761));
   const out = {
     terrain: hex.terrain, water: !!hex.water, river: !!hex.river,
     homes: [], towers: [], wall: 0, monuments: [], fields: [], nature: [], walkers: [],
-    war: false, lit: false,
+    war: false, lit: false, huts: false, fire: null,
   };
   if (hex.water) return out;
   const byCiv = hex.peopleByCiv ?? [];
@@ -80,6 +83,7 @@ export function layoutHex(hex, people = []) {
   out.war = civsHere.length >= 2;
   // Lights at night only where people live now.
   out.lit = (hex.people ?? 0) > 0 && owner >= 0;
+  out.huts = owner >= 0 && (hex.level ?? 2) <= 1;
   const taken = []; // circles already used: [x, z, r]
   const free = (x, z, r) => inHex(x, z, HEX_R - r - 0.3) && taken.every(([tx, tz, tr]) => (tx - x) ** 2 + (tz - z) ** 2 >= (tr + r) ** 2);
 
@@ -101,6 +105,18 @@ export function layoutHex(hex, people = []) {
     out.monuments.push({ ...m, x, z });
     taken.push([x, z, r]);
   });
+
+  // Foragers keep a bonfire near the middle, where it is free.
+  if (out.huts && out.lit) {
+    for (let k = 0; k < 60; k++) {
+      const a = k * 2.399963; const rad = 0.3 * k;
+      const x = rad * Math.cos(a); const z = rad * Math.sin(a);
+      if (!free(x, z, 0.9)) continue;
+      taken.push([x, z, 0.9]);
+      out.fire = { x, z };
+      break;
+    }
+  }
 
   // Homes on a golden-angle spiral round the middle, a little jittered.
   const tier = settlement ? settlement.tier : -1;

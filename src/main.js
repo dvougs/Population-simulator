@@ -1,7 +1,10 @@
 // Boot: wires the home page, How to play, the map-generation and setup screens, sim host, renderer, input and controls together.
 
 import { LocalSimHost } from './host/simHost.js';
-import { Loop } from './loop.js';
+import { Loop, BASE_TPS, SPEEDS } from './loop.js';
+import { DAYS_PER_YEAR, SEASON_NAMES, seasonOf } from './sim/calendar.js';
+import { seasonLook } from './render3d/seasons.js';
+import { daylight } from './render3d/dayNight.js';
 import { Camera, FLY_MS, flightAt } from './render/camera.js';
 import { Renderer } from './render/renderer.js';
 import { MenuScene } from './render/menuScene.js';
@@ -57,6 +60,11 @@ let person = null;
 let dirty = true;
 let userMovedCamera = false;
 let lastPanelUpdate = 0;
+let panelsDue = false;
+/** Day of the year the 3D map's seasons last showed, -1 to ask again. */
+let seasonDay = -1;
+/** Day/night clock reading a new game starts at: just after dawn. */
+const DAWN_CLOCK_S = 4;
 let shownEnd = false;
 /** Settings of the game last started, for "Same settings again" (kept in memory only). */
 let startParams = null;
@@ -70,9 +78,15 @@ const loop = new Loop({
     if (flight) stepFlight(now);
     // New head counts are drawn on the renderer's throttled clock, not every tick frame.
     if (ran > 0) renderer.setPopulation(host.population(), now);
+    if (renderer === renderer3d && (ran > 0 || seasonDay < 0)) {
+      seasonDay = host.dayOfYear();
+      renderer3d.setDay(seasonDay, loop.paused ? 0 : (BASE_TPS * SPEEDS[loop.speedIndex].mult) / DAYS_PER_YEAR);
+    }
     // The water shimmer keeps redrawing on its own clock; the sim never sees it.
     if (dirty || (!ui.game.hidden && renderer.needsFrame(now))) { renderer.draw(camera, outlinedHex(), now); dirty = false; }
-    if (ran > 0 && now - lastPanelUpdate > 100) { updatePanels(); lastPanelUpdate = now; }
+    // Panels catch up at most every 100 ms, and at once when the game stops, so a paused game never shows a stale day.
+    if (ran > 0) panelsDue = true;
+    if (panelsDue && (now - lastPanelUpdate > 100 || loop.paused)) { updatePanels(); lastPanelUpdate = now; panelsDue = false; }
     if (host.finished && !shownEnd) showEnd();
   },
 });
@@ -131,6 +145,8 @@ async function startGame(params) {
   map = host.map();
   renderLevelGuide(ui.levelGuide, map, startParams.civCount);
   renderer.setMap(map, host.stats().civs.map((c) => c.type));
+  seasonDay = -1;
+  renderer3d.setClock(DAWN_CLOCK_S); // a new game starts in the morning
   renderer.setPopulation(host.population(), performance.now());
   camera.setBounds(worldBounds(map.cols, map.rows));
   selected = -1;
@@ -278,6 +294,7 @@ async function pickRenderer() {
 /** Hand the running game to the renderer in use (after the 3D flag changed while away from it). */
 function reloadRenderer() {
   renderer.setMap(map, host.stats().civs.map((c) => c.type));
+  seasonDay = -1;
   renderer.setPopulation(host.population(), performance.now());
   renderer.setBuildings(host.buildings());
   renderer.setSettlements(host.settlements(), performance.now(), true);
@@ -307,6 +324,8 @@ async function enterHex(index) {
   const s = hex.settlement;
   $('hex-view-name').textContent = s ? s.name : hex.name;
   const owner = s ? s.holder : hex.peopleByCiv.indexOf(Math.max(...hex.peopleByCiv));
+  // The holder's level decides how its homes look inside (huts and a bonfire at level 1).
+  hex.level = owner >= 0 ? host.stats()?.civs[owner]?.level ?? 1 : 1;
   const bits = [s ? `${s.tierName ?? TIER_NAMES[s.tier]} on ${hex.name.toLowerCase()}` : hex.name];
   if (hex.people > 0 && owner >= 0) bits.push(`Civ ${owner + 1}`);
   bits.push(`${formatNumber(hex.people)} ${hex.people === 1 ? 'person' : 'people'}`);
@@ -314,20 +333,19 @@ async function enterHex(index) {
   $('hex-view-info').textContent = bits.join(' · ');
   const el = $('hex-view');
   el.hidden = false;
-  hexView.onPart = (part) => { $('hex-view-time').textContent = part; };
-  const ok = await hexView.enter(hex, host.hexPeople(col, row, 48)?.people ?? [], hexClock);
+  const doy = host.dayOfYear();
+  const season = doy >= 0 ? `${SEASON_NAMES[seasonOf(doy)].toLowerCase()} ` : '';
+  hexView.onPart = (part) => { $('hex-view-time').textContent = `${season}${part}`; };
+  const ok = await hexView.enter(hex, host.hexPeople(col, row, 48)?.people ?? [], renderer3d.clock(), seasonLook(host.dayOfYear()));
   if (!ok) { showToast('This browser cannot draw the inside of a hex.'); leaveHex(); return; }
   requestAnimationFrame(() => el.classList.add('shown'));
   $('btn-hex-leave').focus({ preventScroll: true });
 }
 
-/** The day/night clock carries on from one visit to the next. */
-let hexClock = 4;
 
 function leaveHex() {
   if (!inside) return;
   const el = $('hex-view');
-  if (hexView.open) hexClock = hexView.clock;
   el.classList.remove('shown');
   // Let the fade finish before the world goes.
   leaveTimer = setTimeout(() => { el.hidden = true; hexView.leave(); }, 500);
@@ -363,6 +381,7 @@ function updatePanels() {
   renderHudCivs(ui.hudCivs, stats);
   renderStats(ui.stats, stats);
   if (renderer.setBuildings(host.buildings())) dirty = true;
+  if (renderer.setLevels?.(stats.civs.map((c) => c.level))) dirty = true;
   // Running, the renderer takes new settlements with its next redraw; paused (a step), at once.
   if (renderer.setSettlements(host.settlements(), performance.now(), loop.paused)) dirty = true;
   // Keep the open card's values current.
@@ -631,6 +650,9 @@ window.popsim = {
   /** The home page's 3D world: whether it draws, on a software renderer, and its transition progress (0 flat to 1 risen). */
   /** Inside a hex: { index, part } (part of the day), or null. */
   insideHex: () => (inside ? { index: inside.index, part: $('hex-view-time').textContent } : null),
+  /** The 3D map's light: the day/night clock in seconds, its daylight (0 night to 1 day) and the seasons' look on show; setClock(s) moves the clock. */
+  light: () => ({ clock: renderer3d.clock(), daylight: daylight(renderer3d.clock()), look: renderer3d.lookShown }),
+  setClock: (s) => { renderer3d.setClock(s); dirty = true; },
   /** Which map renderer the game uses: '2d' or '3d'. */
   mapRenderer: () => (renderer === renderer3d ? '3d' : '2d'),
   home3d: () => ({ live: home3d.live, failed: home3d.failed, lite: home3d.lite, progress: home3d.u, target: home3d.target, opacity: home3d.blend }),
