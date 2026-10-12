@@ -86,7 +86,7 @@ export class Renderer {
     if (this.motionChanged) return true;
     if (this.people?.animating(now)) return true;
     if (this.drifting) return true;
-    if (this.peopleDirty && now - this.lastDraw >= PEOPLE_FRAME_MS) return true;
+    if ((this.peopleDirty || this.pendingSettle) && now - this.lastDraw >= PEOPLE_FRAME_MS) return true;
     if (this.territory?.pending && now - this.lastTerritory >= PEOPLE_FRAME_MS) return true;
     if (!this.animating || now - this.lastShimmer < SHIMMER_FRAME_MS) return false;
     return shimmerLevel(now) !== this.shimmerLevel;
@@ -156,7 +156,7 @@ export class Renderer {
     this.territory = new TerritoryLayer(map);
     this.buildings = new BuildingLayer(map, types);
     this.settlements = new SettlementLayer(map, types, this.app?.renderer ?? null);
-    this.lastSettle = -Infinity;
+    this.pendingSettle = null;
     this.lastTerritory = -Infinity;
     this.world.addChild(terrain, this.territory.tint, rivers);
     if (this.shimmer) this.world.addChild(this.shimmer);
@@ -170,14 +170,15 @@ export class Renderer {
   }
 
   /**
-   * New SimHost.settlements() snapshot; returns true if the map needs a redraw. Taken at most
-   * every PEOPLE_FRAME_MS, like new head counts, since routes change every year and a redraw of
-   * the whole map is costly on a software renderer; `force` takes it at once (a new game, paused).
+   * New SimHost.settlements() snapshot; returns true if the map needs a redraw now. While the game
+   * runs it waits for the next redraw for new head counts (at most every PEOPLE_FRAME_MS), since
+   * routes change every year and each redraw of the whole map is costly on a software renderer;
+   * `force` takes it at once (paused, after a step).
    */
   setSettlements(data, now = performance.now(), force = false) {
     if (!this.settlements || !data) return false;
-    if (!force && now - this.lastSettle < PEOPLE_FRAME_MS) return false;
-    this.lastSettle = now;
+    if (!force) { this.pendingSettle = data; return false; }
+    this.pendingSettle = null;
     return this.settlements.setSettlements(data);
   }
 
@@ -222,6 +223,7 @@ export class Renderer {
     if (!this.app || !this.map) return;
     this.lastDraw = now;
     this.peopleDirty = false;
+    if (this.pendingSettle) { this.settlements?.setSettlements(this.pendingSettle); this.pendingSettle = null; }
     this.updateShimmer(now);
     // The drift clock: frame time while the game runs, capped so a stalled tab does not jump.
     if (this.lastDriftNow >= 0 && this.moving && !this.reducedMotion) {
