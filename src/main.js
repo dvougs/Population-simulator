@@ -7,6 +7,8 @@ import { Renderer } from './render/renderer.js';
 import { MenuScene } from './render/menuScene.js';
 import { HomeScene3D } from './render3d/homeScene3d.js';
 import { Renderer3D } from './render3d/renderer3d.js';
+import { HexView } from './render3d/hexView.js';
+import { TIER_NAMES } from './sim/settlements.js';
 import { createFlags } from './flags.js';
 import { peopleShown, PEOPLE_ZOOM_PX, PEOPLE_FLY_PX } from './render/peopleLayer.js';
 import { hexAtWorld, hexCentre, worldBounds, HEX_SIZE } from './render/layout.js';
@@ -149,6 +151,7 @@ async function startGame(params) {
 }
 
 function showScreen(name) {
+  if (name !== 'game' && inside) leaveHex();
   const first = screen === null;
   screen = name;
   ui.home.hidden = name !== 'home';
@@ -281,8 +284,62 @@ function reloadRenderer() {
   person = null;
   renderer.selectPerson(-1);
   camera.setBounds(worldBounds(map.cols, map.rows));
+  // The card's Step inside button belongs to the 3D map only.
+  if (selected >= 0) showHexCard();
   dirty = true;
 }
+
+// Inside a hex (3D map only): the hex as a small living world over the map while the game waits.
+const hexView = new HexView($('hex-canvas'));
+/** While inside a hex: { index, wasPaused }, else null. */
+let inside = null;
+let leaveTimer = 0;
+
+async function enterHex(index) {
+  if (inside || index < 0 || !map) return;
+  const col = index % map.cols; const row = Math.floor(index / map.cols);
+  const hex = host.inspect(col, row);
+  if (!hex || hex.water) return;
+  inside = { index, wasPaused: loop.paused };
+  controls.setPaused(true);
+  document.body.classList.add('in-hex');
+  clearTimeout(leaveTimer);
+  const s = hex.settlement;
+  $('hex-view-name').textContent = s ? s.name : hex.name;
+  const owner = s ? s.holder : hex.peopleByCiv.indexOf(Math.max(...hex.peopleByCiv));
+  const bits = [s ? `${s.tierName ?? TIER_NAMES[s.tier]} on ${hex.name.toLowerCase()}` : hex.name];
+  if (hex.people > 0 && owner >= 0) bits.push(`Civ ${owner + 1}`);
+  bits.push(`${formatNumber(hex.people)} ${hex.people === 1 ? 'person' : 'people'}`);
+  if (hex.peopleByCiv.filter((n) => n > 0).length >= 2) bits.push('at war');
+  $('hex-view-info').textContent = bits.join(' · ');
+  const el = $('hex-view');
+  el.hidden = false;
+  hexView.onPart = (part) => { $('hex-view-time').textContent = part; };
+  const ok = await hexView.enter(hex, host.hexPeople(col, row, 48)?.people ?? [], hexClock);
+  if (!ok) { showToast('This browser cannot draw the inside of a hex.'); leaveHex(); return; }
+  requestAnimationFrame(() => el.classList.add('shown'));
+  $('btn-hex-leave').focus({ preventScroll: true });
+}
+
+/** The day/night clock carries on from one visit to the next. */
+let hexClock = 4;
+
+function leaveHex() {
+  if (!inside) return;
+  const el = $('hex-view');
+  if (hexView.open) hexClock = hexView.clock;
+  el.classList.remove('shown');
+  // Let the fade finish before the world goes.
+  leaveTimer = setTimeout(() => { el.hidden = true; hexView.leave(); }, 500);
+  document.body.classList.remove('in-hex');
+  if (!inside.wasPaused) controls.setPaused(false);
+  inside = null;
+  dirty = true;
+}
+
+$('btn-hex-leave').addEventListener('click', leaveHex);
+window.addEventListener('keydown', (e) => { if (inside && e.key === 'Escape') leaveHex(); });
+new ResizeObserver(() => { if (inside) hexView.resize(); }).observe($('hex-canvas'));
 
 /** Back to the running game, on the renderer the 3D flag asks for. */
 async function resumeGame() {
@@ -325,6 +382,7 @@ function showHexCard() {
   const listOpen = ui.inspector.dataset.list === 'open';
   renderInspector(ui.inspector, host.inspect(col, row), () => select(-1), {
     people: listOpen ? host.hexPeople(col, row, 100) : null,
+    onEnter: renderer === renderer3d ? () => enterHex(selected) : null,
     onToggleList: () => { showHexCard(); placeInspector(true); },
     onPerson: (slot, id) => selectPerson(slot, id),
   });
@@ -533,7 +591,7 @@ function hexUnder(x, y) {
 
 // Arrow keys pan and + / − zoom about the open map's middle, like a drag and a pinch.
 attachKeys(window, {
-  active: () => screen === 'game' && !!map,
+  active: () => screen === 'game' && !!map && !inside,
   onPan: (dx, dy) => { flight = null; camera.pan(dx, dy); userMovedCamera = true; dirty = true; placeInspector(); },
   onZoom: (f) => {
     const c = mapCentre();
@@ -571,6 +629,8 @@ window.popsim = {
   /** Feature flags: get(name), set(name, on), all(). */
   flags: { get: (name) => flags.get(name), set: (name, on) => flags.set(name, on), all: () => flags.all() },
   /** The home page's 3D world: whether it draws, on a software renderer, and its transition progress (0 flat to 1 risen). */
+  /** Inside a hex: { index, part } (part of the day), or null. */
+  insideHex: () => (inside ? { index: inside.index, part: $('hex-view-time').textContent } : null),
   /** Which map renderer the game uses: '2d' or '3d'. */
   mapRenderer: () => (renderer === renderer3d ? '3d' : '2d'),
   home3d: () => ({ live: home3d.live, failed: home3d.failed, lite: home3d.lite, progress: home3d.u, target: home3d.target, opacity: home3d.blend }),
