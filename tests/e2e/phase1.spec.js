@@ -294,6 +294,41 @@ test.describe('3D graphics flag', () => {
     expect((await state(page)).flag).toBe(false);
   });
 
+  test('with the flag on the game map is 3D, taps pick hexes, and Back to game follows the switch', async ({ page }, testInfo) => {
+    await page.goto('/?3d=1#new');
+    await startGame(page);
+    await expect.poll(() => page.evaluate(() => window.popsim.mapRenderer()), { timeout: 15_000 }).toBe('3d');
+    await expect(page.locator('#map3d')).toBeVisible();
+    await pause(page);
+    // A land hex near the middle, tapped where its tile's top is drawn.
+    const hex = await page.evaluate(() => {
+      const { size } = window.popsim.mapParams();
+      const mid = Math.floor(size / 2);
+      for (let d = 0; d < mid; d++) {
+        for (const [c, r] of [[mid + d, mid], [mid - d, mid], [mid, mid + d], [mid, mid - d]]) {
+          if (window.popsim.terrainAt(c, r) !== 'deepWater') return { c, r, index: r * size + c };
+        }
+      }
+      return null;
+    });
+    expect(hex).not.toBeNull();
+    const p = await page.evaluate(({ c, r }) => window.popsim.hexToScreen(c, r), hex);
+    await tapMap(page, p.x, p.y);
+    await expect.poll(() => page.evaluate(() => window.popsim.selected())).toBe(hex.index);
+    await landed(page);
+    await shot(page, testInfo, 'game-3d');
+    expect(page.errors).toEqual([]);
+
+    // Back on the home page the switch turns 3D off; the running game comes back in 2D.
+    await page.locator('#btn-setup').click();
+    await page.locator('#btn-setup-home').click();
+    await page.locator('#btn-3d').click();
+    await expect(page.locator('#btn-3d')).toHaveAttribute('aria-checked', 'false');
+    await page.locator('#btn-home-resume').click();
+    await expect.poll(() => page.evaluate(() => window.popsim.mapRenderer())).toBe('2d');
+    await expect(page.locator('#map3d')).toBeHidden();
+  });
+
   test('the game settings screen has a Home button back to the home page', async ({ page }) => {
     await startGame(page);
     await page.locator('#btn-setup').click();

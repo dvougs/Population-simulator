@@ -6,7 +6,7 @@
 // Units: one hex has radius 1 (the 2D map's HEX_SIZE world pixels), x runs
 // east and z runs south as the 2D map's y does, and y is up.
 
-import { HEX_SIZE, worldBounds } from '../render/layout.js';
+import { HEX_SIZE, worldBounds, hexAtWorld } from '../render/layout.js';
 import { DEEP_WATER, COAST, PLAINS, FOREST, HILLS, MOUNTAIN, DESERT, TUNDRA, TERRAIN_COUNT } from '../sim/terrain.js';
 
 /** Height of a tile's top above the board's base plane, by terrain (hex radii). */
@@ -117,4 +117,40 @@ export function cameraPose(b, aspect, tilt, yaw = 0) {
     z: tz + back * Math.cos(yaw),
     tx: b.cx, ty, tz,
   };
+}
+
+// The game's 3D map looks down at a fixed angle with no perspective, so the
+// ground maps to the screen as the flat map does, only shorter north to south
+// (Camera.ky), and pan, zoom and taps keep their 2D maths.
+
+/** Tilt of the game map's view from straight down (degrees). */
+export const GAME_TILT_DEG = 45;
+/** Height the map camera's ground plane sits at: about the top of lowland tiles (hex radii). */
+export const VIEW_PLANE = 0.4;
+/** No tile top stands higher than this (hex radii). */
+export const MAX_TOP = TILE_HEIGHT[MOUNTAIN] + ELEVATION_LIFT;
+const RAY_STEP = 0.04;
+
+/** The camera's north-south squash for a tilt in degrees: its cosine. */
+export function tiltKy(deg = GAME_TILT_DEG) {
+  return Math.cos((deg * Math.PI) / 180);
+}
+
+/**
+ * The hex a tap hits on the tilted map. (x, z) is the point the tap lands on
+ * in the camera's ground plane (hex radii; Camera.screenToWorld ÷ HEX_SIZE).
+ * Looking down from the south, the line of sight through it meets higher
+ * ground further south, so it is followed from the tallest top down to the
+ * base: the first hex whose tile stands at least that high there is hit,
+ * which is right for tops and for the tiles' sides. topOf(i): tile i's top.
+ * Returns the hex index, or -1 off the map.
+ */
+export function rayHex(cols, rows, x, z, topOf, deg = GAME_TILT_DEG) {
+  const tan = Math.tan((deg * Math.PI) / 180);
+  for (let h = MAX_TOP; h >= 0; h -= RAY_STEP) {
+    const hex = hexAtWorld(cols, rows, x * HEX_SIZE, (z + (h - VIEW_PLANE) * tan) * HEX_SIZE);
+    if (hex && topOf(hex.index) >= h) return hex.index;
+  }
+  const hex = hexAtWorld(cols, rows, x * HEX_SIZE, (z - VIEW_PLANE * tan) * HEX_SIZE);
+  return hex ? hex.index : -1;
 }

@@ -1,6 +1,9 @@
 // Map camera. World coordinates are hex-layout pixels (see sim/hex.js and
 // HEX_SIZE); scale is screen CSS pixels per world unit and (x, y) is where the
-// world origin sits on screen.
+// world origin sits on screen. The 3D map looks at the ground from an angle,
+// so the ground's north-south runs shorter on screen: ky is that squash (1 on
+// the flat 2D map, the cosine of the tilt in 3D), and every mapping below uses
+// it, so pan, zoom, fit and taps work the same in both.
 
 export class Camera {
   constructor() {
@@ -12,6 +15,7 @@ export class Camera {
     this.bounds = { minX: 0, minY: 0, maxX: 1, maxY: 1 };
     this.minScale = 0.05;
     this.maxScale = 8;
+    this.ky = 1;
   }
 
   setView(w, h) {
@@ -31,12 +35,20 @@ export class Camera {
   fit({ top = 0, bottom = 0, right = 0 } = {}) {
     const availW = Math.max(50, this.viewW - right);
     const availH = Math.max(50, this.viewH - top - bottom);
-    this.scale = Math.max(0.01, Math.min((availW - 16) / this.mapW, (availH - 16) / this.mapH));
+    this.scale = Math.max(0.01, Math.min((availW - 16) / this.mapW, (availH - 16) / (this.mapH * this.ky)));
     // Zoom out a little past the fit, and in far enough for a hex to fill much of the screen.
     this.minScale = this.scale * 0.6;
     this.maxScale = Math.max(this.scale * 2, Math.min(this.viewW, this.viewH) / 80);
     this.x = (availW - this.mapW * this.scale) / 2 - this.bounds.minX * this.scale;
-    this.y = top + (availH - this.mapH * this.scale) / 2 - this.bounds.minY * this.scale;
+    this.y = top + (availH - this.mapH * this.scale * this.ky) / 2 - this.bounds.minY * this.scale * this.ky;
+  }
+
+  /** Change the squash, keeping the world point at the view's middle where it is. */
+  setKy(ky) {
+    if (ky === this.ky) return;
+    const c = this.screenToWorld(this.viewW / 2, this.viewH / 2);
+    this.ky = ky;
+    this.viewAt(c.x, c.y, this.scale, this.viewW / 2, this.viewH / 2);
   }
 
   pan(dx, dy) {
@@ -59,9 +71,9 @@ export class Camera {
   clamp() {
     const margin = 48;
     const left = this.x + this.bounds.minX * this.scale;
-    const top = this.y + this.bounds.minY * this.scale;
+    const top = this.y + this.bounds.minY * this.scale * this.ky;
     const w = this.mapW * this.scale;
-    const h = this.mapH * this.scale;
+    const h = this.mapH * this.scale * this.ky;
     this.x += Math.min(this.viewW - margin, Math.max(margin - w, left)) - left;
     this.y += Math.min(this.viewH - margin, Math.max(margin - h, top)) - top;
   }
@@ -70,15 +82,15 @@ export class Camera {
   viewAt(wx, wy, scale, sx, sy) {
     this.scale = scale;
     this.x = sx - wx * scale;
-    this.y = sy - wy * scale;
+    this.y = sy - wy * scale * this.ky;
   }
 
   screenToWorld(sx, sy) {
-    return { x: (sx - this.x) / this.scale, y: (sy - this.y) / this.scale };
+    return { x: (sx - this.x) / this.scale, y: (sy - this.y) / (this.scale * this.ky) };
   }
 
   worldToScreen(wx, wy) {
-    return { x: this.x + wx * this.scale, y: this.y + wy * this.scale };
+    return { x: this.x + wx * this.scale, y: this.y + wy * this.scale * this.ky };
   }
 }
 
