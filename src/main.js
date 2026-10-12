@@ -6,6 +6,7 @@ import { Camera, FLY_MS, flightAt } from './render/camera.js';
 import { Renderer } from './render/renderer.js';
 import { MenuScene } from './render/menuScene.js';
 import { HomeScene3D } from './render3d/homeScene3d.js';
+import { Renderer3D } from './render3d/renderer3d.js';
 import { createFlags } from './flags.js';
 import { peopleShown, PEOPLE_ZOOM_PX, PEOPLE_FLY_PX } from './render/peopleLayer.js';
 import { hexAtWorld, hexCentre, worldBounds, HEX_SIZE } from './render/layout.js';
@@ -41,8 +42,12 @@ const flags = createFlags((() => { try { return window.localStorage; } catch { r
 
 const host = new LocalSimHost();
 const camera = new Camera();
-const renderer = new Renderer(ui.canvas);
-let rendererReady = null;
+// Two map renderers with the same methods: PixiJS (2D, the default) and three.js (3D, behind the
+// graphics3d flag). The one in use is chosen when a game starts or is returned to.
+const renderer2d = new Renderer(ui.canvas);
+const renderer3d = new Renderer3D($('map3d'));
+let renderer = renderer2d;
+const rendererReady = new Map();
 let map = null;
 let selected = -1;
 /** Person shown in the card: { slot, id, last } (last = latest SimHost.person() data), or null. */
@@ -113,8 +118,7 @@ const setup = new SetupScreen($('setup-form'), {
 async function startGame(params) {
   showScreen('game');
   try {
-    rendererReady ??= renderer.init();
-    await rendererReady;
+    await pickRenderer();
   } catch (err) {
     showToast('This browser cannot draw the map (WebGL is unavailable).');
     console.warn(err);
@@ -237,6 +241,58 @@ function showEnd() {
   });
   showScreen('end');
   ui.end.scrollTop = 0;
+}
+
+/**
+ * Use the renderer the 3D flag asks for, made ready; returns true if it changed. Without
+ * WebGL for three.js the game falls back to the 2D map.
+ */
+async function pickRenderer() {
+  let next = flags.get('graphics3d') ? renderer3d : renderer2d;
+  const ready = (r) => {
+    if (!rendererReady.has(r)) rendererReady.set(r, r.init());
+    return rendererReady.get(r);
+  };
+  try {
+    await ready(next);
+  } catch (err) {
+    if (next !== renderer3d) throw err;
+    console.warn('3D graphics unavailable; the game shows the 2D map.', err);
+    showToast('3D graphics are unavailable in this browser, so the map is 2D.');
+    next = renderer2d;
+    await ready(next);
+  }
+  const changed = next !== renderer;
+  renderer = next;
+  const in3d = renderer === renderer3d;
+  // The 2D canvas stays on top in 3D, unseen, to take the gestures.
+  ui.canvas.classList.toggle('over-3d', in3d);
+  $('map3d').hidden = !in3d;
+  camera.setKy(renderer.ky ?? 1);
+  return changed;
+}
+
+/** Hand the running game to the renderer in use (after the 3D flag changed while away from it). */
+function reloadRenderer() {
+  renderer.setMap(map, host.stats().civs.map((c) => c.type));
+  renderer.setPopulation(host.population(), performance.now());
+  renderer.setBuildings(host.buildings());
+  renderer.setSettlements(host.settlements(), performance.now(), true);
+  person = null;
+  renderer.selectPerson(-1);
+  camera.setBounds(worldBounds(map.cols, map.rows));
+  dirty = true;
+}
+
+/** Back to the running game, on the renderer the 3D flag asks for. */
+async function resumeGame() {
+  showScreen('game');
+  try {
+    if (await pickRenderer() && map) reloadRenderer();
+  } catch (err) {
+    console.warn(err);
+  }
+  resize();
 }
 
 function updatePanels() {
@@ -452,8 +508,7 @@ attachGestures(ui.canvas, {
       else selectPerson(who.slot, who.id);
       return;
     }
-    const w = camera.screenToWorld(x, y);
-    const hex = hexAtWorld(map.cols, map.rows, w.x, w.y);
+    const hex = hexUnder(x, y);
     // Water, off the map, or the selected hex again: close the inspector.
     if (!hex || map.terrain[hex.index] === DEEP_WATER || hex.index === selected) { select(-1); return; }
     // Zoomed out, a hex also flies the camera in to its people; the card finds its corner on landing.
@@ -465,6 +520,16 @@ attachGestures(ui.canvas, {
     select(hex.index);
   },
 });
+
+/** The hex under screen point (x, y) as { index }, or null; the 3D map follows the line of sight. */
+function hexUnder(x, y) {
+  if (renderer.hexAt) {
+    const index = renderer.hexAt(x, y, camera);
+    return index >= 0 ? { index } : null;
+  }
+  const w = camera.screenToWorld(x, y);
+  return hexAtWorld(map.cols, map.rows, w.x, w.y);
+}
 
 // Arrow keys pan and + / − zoom about the open map's middle, like a drag and a pinch.
 attachKeys(window, {
@@ -482,7 +547,7 @@ $('btn-setup').addEventListener('click', () => {
   setup.setParams(host.params);
   showScreen('setup');
 });
-ui.resume.addEventListener('click', () => { showScreen('game'); resize(); });
+ui.resume.addEventListener('click', resumeGame);
 ui.endNow.addEventListener('click', () => {
   host.endNow();
   showEnd();
@@ -494,7 +559,7 @@ $('btn-how-new').addEventListener('click', newGame);
 $('btn-how-back').addEventListener('click', goHome);
 $('btn-home').addEventListener('click', goHome);
 $('btn-setup-home').addEventListener('click', goHome);
-ui.homeResume.addEventListener('click', () => { showScreen('game'); resize(); });
+ui.homeResume.addEventListener('click', resumeGame);
 
 showScreen(routeFromHash());
 // Run How to play's world while nothing else is happening, so the page opens at once.
@@ -506,6 +571,8 @@ window.popsim = {
   /** Feature flags: get(name), set(name, on), all(). */
   flags: { get: (name) => flags.get(name), set: (name, on) => flags.set(name, on), all: () => flags.all() },
   /** The home page's 3D world: whether it draws, on a software renderer, and its transition progress (0 flat to 1 risen). */
+  /** Which map renderer the game uses: '2d' or '3d'. */
+  mapRenderer: () => (renderer === renderer3d ? '3d' : '2d'),
   home3d: () => ({ live: home3d.live, failed: home3d.failed, lite: home3d.lite, progress: home3d.u, target: home3d.target, opacity: home3d.blend }),
   /** The screen on show: 'home', 'how', 'mapgen', 'setup', 'game' or 'end'. */
   screen: () => screen,
@@ -523,7 +590,9 @@ window.popsim = {
   terrainAt: (col, row) => host.inspect(col, row)?.terrain ?? null,
   /** Screen position (CSS px, relative to the map canvas) of the centre of hex (col, row). */
   hexToScreen: (col, row) => {
-    const c = hexCentre(map.cols, row * map.cols + col);
+    const index = row * map.cols + col;
+    if (renderer.hexToScreen) return renderer.hexToScreen(index, camera);
+    const c = hexCentre(map.cols, index);
     return camera.worldToScreen(c.x, c.y);
   },
   /** Index of the hex shown in the inspector, or -1. */
