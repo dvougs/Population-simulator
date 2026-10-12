@@ -550,8 +550,10 @@ test.describe('setup screen', () => {
     await startGame(page);
     expect(await page.evaluate(() => window.popsim.mapHash())).toBe(hash);
     expect(await page.evaluate(() => window.popsim.mapParams())).toEqual(params);
+    await expect(page.locator('#hud-year')).toHaveText(/^(Spring|Summer|Autumn|Winter) day ([1-9]|[1-8]\d|90), year [1-9]\d*$/);
+    await page.locator('#speed button', { hasText: 'Max' }).click();
     await expect.poll(() => year(page), { timeout: 10_000 }).toBeGreaterThan(3);
-    await expect(page.locator('#hud-year')).toHaveText(/^(Spring|Summer|Autumn|Winter), year [1-9]\d*$/);
+    await expect(page.locator('#hud-year')).toHaveText(/^(Spring|Summer|Autumn|Winter) day ([1-9]|[1-8]\d|90), year [1-9]\d*$/);
     await expect(page.locator('#hud-pop')).toContainText('14 × 14 hexes');
     // RULES.md "Statistics": total population and civs still alive; Small world has 3 civs of 20.
     await expect(page.locator('#hud-pop')).toHaveText(/^[\d,.]+[kM]? people · [1-3] of 3 civs · 14 × 14 hexes$/);
@@ -572,7 +574,7 @@ test.describe('game', () => {
     await expect.poll(() => days(page)).toBe(d0 + 30);
     await page.waitForTimeout(300);
     expect(await days(page)).toBe(d0 + 30);
-    await expect(page.locator('#hud-year')).toHaveText(/^(Spring|Summer|Autumn|Winter), year \d+$/);
+    await expect(page.locator('#hud-year')).toHaveText(/^(Spring|Summer|Autumn|Winter) day ([1-9]|[1-8]\d|90), year \d+$/);
     // Step while running pauses and advances exactly a month.
     await page.locator('#btn-play').click();
     await expect.poll(() => days(page)).toBeGreaterThan(d0 + 30);
@@ -583,7 +585,7 @@ test.describe('game', () => {
     await page.waitForTimeout(300);
     expect(await days(page)).toBe(afterStep);
 
-    const labels = ['1×', '3×', '10×', '30×', 'Max'];
+    const labels = ['1×', '5×', '20×', '100×', 'Max'];
     await expect(page.locator('#speed button')).toHaveText(labels);
     for (let i = 0; i < labels.length; i++) {
       const btn = page.locator('#speed button', { hasText: labels[i] }).first();
@@ -594,19 +596,19 @@ test.describe('game', () => {
       const before = await days(page);
       await expect.poll(() => days(page), { timeout: 5_000 }).toBeGreaterThan(before);
     }
-    // RULES.md: 1× runs 120 days per second (a year in 3 seconds), 10× runs 1,200.
+    // RULES.md "Time": 1× runs 2 days per second, 100× runs 200.
     await page.locator('#speed button', { hasText: '1×' }).click();
     let a = await days(page);
-    await page.waitForTimeout(1000);
-    let rate = (await days(page)) - a;
-    expect(rate).toBeGreaterThanOrEqual(60);
-    expect(rate).toBeLessThanOrEqual(180);
-    await page.locator('#speed button', { hasText: '10×' }).click();
+    await page.waitForTimeout(2000);
+    let rate = ((await days(page)) - a) / 2;
+    expect(rate).toBeGreaterThanOrEqual(1);
+    expect(rate).toBeLessThanOrEqual(3);
+    await page.locator('#speed button', { hasText: '100×' }).click();
     a = await days(page);
     await page.waitForTimeout(1000);
     rate = (await days(page)) - a;
-    expect(rate).toBeGreaterThanOrEqual(600);
-    expect(rate).toBeLessThanOrEqual(1800);
+    expect(rate).toBeGreaterThanOrEqual(100);
+    expect(rate).toBeLessThanOrEqual(300);
   });
 
   test('the sim is still running after 60 years at Max speed and food stays in range', async ({ page }) => {
@@ -630,8 +632,8 @@ test.describe('game', () => {
 
   test('a year limit of 10 stops at year 10 and opens the end screen', async ({ page }, testInfo) => {
     await startGame(page, { endTicks: 10 });
-    // A year is 3 s at 1×, so run at 30× to reach year 10 quickly.
-    await page.locator('#speed button', { hasText: '30×' }).click();
+    // A year is 3 minutes at 1×, so run at Max to reach year 10 quickly.
+    await page.locator('#speed button', { hasText: 'Max' }).click();
     await expect.poll(() => page.evaluate(() => window.popsim.host.finished), { timeout: 20_000 }).toBe(true);
     expect(await year(page)).toBe(10);
     await expect(page.locator('#end')).toBeVisible();
@@ -840,6 +842,7 @@ test.describe('game', () => {
 
   test('back to setup pauses, and the game can be resumed', async ({ page }) => {
     await startGame(page);
+    await page.locator('#speed button', { hasText: 'Max' }).click();
     await expect.poll(() => year(page)).toBeGreaterThan(1);
     await page.locator('#btn-setup').click();
     await expect(page.locator('#setup')).toBeVisible();
@@ -964,7 +967,7 @@ test.describe('narrow phones', () => {
     await startGame(page);
     const rects = await controlRects(page);
     const speeds = rects.slice(2);
-    expect(speeds.map((r) => r.id)).toEqual(['1×', '3×', '10×', '30×', 'Max']);
+    expect(speeds.map((r) => r.id)).toEqual(['1×', '5×', '20×', '100×', 'Max']);
     for (const r of rects) {
       expect(r.left, r.id).toBeGreaterThanOrEqual(0);
       expect(r.right, r.id).toBeLessThanOrEqual(342);
