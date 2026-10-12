@@ -54,7 +54,7 @@ export const SETTLE = Object.freeze({
   capitalSwitch: 1.5,
   /** The capital's store holds this many times its tier's cap … */
   capitalStore: 1.5,
-  /** … and never less than this many times the largest single cost of its civ's next level, era building and wonder. */
+  /** … and never less than this many times the largest cost of one material for its civ's next level and era building together, or the era's wonder. */
   capitalNeed: 1.1,
   /** Share of the people in a hex who may go hungry while it still gathers (its food is secure). */
   secureHungry: 0.2,

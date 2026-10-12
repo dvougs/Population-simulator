@@ -129,6 +129,9 @@ export class Renderer {
   setMap(map, types = []) {
     this.map = map;
     this.people = null;
+    // The old settlements' skyline textures go with their layer.
+    this.settlements?.destroy();
+    this.settlements = null;
     for (const child of this.world.removeChildren()) child.destroy({ children: true });
 
     const terrain = new Graphics();
@@ -152,7 +155,8 @@ export class Renderer {
     this.people = new PeopleLayer(map);
     this.territory = new TerritoryLayer(map);
     this.buildings = new BuildingLayer(map, types);
-    this.settlements = new SettlementLayer(map, types);
+    this.settlements = new SettlementLayer(map, types, this.app?.renderer ?? null);
+    this.lastSettle = -Infinity;
     this.lastTerritory = -Infinity;
     this.world.addChild(terrain, this.territory.tint, rivers);
     if (this.shimmer) this.world.addChild(this.shimmer);
@@ -165,9 +169,16 @@ export class Renderer {
     return this.buildings ? this.buildings.setBuildings(list) : false;
   }
 
-  /** New SimHost.settlements() snapshot; returns true if the map needs a redraw. */
-  setSettlements(data) {
-    return this.settlements ? this.settlements.setSettlements(data) : false;
+  /**
+   * New SimHost.settlements() snapshot; returns true if the map needs a redraw. Taken at most
+   * every PEOPLE_FRAME_MS, like new head counts, since routes change every year and a redraw of
+   * the whole map is costly on a software renderer; `force` takes it at once (a new game, paused).
+   */
+  setSettlements(data, now = performance.now(), force = false) {
+    if (!this.settlements || !data) return false;
+    if (!force && now - this.lastSettle < PEOPLE_FRAME_MS) return false;
+    this.lastSettle = now;
+    return this.settlements.setSettlements(data);
   }
 
   /** New population snapshot from SimHost.population(); `now` is render time in ms. */

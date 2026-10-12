@@ -268,7 +268,7 @@ export function howText() {
         title: 'On the move',
         paras: [
           `A person who went hungry sets out with a ${pct(M.hungryChance)} chance. A fed person in a crowded hex, with more people than `
-            + `${pct(M.crowdedShare)} of its food, sets out with a ${pct(M.crowdedChance)} chance.`,
+            + `${pct(M.crowdedShare)} of its food capacity (counting food carried in twice) or more than its settlement can house, sets out with a ${pct(M.crowdedChance)} chance.`,
           `People move one hex a year, into a land hex next door. Nomads walk instead, with ${nomadic.movePoints} movement points a year. `
             + 'Seas and lakes block the way, until a civ builds boats.',
           'They head for a hex with more spare food than home, picked at random but weighted by that spare food, '

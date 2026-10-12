@@ -218,12 +218,14 @@ export class Levels {
     this.later = new Float64Array(civs * MATERIAL_COUNT);
     this.costScratch = new Float64Array(MATERIAL_COUNT);
     this.reserve = new Float64Array(civs * MATERIAL_COUNT);
+    /** What each civ's capital collects: this era's wonder (if committed and not started), next level and era building (if not started) together. */
+    this.capWant = new Float64Array(civs * MATERIAL_COUNT);
     /** Per-civ effects of buildings and wonders, read by eating, contact and capacities. */
     this.hungerMul = new Float64Array(civs).fill(1);
     this.setEffects();
     for (let c = 0; c < civs; c++) this.targets(c);
     // A capital keeps what its civ is saving for when other settlements ask it for materials.
-    this.settlements.keep = this.target;
+    this.settlements.keep = this.capWant;
     this.capitalNeeds();
   }
 
@@ -265,16 +267,22 @@ export class Levels {
     const L = this.level[c];
     const bd = this.buildings;
     const base = c * MATERIAL_COUNT;
-    const { target, later } = this;
+    const { target, later, capWant } = this;
     const cost = this.costScratch;
-    for (let m = 0; m < MATERIAL_COUNT; m++) { target[base + m] = 0; later[base + m] = 0; }
+    for (let m = 0; m < MATERIAL_COUNT; m++) { target[base + m] = 0; later[base + m] = 0; capWant[base + m] = 0; }
     if (L >= MAX_LEVEL) return;
     let first = true;
+    let now = true;
     const take = (list) => {
-      for (let m = 0; m < MATERIAL_COUNT; m++) { later[base + m] += list[m]; if (first) target[base + m] = list[m]; }
+      for (let m = 0; m < MATERIAL_COUNT; m++) {
+        later[base + m] += list[m];
+        if (first) target[base + m] = list[m];
+        if (now) capWant[base + m] += list[m];
+      }
       first = false;
     };
     for (let l = L; l < MAX_LEVEL; l++) {
+      now = l === L;
       if (l === L && bd.waitingForWonder(c, L)) take(WONDERS[L - 1].materials);
       for (let m = 0; m < MATERIAL_COUNT; m++) cost[m] = this.levelCost(c, l, m);
       take(cost);
@@ -411,14 +419,15 @@ export class Levels {
     this.absorb(people, onSwitch);
     this.capacities(map);
     this.capitalNeeds();
-    st.carry(map, this.target, year);
+    st.carry(map, this.capWant, year);
     st.totals(this.held);
     return kingdom;
   }
 
   /**
-   * The least each civ's capital store holds of any one material: capitalNeed × the largest single
-   * cost among its next level, its era building and the era's wonder (while nobody has finished it).
+   * The least each civ's capital store holds of any one material: capitalNeed × the largest cost of
+   * one material among its next level and era building together, and the era's wonder (while nobody
+   * has finished it).
    */
   capitalNeeds() {
     const bd = this.buildings;
@@ -427,10 +436,11 @@ export class Levels {
       const L = this.level[c];
       let top = 0;
       if (L < MAX_LEVEL) {
-        for (let m = 0; m < MATERIAL_COUNT; m++) top = Math.max(top, this.levelCost(c, L, m));
+        if (L <= ERAS) bd.buildingCost(c, L, cost);
+        else cost.fill(0);
+        // The level and the era building together, since the building waits for both to fit.
+        for (let m = 0; m < MATERIAL_COUNT; m++) top = Math.max(top, this.levelCost(c, L, m) + cost[m]);
         if (L <= ERAS) {
-          bd.buildingCost(c, L, cost);
-          for (let m = 0; m < MATERIAL_COUNT; m++) top = Math.max(top, cost[m]);
           if (bd.wYear[L - 1] < 0) for (let m = 0; m < MATERIAL_COUNT; m++) top = Math.max(top, WONDERS[L - 1].materials[m]);
         }
       }

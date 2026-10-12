@@ -15,10 +15,12 @@
 // (food in green, materials in tan). While people are drawn and time runs,
 // small carts travel along them on render time only; the sim never sees them.
 //
-// Cheap by design: each hex's Graphics is redrawn only when its look (tier,
+// Cheap by design: each skyline (tier, civ, capital) is drawn once into a
+// texture and every settlement is a sprite of it, so the whole map batches into
+// a few draw calls; a hex's sprite and icons change only when its look (tier,
 // holder, capital, buildings) changes; routes only when the routes change.
 
-import { Container, Graphics } from '../../vendor/pixi.mjs';
+import { Container, Graphics, Sprite } from '../../vendor/pixi.mjs';
 import { hexCentre, HEX_SIZE } from './layout.js';
 import { civStyle } from './civStyle.js';
 import { rgbToHex } from './palette.js';
@@ -126,10 +128,13 @@ function drawBuildingIcon(g, kind, x, y, rgb, building) {
 }
 
 export class SettlementLayer {
-  /** types[c]: civ c's type id. */
-  constructor(map, types = []) {
+  /** types[c]: civ c's type id. pixi: the PixiJS renderer (draws the skyline textures; none in tests). */
+  constructor(map, types = [], pixi = null) {
     this.cols = map.cols;
     this.types = types;
+    this.pixi = pixi;
+    /** Skyline textures by tier, civ and capital: { texture, ax, ay }. */
+    this.skylines = new Map();
     this.container = new Container();
     this.routesG = new Graphics();
     this.cartsG = new Graphics();
@@ -157,7 +162,7 @@ export class SettlementLayer {
       const look = `${t}:${c}:${capital[c] === h ? 1 : 0}:${built[h]}:${plan[h]}:${started[h]}`;
       let gl = this.glyphs.get(h);
       if (!gl) {
-        gl = { g: new Graphics(), look: '', icons: new Graphics() };
+        gl = { g: new Sprite(), look: '', icons: new Graphics() };
         this.glyphs.set(h, gl);
         this.towns.addChild(gl.g, gl.icons);
         const ctr = hexCentre(this.cols, h);
@@ -166,8 +171,9 @@ export class SettlementLayer {
       }
       if (gl.look !== look) {
         gl.look = look;
-        gl.g.clear();
-        drawSkyline(gl.g, t, c, this.types[c], capital[c] === h);
+        const sk = this.skyline(t, c, capital[c] === h);
+        gl.g.texture = sk.texture;
+        gl.g.anchor.set(sk.ax, sk.ay);
         this.drawIcons(gl.icons, h, c);
         changed = true;
       }
@@ -188,6 +194,22 @@ export class SettlementLayer {
       changed = true;
     }
     return changed;
+  }
+
+  /** The texture of tier t's skyline for civ c (capital or not), drawn once. */
+  skyline(t, c, capital) {
+    const key = `${t}:${c}:${capital ? 1 : 0}`;
+    let sk = this.skylines.get(key);
+    if (sk) return sk;
+    const g = new Graphics();
+    drawSkyline(g, t, c, this.types[c], capital);
+    const b = g.getLocalBounds();
+    // Twice the resolution so it stays crisp zoomed in; the anchor puts the base line on the hex.
+    const texture = this.pixi ? this.pixi.generateTexture({ target: g, resolution: 2, antialias: true }) : null;
+    sk = { texture, ax: -b.x / b.width, ay: -b.y / b.height };
+    g.destroy();
+    this.skylines.set(key, sk);
+    return sk;
   }
 
   drawIcons(g, h, c) {
@@ -251,6 +273,8 @@ export class SettlementLayer {
   get animating() { return this.routeList.length > 0; }
 
   destroy() {
-    this.container.destroy({ children: true });
+    if (!this.container.destroyed) this.container.destroy({ children: true });
+    for (const sk of this.skylines.values()) sk.texture?.destroy(true);
+    this.skylines.clear();
   }
 }

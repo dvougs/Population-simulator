@@ -240,7 +240,8 @@ function updatePanels() {
   renderHudCivs(ui.hudCivs, stats);
   renderStats(ui.stats, stats);
   if (renderer.setBuildings(host.buildings())) dirty = true;
-  if (renderer.setSettlements(host.settlements())) dirty = true;
+  // Running, the renderer takes new settlements on its own clock; paused (a step), at once.
+  if (renderer.setSettlements(host.settlements(), performance.now(), loop.paused)) dirty = true;
   // Keep the open card's values current.
   if (selected >= 0) showHexCard();
   else if (person) showPersonCard();
