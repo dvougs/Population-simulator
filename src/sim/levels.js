@@ -18,11 +18,15 @@
 // snapshot, so the order people and hexes are visited in never changes the
 // outcome. Neither gathering nor absorbing uses randomness.
 
+import { WINTER_YIELD, winterClosedMask } from './calendar.js';
 import { MATERIAL_COUNT, MATERIAL_TIER, MATERIAL_IDS } from './materials.js';
-import { PLAINS, DEEP_WATER } from './terrain.js';
+import { PLAINS, DEEP_WATER, TERRAIN_COUNT } from './terrain.js';
 import { COOPERATION } from './traits.js';
 import { Buildings, ERAS, WONDERS, reduce } from './buildings.js';
 import { Settlements, TIERS, SETTLE } from './settlements.js';
+
+// Tundra and mountains are closed in winter, so they gather for three seasons of four.
+const WINTER_SHUT = winterClosedMask(TERRAIN_COUNT);
 
 const SETTLE_CARRY_COST = SETTLE.carryGatherCost;
 
@@ -564,7 +568,7 @@ export class Levels {
       if (!mask) mask = dep & this.laterMask[c];
       if (!mask || effort[b0 + c] === 0) continue;
       const g = (GATHER.gatherShare * effort[b0 + c] * this.gatherPct[c] * (1 + this.buildings.eff.gather[c])
-        * (1 - SETTLE_CARRY_COST * st.used[h])) / 100;
+        * (1 - SETTLE_CARRY_COST * st.used[h]) * (WINTER_SHUT[map.terrain[h]] ? WINTER_YIELD : 1)) / 100;
       const rare = 1 + this.buildings.eff.gatherRare[c];
       let k = 0;
       for (let m = 0; m < MATERIAL_COUNT; m++) if (mask & (1 << m)) k++;

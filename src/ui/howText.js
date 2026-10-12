@@ -15,7 +15,8 @@ import { MATERIAL_NAMES, MATERIAL_TIER, DEPOSIT_CHANCE, RIVER_DEPOSIT_CHANCE } f
 import { BUILDINGS, BUILDING_COST, WONDERS, WONDER_RULES, ERAS, effectText, materialText } from '../sim/buildings.js';
 import { DEFAULT_PARAMS, LIMITS, YEAR_LIMIT_CHOICES } from '../sim/params.js';
 import { TIERS, TIER_NAMES, HAND, SETTLE, MAX_PROGRESS_BONUS } from '../sim/settlements.js';
-import { BASE_TPS, SPEEDS } from '../loop.js';
+import { BASE_TPS, SPEEDS, STEP_DAYS } from '../loop.js';
+import { DAYS_PER_YEAR } from '../sim/calendar.js';
 import { CIV_STYLES } from '../render/civStyle.js';
 
 /** Whole percent, with up to one decimal when needed: 0.25 → "25%", 0.075 → "7.5%". */
@@ -243,22 +244,23 @@ export function howText() {
       {
         id: 'year',
         kicker: 'Time',
-        title: 'One tick, one year',
+        title: 'One tick, one day',
         paras: [
-          `Time moves a year at a time. At 1× your world lives ${BASE_TPS} years every second; speed up to ${orList(speeds.slice(1))}, `
-            + 'pause whenever you like, or step a single year to see exactly what happens. Each year runs the same steps, in order:',
+          `Time moves a day at a time, in years of ${DAYS_PER_YEAR} days: spring, summer, autumn and winter. At 1× your world lives ${BASE_TPS} days `
+            + `every second, a year in ${num(DAYS_PER_YEAR / BASE_TPS)} seconds; speed up to ${orList(speeds.slice(1))}, `
+            + `pause whenever you like, or step a month (${STEP_DAYS} days) to see what happens. Each year runs the same steps:`,
         ],
         steps: [
-          ['Gather and level up', 'Civs that are not starving gather materials, work on their buildings and wonders, and may reach a new level.'],
-          ['Birthdays', 'Everyone grows a year older.'],
-          ['Eat', 'Each hex shares out its food. When it runs short, some go hungry.'],
-          ['Deaths', 'The starved and the very old die.'],
-          ['Births', 'Fed adults may have a child.'],
-          ['Migrate', 'The hungry and the crowded set out for better land.'],
-          ['Food regrows', `Every hex regrows ${pct(L.foodRegrowth)} of its capacity.`],
-          ['Contact', 'Civs sharing a hex may fight, or people may change sides.'],
-          ['Records', 'The year goes into the statistics, the war tallies and the history.'],
-          ['The end?', 'The end conditions you picked are checked.'],
+          ['First day: gather and level up', 'Civs that are not starving gather materials, work on their buildings and wonders, and may reach a new level.'],
+          ['First day: birthdays', 'Everyone grows a year older.'],
+          ['First day: eat', 'Each hex shares out its food. When it runs short, some go hungry.'],
+          ['First day: deaths', 'The starved and the very old die.'],
+          ['First day: births', 'Fed adults may have a child.'],
+          ['Every month: migrate', 'A twelfth of the people may set out each month: the hungry and the crowded head for better land, so new land fills up over the year. In winter nobody moves into or out of tundra and mountains.'],
+          ['Every season: food regrows', `Hexes regrow ${pct(L.foodRegrowth)} of their capacity over a year, most in spring and summer, least in winter, and nothing on tundra and mountains in winter.`],
+          ['Last day: contact', 'Civs sharing a hex may fight, or people may change sides.'],
+          ['Last day: records', 'The year goes into the statistics, the war tallies and the history.'],
+          ['Last day: the end?', 'The end conditions you picked are checked.'],
         ],
         after: 'Within each step everyone decides first and then it all happens at once, so nobody gains from being first in line.',
       },

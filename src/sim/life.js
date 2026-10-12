@@ -256,11 +256,17 @@ export function crowdLine(map, h, share) {
   return map.housing && map.housing[h] < line ? map.housing[h] : line;
 }
 
-/** Food grows back by foodRegrowth × capacity, never above capacity. */
-export function regrow(map) {
-  const { food, foodCap } = map;
+/**
+ * Food grows back by share × foodRegrowth × capacity, never above capacity
+ * (share 1: a whole year's regrowth). closed[terrain] = 1 skips that terrain
+ * (winter on tundra and mountains, see calendar.js).
+ */
+export function regrow(map, share = 1, closed = null) {
+  const { food, foodCap, terrain } = map;
+  const add = share * LIFE.foodRegrowth;
   for (let h = 0; h < map.count; h++) {
-    if (food[h] < foodCap[h]) food[h] = Math.min(foodCap[h], food[h] + LIFE.foodRegrowth * foodCap[h]);
+    if (closed && closed[terrain[h]]) continue;
+    if (food[h] < foodCap[h]) food[h] = Math.min(foodCap[h], food[h] + add * foodCap[h]);
   }
 }
 

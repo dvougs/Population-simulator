@@ -39,11 +39,11 @@ New work can ship switched off and be tried on demand, on the live site too. Fla
 
 ## Time
 
-- One tick is one year. The game starts at year 0.
-- At 1× the game runs 8 years per second. Speeds: 1×, 2×, 5×, 20× and Max (as many years as fit in 9 ms of each frame).
-- Pause stops time; Step advances exactly one year, paused or not.
-- If the device cannot keep up with the chosen speed, years are skipped rather than queued.
-- Each year runs the steps in "A year" below, in that order.
+- One tick is one day. A year is 360 days: 12 months of 30 days, and 4 seasons of 90 days (spring days 1–90, summer 91–180, autumn 181–270, winter 271–360). The whole map has the same season. The game starts at year 0; year 1 begins on the first day run. The top bar shows the season and the year ("Autumn, year 312").
+- At 1× the game runs 120 days per second, so a year takes 3 seconds. Speeds: 1×, 3×, 10×, 30× and Max (as many days as fit in 9 ms of each frame).
+- Pause stops time; Step advances exactly one month (30 days), paused or not.
+- If the device cannot keep up with the chosen speed, days are skipped rather than queued.
+- Each year runs the steps in "A year" below, on their days. Every number written "a year" in these rules is for a whole year.
 
 ## The map
 
@@ -185,7 +185,7 @@ Each civ has one of 5 types, picked per civ on the setup screen. A type biases t
 
 ## A year
 
-Each year (tick) runs these steps in order. Within a step everyone decides first and the results apply together, so the order people are listed in never changes the outcome.
+Each year runs these steps, in this order, on these days. Steps 1–5 run on the first day of the year, step 6 once a month, step 7 at the start of each season and steps 8–10 on the last day. Within a step everyone decides first and the results apply together, so the order people are listed in never changes the outcome.
 
 1. **Settlements, gathering and levels**, from the state at the end of last year: settlements (holders, sizes, capitals), what they plan to build, gathering, settlement buildings, era buildings and wonders, levelling up or falling back, Kingdoms enclosing hexes and absorbing the people in them, food capacities, and supply routes (see "Gathering and levels" and "Settlements").
 2. **Birthdays.** Everyone's age goes up by 1.
@@ -199,14 +199,16 @@ Each year (tick) runs these steps in order. Within a step everyone decides first
    - **Old age:** otherwise, a person whose age has reached their old-age start (35 + 20 × life expectancy, plus 5 years for a civ at level 5) dies with chance min(1, (age − start) ÷ 40) that year. With life expectancy 0.5 the start is 45: 2.5% at 46, 25% at 55, 50% at 65, and certain at 85. Nobody lives past start + 40, at most 95 (100 in a Kingdom).
 5. **Births.** Each person who ate this year, aged 16 to 40 (inclusive), in a hex with fewer people (all civs, counted after this year's deaths) than its **room**, has a child with their birth chance, (2.5% + 5% × f) × (0.75 + 0.5 × m) + 0.5% × (their civ's level − 1) (5% with fertility and metabolism 0.5 at level 1). No partner is needed. The child starts at age 0 with full health and no hunger, in the parent's hex and civ, with that parent recorded and the parent's traits with mutation (see "Traits").
    - **Room** of a hex = its **support**, but never more than its settlement's housing (see "Settlements"; a hex nobody lives in has no housing limit). Support = its food capacity + 2 × the food carried into it (smoothed, see "Supply routes"): regrowth gives half the capacity a year, so food carried in counts double.
-6. **Migration** (see below).
-7. **Food regrowth.** Each hex regains food equal to 50% of its food capacity, never above its capacity.
+6. **Migration**, on the 16th day of every month: a twelfth of the people each time (see below).
+7. **Food regrowth**, on the first day of each season. Over a year each hex regains food equal to 50% of its food capacity: 30% of that in spring, 35% in summer, 25% in autumn and 10% in winter, never above its capacity. On tundra and mountains nothing grows in winter, so they regain 45% of their capacity a year.
 8. **Contact:** fights and switching civ in hexes shared by several civs (see "Contact").
 9. **Statistics** for the year are recorded (see "Statistics").
 10. **End conditions** are checked (see "End of the game").
 
 ## Migration
 
+- **Monthly.** Migration runs on the 16th day of each month, for the people whose number (id) divided by 12 leaves the month's number (0 in the first month … 11 in the last): each person may set out once a year, in their own month, so new land fills over the year rather than all at once. The counts below are retaken each month.
+- **Winter.** In the three winter months nobody sets out from a tundra or mountain hex and no tundra or mountain hex is in reach.
 - A person who went hungry this year sets out with chance 50%.
 - A person who ate, in a crowded hex, sets out with chance 20%. A hex is crowded when it holds more people (all civs) than 50% of its support (its food capacity + 2 × the food carried in; see "A year", Births), or more than its settlement's housing. Food regrows by 50% of the capacity a year, so 50% is about as many people as a hex feeds year after year: above it the stored food runs down until people go hungry.
 - **By civ type** (see "Civ types"): for Expansionist people a hex is already crowded above 30% of its support (or its housing); Isolationist people who ate never set out; Nomadic people set out at twice the chance (100% hungry, 40% fed in a crowded hex) and have 5 movement points. Aggressive and Cooperative people use the usual numbers.
@@ -225,7 +227,7 @@ Each year (tick) runs these steps in order. Within a step everyone decides first
 
 ## Contact
 
-Checked once a year, after food regrowth, in every land hex where people of 2 or more civs live. Everything is decided against the same counts, taken when the step starts (people, food and who is where); then the deaths, flights and switches apply together.
+Checked once a year, on its last day, in every land hex where people of 2 or more civs live. Everything is decided against the same counts, taken when the step starts (people, food and who is where); then the deaths, flights and switches apply together.
 
 ### Fights
 
@@ -274,6 +276,7 @@ Step 1 of each year (see "A year") works from the state at the end of last year:
 - Where civs expand ("Migration") uses the same next spend for the materials a civ wants.
 - **Gatherers.** In each hex it works, 20% of the holder's adults there (aged 16 or more) gather, each weighted by 0.5 + their cooperation: gatherers = 20% × the sum of (0.5 + cooperation) over its adults there (exactly 20% of its adults when every cooperation is 0.5). Cooperative civs × 1.25. A gathering bonus from buildings and wonders multiplies this by 1 + the bonus (and uncommon and exotic yields by 1 + any rare-gathering bonus too, Caravanserai). A hex that carried goods last year gathers × (1 − 0.25 × the share of its carrying capacity it used; see "Supply routes"): its carriers did not gather. The gatherers split equally among the deposits worked in that hex.
 - **Yield.** Deposits never run out, but by hand they give slowly. By hand each gatherer yields 0.5 a year of a common material, 0.25 of an uncommon one and 0.0625 of an exotic one, and a deposit gives at most 10, 5 and 1.25 a year: yield = min(cap, gatherers on it × yield per gatherer). An **industry building** on the deposit raises both (see "Settlements"): Woodcutter, Quarry and Clay pit (wood, stone, clay) and Mine (copper, iron, salt) 1 a gatherer, at most 20 a deposit a year; Deep mine (gold, gemstones, spices) 0.5 a gatherer, at most 5.
+- **Winter.** Tundra and mountain hexes are closed for the winter quarter, so their gatherers count × 0.75 there.
 - The yield goes into the store of the hex's settlement, up to its cap (see "Settlements"); what does not fit is lost. Gathering costs no food and takes nobody away from eating or having children.
 
 ### Levelling up
