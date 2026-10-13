@@ -8,6 +8,12 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
 
 Ideas the director draws from headless simulation runs and the code. At most 6 wait here at a time.
 
+## Requests
+
+- [P2] R-017: Close two open tasks without building them (owner, 2026-10-13 05:36 UTC). T-032 desktop live report column: "yes, consider this resolved" (reading: no longer needed, close it). T-040 draw people by age and hunger: "i think this would be just cosmetic and would create too much noise to implement it. let's leave it as is for now." (reading: drop it; do not re-propose).
+
+## Answered
+
 ### P-010: Show fights on the map
 - Date: 2026-10-11
 - Category: visuals
@@ -16,13 +22,8 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Effort: S
 - Phone performance risk: low: one small overlay redrawn once a year from the per-hex fight winner the sim already keeps (`sim.fightWinner`). No per-person work.
 - Priority: P2 (suggested; stands unless the owner changes it)
-- Decision:
-
-## Requests
-
-- [P2] R-017: Close two open tasks without building them (owner, 2026-10-13 05:36 UTC). T-032 desktop live report column: "yes, consider this resolved" (reading: no longer needed, close it). T-040 draw people by age and hunger: "i think this would be just cosmetic and would create too much noise to implement it. let's leave it as is for now." (reading: drop it; do not re-propose).
-
-## Answered
+- Decision: superseded (owner, 2026-10-13 05:39 UTC: "we need to open a new thread for fighting, especially now that each tick is only one day, and rework fighting as a whole. let's move it there directly and drop this from here." Fighting is reworked as a whole in its own project thread, outside the director cycle; no task for the director.)
+- Moved: 2026-10-13 (cleanup), to the new fighting rework thread.
 
 ### Q-009: Should a civ keep gathering when a few of its people go hungry?
 - Date: 2026-10-11
