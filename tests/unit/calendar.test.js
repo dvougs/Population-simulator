@@ -22,11 +22,11 @@ test('a year is 360 days: 12 months of 30, 4 seasons of 90', () => {
   assert.equal(MOVE_DAY, 15);
 });
 
-test('1× runs 2 days a second, a season in 45 s and a year in 3 minutes; speeds 1×, 5×, 20×, 100×, Max; Step is a month', () => {
+test('1× runs 2 days a second, a season in 45 s and a year in 3 minutes; speeds 1×, 50×, 100×, 500×, Max; Step is a month', () => {
   assert.equal(BASE_TPS, 2);
   assert.equal(DAYS_PER_YEAR / BASE_TPS, 180);
-  assert.deepEqual(SPEEDS.map((s) => s.label), ['1×', '5×', '20×', '100×', 'Max']);
-  assert.deepEqual(SPEEDS.map((s) => s.mult * BASE_TPS), [2, 10, 40, 200, Infinity]);
+  assert.deepEqual(SPEEDS.map((s) => s.label), ['1×', '50×', '100×', '500×', 'Max']);
+  assert.deepEqual(SPEEDS.map((s) => s.mult * BASE_TPS), [2, 100, 200, 1000, Infinity]);
   assert.equal(STEP_DAYS, 30);
 });
 

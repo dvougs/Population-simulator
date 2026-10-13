@@ -3,8 +3,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   TILE_HEIGHT, tileHeight, homesFor, MAX_HOMES, HOME_SLOTS, boardBounds, riseAt, tiltAt, cameraPose,
-  RISE_MS, FOV_DEG, FILL, TILE_BASE,
+  RISE_MS, FOV_DEG, FILL, TILE_BASE, borderEdges, borderQuad, HEX_CORNERS, BORDER_OUTER, BORDER_INNER, BORDER_CASING,
 } from '../../src/render3d/diorama.js';
+import { buildNeighbourTable } from '../../src/sim/hex.js';
 import { DEEP_WATER, COAST, PLAINS, FOREST, HILLS, MOUNTAIN, DESERT, TUNDRA } from '../../src/sim/terrain.js';
 
 test('tiles stand in the RULES.md order: water, coast, desert, plains, forest, tundra, hills, mountain', () => {
@@ -70,4 +71,42 @@ test('tilted, the camera moves south of the board and looks down at it', () => {
   assert.ok(p.y > 0);
   const yawed = cameraPose(b, 7 / 6, 1, 0.2);
   assert.ok(Math.abs(Math.hypot(yawed.x - yawed.tx, yawed.z - yawed.tz) - Math.hypot(p.x - p.tx, p.z - p.tz)) < 1e-9);
+});
+
+test('3D empire borders run along every edge where a civ\'s land meets another civ, nobody or the map edge', () => {
+  const cols = 5; const rows = 5;
+  const civOf = new Int8Array(cols * rows).fill(-1);
+  // A lone hex in the middle: all six edges.
+  civOf[12] = 0;
+  assert.deepEqual(borderEdges(civOf, cols, rows), [72, 73, 74, 75, 76, 77]);
+  // Its neighbour joins the same civ: the shared edge goes from both sides.
+  const nb = buildNeighbourTable(cols, rows);
+  const east = nb[12 * 6];
+  civOf[east] = 0;
+  const two = borderEdges(civOf, cols, rows);
+  assert.equal(two.length, 10);
+  assert.ok(!two.includes(12 * 6) && !two.includes(east * 6 + 3));
+  // Another civ next door: both sides of the meeting edge have a band.
+  civOf[east] = 1;
+  const both = borderEdges(civOf, cols, rows);
+  assert.ok(both.includes(12 * 6) && both.includes(east * 6 + 3));
+  // A corner hex borders the map's edge too.
+  civOf.fill(-1); civOf[0] = 2;
+  assert.equal(borderEdges(civOf, cols, rows).length, 6);
+  civOf.fill(-1);
+  assert.deepEqual(borderEdges(civOf, cols, rows), []);
+});
+
+test('3D border bands sit inside the tile, from 96% to 72% of the way out with a dark line to 67%, and meet at the corners', () => {
+  assert.deepEqual([BORDER_OUTER, BORDER_INNER, BORDER_CASING], [0.96, 0.72, 0.67]);
+  assert.ok(BORDER_OUTER < 0.965, 'inside the tile top');
+  // Edge 0 faces east (direction 0): between corners 1 and 2, at x = cos 30°.
+  const q = borderQuad(10, 20, 0, 1, 0.5);
+  assert.deepEqual(q[0], [10 + HEX_CORNERS[1][0], 20 + HEX_CORNERS[1][1]]);
+  assert.deepEqual(q[1], [10 + HEX_CORNERS[2][0], 20 + HEX_CORNERS[2][1]]);
+  assert.ok(Math.abs(q[2][0] - (10 + HEX_CORNERS[2][0] / 2)) < 1e-12);
+  // The band of edge 0 ends where the band of edge 1 begins.
+  const next = borderQuad(10, 20, 1, 1, 0.5);
+  assert.deepEqual(next[0], q[1]);
+  assert.deepEqual(next[3], q[2]);
 });

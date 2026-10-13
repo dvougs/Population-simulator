@@ -51,7 +51,7 @@ test('How to play text: has the sections in the RULES.md order and every number 
     'from 10 × 10 up to 50 × 50', 'regrows 50%', '+30 food',
     'costs 1 movement point', 'desert or tundra 1.5', 'forest or hills 2', 'mountain 3', '+25% in forest, +50% in hills and +100% in mountain',
     'health from 0 to 100', 'they gain 25 health', 'they lose about 35', 'Between 16 and 40', 'about a 5% chance', 'From about 45', 'past about 85',
-    '2 days every second', 'a season in 45 seconds and a year in 3 minutes', '5×, 20×, 100× or Max', 'step a month (30 days)', 'years of 360 days',
+    '2 days every second', 'a season in 45 seconds and a year in 3 minutes', '50×, 100×, 500× or Max', 'step a month (30 days)', 'years of 360 days',
     'hungry sets out with a 50% chance', 'more people than 50% of its food', 'sets out with a 20% chance',
     'People move one hex a year', 'with 5 movement points a year', 'needs counts × 3', 'cannot beat, × 0.25', 'can beat, × 2', '+20% for each neighbouring hex', 'counted twice',
     '1 to 8 civilisations', '2 to 200 people (20 by default)', 'at least 3 steps',

@@ -692,6 +692,10 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 6px 
 .b-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
 .b-list li { display: grid; grid-template-columns: 1fr auto; column-gap: 8px; }
 .b-list li.later { opacity: 0.55; }
+.b-list li.go { cursor: pointer; min-height: var(--tap); align-content: center; border-radius: 8px; margin: 0 -6px; padding: 2px 6px; -webkit-tap-highlight-color: transparent; }
+.b-list li.go .b-name::after { content: ' \2192'; color: var(--text-dim); font-weight: 400; }
+.b-list li.go:active, .b-list li.go:hover { background: var(--surface-2); }
+.b-list li.go:focus-visible { outline: 2px solid var(--accent, #7cc4ff); outline-offset: 1px; }
 .b-list .b-name { font-weight: 600; min-width: 0; }
 .b-list .b-status { text-align: right; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .b-list li[data-status="standing"] .b-status, .b-list li[data-status="owned"] .b-status { color: #9fe0a4; }

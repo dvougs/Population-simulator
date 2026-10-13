@@ -1446,16 +1446,18 @@ test('Levels.summary and Buildings.summary: plain data for the sheet (status, co
   // Wonder statuses.
   w.bd.attempt[0] = COMMITTED;
   assert.equal(w.lv.summary(0).buildings.eras[0].wonder.status, 'gathering');
+  assert.equal(w.lv.summary(0).buildings.eras[0].wonder.hex, -1, 'gathering: no hex to fly to yet');
   assert.equal(w.lv.summary(0).next.waitingForWonder, true);
   w.bd.aHex[0] = 47; w.bd.aWork[0] = 3;
   const b = w.lv.summary(0).buildings.eras[0].wonder;
-  assert.deepEqual([b.status, b.work, b.years], ['building', 3, 40]);
-  w.bd.wYear[0] = 9; w.bd.wOwner[0] = 1; w.bd.totals();
+  assert.deepEqual([b.status, b.work, b.years, b.hex], ['building', 3, 40, 47]);
+  w.bd.wYear[0] = 9; w.bd.wOwner[0] = 1; w.bd.wHex[0] = 52; w.bd.totals();
   assert.equal(w.lv.summary(0).buildings.eras[0].wonder.status, 'building', 'still building by its own attempt');
   w.bd.aHex[0] = -1; w.bd.attempt[0] = NONE;
   assert.equal(w.lv.summary(0).buildings.eras[0].wonder.status, 'taken');
   assert.equal(w.lv.summary(1).buildings.eras[0].wonder.status, 'owned');
   assert.equal(w.lv.summary(1).buildings.eras[0].wonder.owner, 1);
+  assert.equal(w.lv.summary(1).buildings.eras[0].wonder.hex, 52, 'an owned wonder points at the hex it stands on');
   assert.deepEqual(w.lv.summary(1).buildings.bonuses.loyalty, 0.5);
   // A Kingdom has no next building.
   w.lv.level[0] = 5;

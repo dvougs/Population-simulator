@@ -7,6 +7,7 @@
 // east and z runs south as the 2D map's y does, and y is up.
 
 import { HEX_SIZE, worldBounds, hexAtWorld } from '../render/layout.js';
+import { buildNeighbourTable, SQRT3 } from '../sim/hex.js';
 import { DEEP_WATER, COAST, PLAINS, FOREST, HILLS, MOUNTAIN, DESERT, TUNDRA, TERRAIN_COUNT } from '../sim/terrain.js';
 
 /** Height of a tile's top above the board's base plane, by terrain (hex radii). */
@@ -153,4 +154,46 @@ export function rayHex(cols, rows, x, z, topOf, deg = GAME_TILT_DEG) {
   }
   const hex = hexAtWorld(cols, rows, x * HEX_SIZE, (z - VIEW_PLANE * tan) * HEX_SIZE);
   return hex ? hex.index : -1;
+}
+
+/**
+ * Empire borders on the 3D map: each hex belongs to at most one civ (civOf[h], −1 for none), and
+ * an edge is drawn on the inside of every edge of a held hex whose neighbour across it belongs to
+ * another civ, to nobody, or is off the map. Returned as h * 6 + k for edge k of hex h (it faces
+ * the neighbour in sim/hex.js direction k), ascending.
+ */
+export function borderEdges(civOf, cols, rows) {
+  const nb = buildNeighbourTable(cols, rows);
+  const out = [];
+  for (let h = 0; h < cols * rows; h++) {
+    const c = civOf[h];
+    if (c < 0) continue;
+    for (let k = 0; k < 6; k++) {
+      const o = nb[h * 6 + k];
+      if (o < 0 || civOf[o] !== c) out.push(h * 6 + k);
+    }
+  }
+  return out;
+}
+
+/** The border band's outer and inner edge, and its dark casing, as distances from a hex's middle (hex radii; the tiles reach 0.965). */
+export const BORDER_OUTER = 0.96;
+export const BORDER_INNER = 0.72;
+export const BORDER_CASING = 0.67;
+
+/** Hex corner j (clockwise from the top, as the 2D map's) at radius 1: [x, z]. */
+export const HEX_CORNERS = Object.freeze([[0, -1], [SQRT3 / 2, -0.5], [SQRT3 / 2, 0.5], [0, 1], [-SQRT3 / 2, 0.5], [-SQRT3 / 2, -0.5]]
+  .map((c) => Object.freeze(c)));
+
+/**
+ * The band along edge k of a hex centred at (x, z), between radii rOut and rIn, as four [x, z]
+ * points: outer corners k + 1 and k + 2, then the inner ones. Edge k runs between corners k + 1 and
+ * k + 2, so the ends follow the lines to the hex's middle and the bands of one hex meet cleanly.
+ */
+export function borderQuad(x, z, k, rOut, rIn) {
+  const a = HEX_CORNERS[(k + 1) % 6]; const b = HEX_CORNERS[(k + 2) % 6];
+  return [
+    [x + a[0] * rOut, z + a[1] * rOut], [x + b[0] * rOut, z + b[1] * rOut],
+    [x + b[0] * rIn, z + b[1] * rIn], [x + a[0] * rIn, z + a[1] * rIn],
+  ];
 }
