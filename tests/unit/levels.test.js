@@ -70,7 +70,7 @@ test('RULES.md "Gathering": the numbers', () => {
   assert.equal(LEVEL_EFFECTS.oldAgeDelay, 5);
   assert.equal(LEVEL_EFFECTS.shelterFactor, 0.5);
   assert.equal(LEVEL_EFFECTS.fallBackYears, 100);
-  assert.equal(LEVEL_EFFECTS.kingdomStrength, 3);
+  assert.equal(LEVEL_EFFECTS.kingdomStrength, undefined, 'a Kingdom has morale (war.js), not strength');
   assert.equal(LEVEL_EFFECTS.absorbPct, undefined, 'Kingdoms absorb enclosed hexes whole');
   assert.equal(LEVEL_EFFECTS.boatCost, 1);
   assert.deepEqual([LEVEL_EFFECTS.raftRange, LEVEL_EFFECTS.boatRange], [1, 3]);

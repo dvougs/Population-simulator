@@ -98,8 +98,6 @@ export const LEVEL_EFFECTS = Object.freeze({
   oldAgeDelay: 5,
   /** The top level, Kingdom (the same as MAX_LEVEL). */
   kingdomLevel: 5,
-  /** A Kingdom's strength in a fight against a civ that is not a Kingdom is multiplied by this. */
-  kingdomStrength: 3,
   /** A civ below its level's minimum population this many years in a row drops one level. */
   fallBackYears: 100,
 });

@@ -101,6 +101,12 @@ export class LocalSimHost {
    */
   buildings() { return this.sim?.buildings() ?? []; }
   /**
+   * Every battle and siege under way, as plain data (War.summary): [{ hex, col, row, attacker,
+   * defender, holder, siege, siegeDays, siegeLeft, day, warriors, start, dead, morale, attack }],
+   * per side [attacker, defender]. Empty without a game.
+   */
+  battles() { return this.sim ? this.sim.war.summary(this.sim.map.cols) : []; }
+  /**
    * Settlements for drawing: { tick, tier, holder, built, plan, started (typed arrays per hex),
    * capital (hex per civ), routes: { from, to, food, materials } }, or null without a game.
    */

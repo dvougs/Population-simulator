@@ -8,6 +8,10 @@
 // lives in round thatched huts, lit at night by a bonfire, not windows. Each kind of thing is one instanced mesh, so the whole world is
 // about a dozen draw calls whatever the map size.
 //
+// With borders on (the game's map), each civ's empire is ringed by a bold band
+// in its colour along its outer edges, over a thin dark casing on the inside so
+// it reads on any land.
+//
 // The world knows nothing of cameras or lights: its owner places it (place(),
 // with how far each tile has risen) and draws it.
 
@@ -19,7 +23,10 @@ import { DEEP_WATER, FOREST, MOUNTAIN } from '../sim/terrain.js';
 import { seasonRgb, SNOW_RGB } from './seasons.js';
 import { modelOf, footprint, SHAPES } from './buildingModels.js';
 import { shapeGeometries, placePart, partColour } from './modelMeshes.js';
-import { tileHeight, homesFor, HOME_SLOTS, MONUMENT_SLOT, MAX_HOMES, TILE_BASE, boardBounds } from './diorama.js';
+import {
+  tileHeight, homesFor, HOME_SLOTS, MONUMENT_SLOT, MAX_HOMES, TILE_BASE, boardBounds,
+  borderEdges, borderQuad, BORDER_OUTER, BORDER_INNER, BORDER_CASING,
+} from './diorama.js';
 
 const GROW_MS = 380; // a new home growing out of the ground
 const TREE_SLOTS = [[-0.35, -0.2], [0.3, -0.3], [0.05, 0.35], [-0.4, 0.3], [0.42, 0.18]];
@@ -45,6 +52,10 @@ const HOMES_WITH_MODEL = 3;
 const MODEL_HOME_SPREAD = 1.75;
 /** Most parts of building models drawn on the map, per shape. */
 const MAX_PARTS = 1500;
+
+const BORDER_LIFT = 0.008; // the border band floats this far over its tile, clear of the tile's top
+const CASING = 0x0b0e13;
+const VERTS_PER_EDGE = 12; // two bands of two triangles
 
 const easeOut = (t) => (t >= 1 ? 1 : t <= 0 ? 0 : 1 - (1 - t) * (1 - t) * (1 - t));
 const clamp01 = (t) => (t < 0 ? 0 : t > 1 ? 1 : t);
@@ -78,10 +89,12 @@ function buildGeometries(T) {
 }
 
 export class DioramaWorld {
-  /** T: the three.js module; shadows: whether meshes cast and take shadows. */
-  constructor(T, { shadows = true } = {}) {
+  /** T: the three.js module; shadows: whether meshes cast and take shadows; borders: draw each empire's outer border. */
+  constructor(T, { shadows = true, borders = false } = {}) {
     this.T = T;
     this.shadows = shadows;
+    this.borders = borders;
+    this.border = null;
     this.geo = buildGeometries(T);
     this.root = null;
     this.meshes = [];
@@ -166,11 +179,19 @@ export class DioramaWorld {
     });
     this.homes = { shown: new Int8Array(n), grownAt: new Float32Array(n).fill(-1e9) };
     this.show = null;
+    if (this.borders) {
+      const geo = new T.BufferGeometry();
+      this.border = { mesh: new T.Mesh(geo, new T.MeshBasicMaterial({ vertexColors: true, side: T.DoubleSide })), edges: [], cap: 0 };
+      this.border.mesh.frustumCulled = false;
+      this.border.mesh.visible = false;
+      root.add(this.border.mesh);
+    }
     this.paintTiles(null);
     return root;
   }
 
   dispose() {
+    if (this.border) { this.border.mesh.geometry.dispose(); this.border.mesh.material.dispose(); this.border = null; }
     for (const m of this.meshes) { m.removeFromParent(); m.dispose(); }
     this.meshes = [];
     this.root?.removeFromParent();
@@ -266,6 +287,56 @@ export class DioramaWorld {
       show.huts[i] = civ >= 0 && (levels?.[civ] ?? 2) <= 1 ? 1 : 0;
     }
     this.paintTiles(show.civ);
+    if (this.border) this.setBorders(show.civ);
+  }
+
+  /** Which edges the borders run along and their colours, for one civ per hex (civOf). */
+  setBorders(civOf) {
+    const { T } = this;
+    const b = this.border;
+    b.edges = borderEdges(civOf, this.map.cols, this.map.rows);
+    const need = Math.max(1, b.edges.length) * VERTS_PER_EDGE;
+    if (need > b.cap) {
+      b.cap = Math.max(need, b.cap * 2, 64 * VERTS_PER_EDGE);
+      const geo = b.mesh.geometry;
+      geo.setAttribute('position', new T.BufferAttribute(new Float32Array(b.cap * 3), 3));
+      geo.setAttribute('color', new T.BufferAttribute(new Float32Array(b.cap * 3), 3));
+    }
+    const col = b.mesh.geometry.getAttribute('color');
+    const c = this.tmp.c;
+    const dark = new T.Color(CASING);
+    for (let e = 0; e < b.edges.length; e++) {
+      const civ = civOf[Math.floor(b.edges[e] / 6)];
+      c.setRGB(...civStyle(civ).rgb.map((v) => v / 255), T.SRGBColorSpace);
+      for (let v = 0; v < VERTS_PER_EDGE; v++) {
+        const cc = v < 6 ? c : dark;
+        col.setXYZ(e * VERTS_PER_EDGE + v, cc.r, cc.g, cc.b);
+      }
+    }
+    col.needsUpdate = true;
+  }
+
+  /** Lay the border bands on their tiles as they stand now (the tiles' rise moves them up). */
+  placeBorders() {
+    const b = this.border;
+    const { cx, cz, top, rise } = this.tiles;
+    const pos = b.mesh.geometry.getAttribute('position');
+    b.mesh.visible = b.edges.length > 0;
+    if (!pos) return;
+    const arr = pos.array;
+    let o = 0;
+    const quad = (q, y) => {
+      for (const j of [0, 1, 2, 0, 2, 3]) { arr[o++] = q[j][0]; arr[o++] = y; arr[o++] = q[j][1]; }
+    };
+    for (let e = 0; e < b.edges.length; e++) {
+      const h = Math.floor(b.edges[e] / 6); const k = b.edges[e] % 6;
+      const r = rise[h] < 0 ? 1 : rise[h];
+      const y = FLAT + (top[h] - FLAT) * r + BORDER_LIFT;
+      quad(borderQuad(cx[h], cz[h], k, BORDER_OUTER, BORDER_INNER), y);
+      quad(borderQuad(cx[h], cz[h], k, BORDER_INNER, BORDER_CASING), y);
+    }
+    pos.needsUpdate = true;
+    b.mesh.geometry.setDrawRange(0, b.edges.length * VERTS_PER_EDGE);
   }
 
   /**
@@ -314,6 +385,7 @@ export class DioramaWorld {
       put(m.river, k++, (rv.a.x + rv.e.x) / 2, y, (rv.a.z + rv.e.z) / 2, rv.len, 0.02, 0.2, -rv.yaw);
     }
     m.river.count = k;
+    if (this.border) this.placeBorders();
     this.placeSettled(put, t, still);
     for (const mesh of this.meshes) mesh.instanceMatrix.needsUpdate = true;
   }

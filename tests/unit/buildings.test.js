@@ -97,9 +97,8 @@ const nb = (w, h, d) => w.map.neighbours[h * 6 + d];
 
 const FIGHT_HEX = 12; // the middle of a 5 × 5 map
 /**
- * groups: [civ, n] in FIGHT_HEX. eff: { civ: { kind: value } } building bonuses. last: the end-of-last-year counts ([civ, n]
- * in FIGHT_HEX; default the present ones: the holder is then the bigger side). strengths/coop: per civ; agg: everyone's aggression.
- * Civ 0 is Aggressive (always fights) and the rest Cooperative unless types say otherwise.
+ * One year of switching civ (contact.js) in a shared hex. groups: [civ, n] in FIGHT_HEX. eff: { civ: { kind: value } }
+ * building bonuses. strengths/coop: per civ; agg: everyone's aggression. Fighting is war.js (see war.test.js).
  */
 function fight(groups, { terrain = PLAINS, eff = {}, last = null, strengths = null, coop = null, agg = 0.5, types = null } = {}) {
   const civs = Math.max(...groups.map(([c]) => c)) + 1;
@@ -120,13 +119,8 @@ function fight(groups, { terrain = PLAINS, eff = {}, last = null, strengths = nu
   for (const k of EFFECT_KEYS) bonus[k] = new Float64Array(civs);
   for (const [c, o] of Object.entries(eff)) for (const [k, v] of Object.entries(o ?? {})) bonus[k][c] = v;
   contact.eff = bonus;
-  const lastPop = new Int32Array(map.count * civs);
-  for (const [c, n] of last ?? groups) lastPop[FIGHT_HEX * civs + c] = n;
-  const out = { deaths: [], fights: [], switches: [], n: 0 };
-  out.n = contact.year(people, map, lastPop, 100, new Rng('fw'), new Rng('fs'),
-    (slot, cause) => out.deaths.push({ civ: people.civ[slot], cause }),
-    (hex, attacker, defender, holder, winner, d) => out.fights.push({ hex, attacker, defender, holder, winner, deaths: d }),
-    (from, to) => out.switches.push([from, to]));
+  const out = { switches: [], n: 0 };
+  out.n = contact.year(people, map, null, new Rng('fs'), (from, to) => out.switches.push([from, to]));
   return out;
 }
 
@@ -1219,53 +1213,10 @@ test('RULES.md "Levelling up": a cost bonus (Guild Hall 15%) lowers every materi
   assert.deepEqual(a.stockList(0), M({ wood: 68, stone: 26, clay: 26 }));
 });
 
-test('"Fights": strength bonus multiplies each side\'s strength by 1 + bonus; defence adds to the terrain bonus', () => {
-  const win = (holderN, holderEff, attackerN, attackerEff, terrain = PLAINS) => {
-    const f = fight([[1, holderN], [0, attackerN]], { terrain, eff: { 1: holderEff, 0: attackerEff }, last: [[1, holderN]] });
-    assert.equal(f.fights[0].holder, 1);
-    return f.fights[0].winner;
-  };
-  // Strength 0.5 each: 20 people are 10.
-  assert.equal(win(20, {}, 21, {}), 0, 'baseline: 10.5 beats 10');
-  assert.equal(win(20, { strength: 0.1 }, 21, {}), 1, '11 against 10.5');
-  assert.equal(win(20, { strength: 0.1 }, 23, {}), 0, '11 against 11.5');
-  assert.equal(win(29, {}, 20, { strength: 0.5 }), 0, 'attacker 15 against 14.5: the attacker\'s strength counts');
-  assert.equal(win(31, {}, 20, { strength: 0.5 }), 1, '15 against 15.5');
-  // Defence: hills 1.5 + 0.5 = 2 for the holder; the attacker has none of it.
-  assert.equal(win(20, { defence: 0.5 }, 40, {}, HILLS), 1, '20 against 20 ties to the holder');
-  assert.equal(win(20, { defence: 0.5 }, 41, {}, HILLS), 0, '20.5 against 20');
-  assert.equal(win(20, {}, 31, { defence: 5 }, HILLS), 0, 'the attacker\'s defence bonus is not used (15.5 against 15)');
-  assert.equal(win(20, { defence: 0.75 }, 35, {}, PLAINS), 1, 'Walls on plains: 17.5 against 17.5');
-  assert.equal(win(20, { defence: 0.75 }, 36, {}, PLAINS), 0);
-  // Strength and defence multiply: holder 1.1 × (1 + 0.5 + 0.5) on hills = 2.2 → 22 against 22.
-  assert.equal(win(20, { defence: 0.5, strength: 0.1 }, 44, {}, HILLS), 1);
-  assert.equal(win(20, { defence: 0.5, strength: 0.1 }, 45, {}, HILLS), 0);
-});
-
-test('"Fights": a war-loss bonus (War Totem 20%, Barracks 50%) shrinks the loser\'s deaths to ⌈20% × (1 − bonus)⌉, at least 1', () => {
-  const dead = (n, warLoss) => {
-    const f = fight([[0, 20], [1, n]], { eff: { 1: { warLoss } }, strengths: [1, 0], last: [[0, 20], [1, n]] });
-    assert.equal(f.fights[0].winner, 0);
-    return f.deaths.filter((d) => d.civ === 1).length;
-  };
-  assert.equal(dead(50, 0), 10);
-  assert.equal(dead(50, 0.2), 8, '10 × 0.8');
-  assert.equal(dead(50, 0.5), 5);
-  assert.equal(dead(50, 0.7), 3, '3 exactly');
-  assert.equal(dead(50, 0.75), 3, '2.5 → 3');
-  assert.equal(dead(51, 0.5), 6, '5.1 → 6');
-  assert.equal(dead(1, 0.75), 1, 'always at least one');
-  assert.equal(dead(4, 0.5), 1);
-  // Only the loser benefits.
-  const won = fight([[0, 40], [1, 10]], { eff: { 0: { warLoss: 0.75 } }, strengths: [1, 0], last: [[0, 40], [1, 10]] });
-  assert.equal(won.deaths.filter((d) => d.civ === 0).length, 2, 'the winner loses 5% (rounded down) whatever its bonus');
-});
-
 test('"Switching civ": a loyalty bonus multiplies the chance of switching away by 1 − bonus (Market/Sun Circle 50%, capped at 75%)', () => {
   const rate = (loyalty) => {
     const n = 8000;
     const f = fight([[0, n], [1, 4]], { eff: { 0: { loyalty } }, coop: [1, 0], agg: 0, types: ['expansionist', 'expansionist'] });
-    assert.equal(f.n, 0);
     return f.switches.length / n;
   };
   near(rate(0), 0.02, 0.004);
@@ -1446,16 +1397,18 @@ test('Levels.summary and Buildings.summary: plain data for the sheet (status, co
   // Wonder statuses.
   w.bd.attempt[0] = COMMITTED;
   assert.equal(w.lv.summary(0).buildings.eras[0].wonder.status, 'gathering');
+  assert.equal(w.lv.summary(0).buildings.eras[0].wonder.hex, -1, 'gathering: no hex to fly to yet');
   assert.equal(w.lv.summary(0).next.waitingForWonder, true);
   w.bd.aHex[0] = 47; w.bd.aWork[0] = 3;
   const b = w.lv.summary(0).buildings.eras[0].wonder;
-  assert.deepEqual([b.status, b.work, b.years], ['building', 3, 40]);
-  w.bd.wYear[0] = 9; w.bd.wOwner[0] = 1; w.bd.totals();
+  assert.deepEqual([b.status, b.work, b.years, b.hex], ['building', 3, 40, 47]);
+  w.bd.wYear[0] = 9; w.bd.wOwner[0] = 1; w.bd.wHex[0] = 52; w.bd.totals();
   assert.equal(w.lv.summary(0).buildings.eras[0].wonder.status, 'building', 'still building by its own attempt');
   w.bd.aHex[0] = -1; w.bd.attempt[0] = NONE;
   assert.equal(w.lv.summary(0).buildings.eras[0].wonder.status, 'taken');
   assert.equal(w.lv.summary(1).buildings.eras[0].wonder.status, 'owned');
   assert.equal(w.lv.summary(1).buildings.eras[0].wonder.owner, 1);
+  assert.equal(w.lv.summary(1).buildings.eras[0].wonder.hex, 52, 'an owned wonder points at the hex it stands on');
   assert.deepEqual(w.lv.summary(1).buildings.bonuses.loyalty, 0.5);
   // A Kingdom has no next building.
   w.lv.level[0] = 5;

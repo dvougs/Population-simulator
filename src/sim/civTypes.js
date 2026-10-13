@@ -32,8 +32,8 @@ export const TYPE_RULES = Object.freeze({
 /** One or two plain sentences per type for the setup screen (they follow RULES.md "Civ types"). */
 const BEHAVIOUR = {
   expansionist: 'Moves on early: its people set out once their hex holds 30% of its food capacity, long before it is crowded at 50%.',
-  aggressive: 'Always fights any civ it shares a hex with.',
-  cooperative: 'Never starts a fight, and its people leave it for another civ half as often as others do.',
+  aggressive: 'Declares war on any civ it borders.',
+  cooperative: 'Never declares war and only fights for its own land, and its people leave it for another civ half as often as others do.',
   isolationist: 'Keeps to itself: when its hex is crowded, its people only move to land with no other civ in or next to it.',
   nomadic: 'Wanders far: 5 movement points a year instead of 3, and sets out twice as often.',
 };

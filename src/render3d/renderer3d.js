@@ -41,7 +41,7 @@ const TWILIGHT_FRAME_MS = 33;
 const SOFTWARE_LIGHT_MS = 500;
 const SHADOW_MS = 400;
 const SEASON_EASE_S = 0.35; // the seasons' look catches up with the calendar over about this long
-const STEADY_EASE_S = 1.5; // the steady look (100× and Max) eases in and out over about this long
+const STEADY_EASE_S = 1.5; // the steady look (100×, 500× and Max) eases in and out over about this long
 const SKY_DAY = 0xe4f0ff; const SKY_NIGHT = 0x5d74b8;
 const GROUND_DAY = 0x30384a; const GROUND_NIGHT = 0x161b2b;
 const SUN = 0xfff1d6; const SUN_LOW = 0xff9a52; const MOON = 0x9fb6ff;
@@ -96,7 +96,7 @@ export class Renderer3D {
     this.sky = this.scene.children.find((o) => o.isHemisphereLight);
     this.moon = new T.DirectionalLight(MOON, 0);
     this.scene.add(this.moon, this.moon.target);
-    this.diorama = new DioramaWorld(T, { shadows: !soft });
+    this.diorama = new DioramaWorld(T, { shadows: !soft, borders: true });
     const ring = new T.RingGeometry(0.8, 1, 6, 1, Math.PI / 6);
     ring.rotateX(-Math.PI / 2);
     this.ring = new T.Mesh(ring, new T.MeshBasicMaterial({ color: RING, transparent: true, opacity: 0.9, depthWrite: false }));
@@ -166,7 +166,7 @@ export class Renderer3D {
   clock(now = performance.now()) { return (now - this.clockStart) / 1000; }
 
   /**
-   * Steady look (at 100× and Max): the light eases to a summer noon and stays there, and the
+   * Steady look (at 100×, 500× and Max): the light eases to a summer noon and stays there, and the
    * seasons' look fades to plain summer, while the clock and the calendar run on underneath.
    */
   setSteady(on) { this.steady = on; }
