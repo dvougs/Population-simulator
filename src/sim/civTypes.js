@@ -1,11 +1,10 @@
 // Civ types: a behaviour bias layered on top of each person's own traits. The
-// type sets the founders' starting traits (CIV_TYPE_TRAITS in traits.js), how
-// eagerly its people migrate, and how it fights and blends with other civs.
+// type sets how eagerly its people migrate, how it fights and blends with
+// other civs, and how it levels up; starting traits come from the civ's
+// people (peoples.js).
 // Every number here is listed in RULES.md ("Civ types", "Migration", "Contact").
 
-import { CIV_TYPE_TRAITS } from './traits.js';
-
-/** Type ids; this is also the order new civs get by default (Civ 1 Expansionist, Civ 2 Aggressive, …, repeating). */
+/** Type ids; also the default civs' order (Civ 1 Expansionist, Civ 2 Aggressive, …, repeating; see peoples.js DEFAULT_PEOPLES). */
 export const CIV_TYPES = Object.freeze(['expansionist', 'aggressive', 'cooperative', 'isolationist', 'nomadic']);
 export const CIV_TYPE_NAMES = Object.freeze({
   expansionist: 'Expansionist',
@@ -30,11 +29,7 @@ export const TYPE_RULES = Object.freeze({
   nomadic: Object.freeze({ movePoints: 5, setOutFactor: 2 }),
 });
 
-/**
- * One or two plain sentences per type for the setup screen (they follow
- * RULES.md "Civ types"). Starting traits are appended from CIV_TYPE_TRAITS so
- * the text cannot drift from the numbers.
- */
+/** One or two plain sentences per type for the setup screen (they follow RULES.md "Civ types"). */
 const BEHAVIOUR = {
   expansionist: 'Moves on early: its people set out once their hex holds 30% of its food capacity, long before it is crowded at 50%.',
   aggressive: 'Always fights any civ it shares a hex with.',
@@ -43,14 +38,5 @@ const BEHAVIOUR = {
   nomadic: 'Wanders far: 5 movement points a year instead of 3, and sets out twice as often.',
 };
 
-const TRAIT_WORDS = {
-  fertility: 'fertility', lifeExpectancy: 'life expectancy', strength: 'strength', aggression: 'aggression',
-  cooperation: 'cooperation', metabolism: 'metabolism', heatTolerance: 'heat tolerance', coldTolerance: 'cold tolerance',
-};
-
-/** The setup screen's explanation of a type: what it does differently and its starting traits. */
-export function civTypeText(type) {
-  const t = CIV_TYPE_TRAITS[type] ?? {};
-  const traits = Object.entries(t).map(([k, v]) => `${TRAIT_WORDS[k]} ${v}`);
-  return `${BEHAVIOUR[type] ?? ''} Starts with ${traits.join(', ')}; other traits 0.5.`;
-}
+/** The setup screen's explanation of a type: what it does differently. */
+export const civTypeText = (type) => BEHAVIOUR[type] ?? '';

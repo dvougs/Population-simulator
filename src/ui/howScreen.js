@@ -15,7 +15,7 @@ import { emblem } from './inspector.js';
 import { renderLevels } from './levelsPanel.js';
 import { chartCard, eventText, warText } from './endScreen.js';
 import { howText } from './howText.js';
-import { DemoWorld, DEMO } from './demoWorld.js';
+import { DemoWorld, DEMO, DEMO_PARAMS } from './demoWorld.js';
 import { drawWorld } from '../render/miniMap.js';
 import { hexTotal } from '../render/peopleMaths.js';
 import { hexCentre } from '../render/layout.js';
@@ -25,8 +25,12 @@ import { buildNeighbourTable } from '../sim/hex.js';
 import { DEEP_WATER, PLAINS, COAST } from '../sim/terrain.js';
 import { TYPE_RULES } from '../sim/civTypes.js';
 import { TRAITS, TRAIT_NAMES, TRAIT_RULES } from '../sim/traits.js';
+import { civNames } from '../sim/peoples.js';
+import { normalizeParams } from '../sim/params.js';
 
-const civName = (c) => `Civ ${c + 1}`;
+/** The pictured world's civs go by their peoples' names. */
+const DEMO_NAMES = civNames(normalizeParams(DEMO_PARAMS).civs);
+const civName = (c) => DEMO_NAMES[c] ?? `Civ ${c + 1}`;
 const smooth = () => (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
 const chip = (c) => h('span', { class: 'civ-chip' }, emblem(c), civName(c));
 
@@ -122,8 +126,15 @@ export class HowScreen {
           h('span', {}, `${civName(e.civ)}`), h('small', {}, `${e.colour} ${e.emblem}`)))),
       ],
       traits: (s) => [
-        h('dl', { class: 'how-traits' }, s.traits.flatMap((t) => [h('dt', {}, t.name), h('dd', {}, t.text)])),
+        h('dl', { class: 'how-traits' }, s.traits.flatMap((t) => [h('dt', {}, t.name),
+          h('dd', {}, t.text, h('small', { class: 'how-rule' }, t.rule))])),
         traitFigure(stats, year),
+      ],
+      peoples: (s) => [
+        h('ul', { class: 'how-types how-peoples' }, s.peoples.map((p) => h('li', { 'data-people': p.id },
+          h('h4', {}, p.name, ' ', h('small', { class: 'muted' }, p.type)),
+          h('p', {}, p.about),
+          h('p', { class: 'muted' }, p.traits)))),
       ],
       types: (s) => [
         h('ul', { class: 'how-types' }, s.types.map((t) => h('li', { 'data-type': t.type },

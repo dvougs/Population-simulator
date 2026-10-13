@@ -130,7 +130,7 @@ test('person(slot, id): details of a living person; null for a wrong id, a dead 
   assert.equal(c.slot, child);
   assert.equal(c.id, pop.id[child]);
   assert.equal(c.civ, pop.civ[child]);
-  assert.equal(c.civName, `Civ ${pop.civ[child] + 1}`);
+  assert.equal(c.civName, host.stats().civs[pop.civ[child]].name);
   assert.equal(c.hex, pop.hex[child]);
   assert.equal(c.col + c.row * host.map().cols, c.hex);
   // The parent's living-children count is the living people whose parent is them.

@@ -151,7 +151,7 @@ async function expectInspectorMatchesRules(page, sample) {
   // RULES.md "Statistics": tapping a hex shows its people per civ.
   const peopleDd = insp.locator('dd[data-field="people"]');
   if (h.people === 0) await expect(peopleDd).toHaveText('None');
-  else await expect(peopleDd).toHaveText(new RegExp(`^${h.people} \\(Civ \\d+: \\d+`));
+  else await expect(peopleDd).toHaveText(new RegExp(`^${h.people} \\([A-Z][\\w ]*: \\d+`));
   await expect(insp.locator('dd[data-field="food-capacity"]')).toHaveText(String(cap));
   // RULES.md "Material deposits": the card lists the hex's deposits by name (or None); who gathered there this year is a row of its own.
   const deposits = h.deposits.map((id) => id[0].toUpperCase() + id.slice(1)).join(', ');
@@ -512,6 +512,44 @@ test.describe('map generation screen', () => {
 });
 
 test.describe('setup screen', () => {
+  test('RULES.md "Game settings": Edit opens a civ\'s sidebar; its people, colour and traits reach the game', async ({ page }, testInfo) => {
+    await page.locator('#btn-continue').click();
+    await expect(page.locator('#f-civ-0-name')).toHaveText('Romans');
+    await expect(page.locator('#f-civ-1-name')).toHaveText('Assyrians');
+    await page.locator('#btn-edit-civ-1').click();
+    const side = page.locator('#civ-editor');
+    await expect(side).toBeVisible();
+    // The sidebar fits the screen (full width on a phone, at most 440 pixels).
+    const box = await side.boundingBox();
+    const vw = page.viewportSize().width;
+    expect(box.width).toBeLessThanOrEqual(Math.min(440, vw) + 1);
+    await page.locator('#f-civ-people').selectOption('vikings');
+    await expect(page.locator('#f-civ-type')).toHaveValue('aggressive');
+    await expect(page.locator('#civ-editor-title')).toHaveText('Vikings');
+    // ⓘ shows the exact rule.
+    await page.locator('.trait-row[data-trait="fertility"] .info-btn').click();
+    await expect(page.locator('#f-trait-fertility-rule')).toBeVisible();
+    // Going over the fair budget shows the ⚠, but nothing stops it.
+    await expect(page.locator('#f-civ-budget-warn')).toHaveCount(0);
+    await page.locator('#f-trait-fertility-num').fill('0.9');
+    await page.locator('#f-trait-fertility-num').press('Tab');
+    await expect(page.locator('#f-civ-budget-warn')).toBeVisible();
+    // Taking the Romans' colour swaps the two.
+    await page.locator('#f-civ-colour-0').click();
+    await expect(page.locator('#f-civ-colour-0')).toHaveAttribute('aria-checked', 'true');
+    await page.screenshot({ path: testInfo.outputPath('civ-editor.png') });
+    await page.locator('#civ-editor-done').click();
+    await expect(side).toBeHidden();
+    await expect(page.locator('#f-civ-1-name')).toContainText('Vikings');
+    await expect(page.locator('#f-civ-1-warn')).toBeVisible();
+    await page.locator('#btn-start').click();
+    await expect(page.locator('#game')).toBeVisible();
+    const civs = await page.evaluate(() => window.popsim.host.stats().civs.map((c) => [c.name, c.colour]));
+    expect(civs).toEqual([['Romans', 1], ['Vikings', 0], ['Babylonians', 2]]);
+    const params = await page.evaluate(() => window.popsim.host.params.civs[1].traits.fertility);
+    expect(params).toBe(0.9);
+  });
+
   test('continue shows the chosen map, change map goes back with it kept', async ({ page }, testInfo) => {
     await page.locator('#m-preset').selectOption('highlands');
     await expect.poll(() => previewParams(page)).toEqual(PRESETS.highlands);

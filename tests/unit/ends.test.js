@@ -57,7 +57,7 @@ test('last civ standing: fires when only one of 2+ civs has people; that civ win
   assert.equal(sim.finished, true);
   assert.equal(sim.endKind, 'lastCiv');
   assert.equal(sim.winner, 1);
-  assert.match(sim.endReason, /Civ 2/);
+  assert.equal(sim.endReason, 'Last civ standing: Assyrians');
 });
 
 test('last civ standing never fires with a single civ; extinction still does', () => {
@@ -90,7 +90,7 @@ test('dominance: share boundary (hexes × 100 ≥ share × land hexes) and strea
   assert.equal(sim.finished, true, 'the 10th year ends it');
   assert.equal(sim.endKind, 'dominance');
   assert.equal(sim.winner, 0);
-  assert.equal(sim.endReason, `Civ 1 held 60% of the land for 10 years`);
+  assert.equal(sim.endReason, 'Romans held 60% of the land for 10 years');
 });
 
 test('dominance: a year below the share resets the streak to 0', () => {
@@ -203,12 +203,12 @@ test('host: endNow, keepWatching and report go through the host', () => {
   assert.equal(host.report().winnerName, null);
 });
 
-test('pinned state hash (re-pinned when traits, civ types, contact and levels shipped, for Kingdom borders and land-based minimums, and for one-hex moves and expansion priorities, when buildings and wonders shipped, for the 500-year balancing pass, when settlements shipped (the hash includes each hex store, building and tier), for rafts, boats and the +20% progress cap, when one tick became one day, for the 1000-year playtest fixes, and for peace and trade; same run twice gives the same hash)', () => {
+test('pinned state hash (re-pinned when traits, civ types, contact and levels shipped, for Kingdom borders and land-based minimums, and for one-hex moves and expansion priorities, when buildings and wonders shipped, for the 500-year balancing pass, when settlements shipped (the hash includes each hex store, building and tier), for rafts, boats and the +20% progress cap, when one tick became one day, for the 1000-year playtest fixes, for peace and trade, and for historical peoples; same run twice gives the same hash)', () => {
   const run = () => {
     const s = new Simulation({ seed: 'hashcheck', size: 15, civCount: 4 });
     s.tick(300);
     return [s.hash(), s.people.count];
   };
   assert.deepEqual(run(), run());
-  assert.deepEqual(run(), ['b4d81b87', 2873]);
+  assert.deepEqual(run(), ['7e2642af', 2840]);
 });

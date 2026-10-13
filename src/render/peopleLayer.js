@@ -14,8 +14,7 @@
 
 import { Container, Graphics, Rectangle, Sprite, Texture, CanvasSource } from '../../vendor/pixi.mjs';
 import { hexCentre, HEX_SIZE } from './layout.js';
-import { CIV_STYLES, traceEmblem, civStyle, EMBLEM_ORDER } from './civStyle.js';
-import { rgbToHex } from './palette.js';
+import { CIV_TINTS, traceEmblem, civStyle, EMBLEM_ORDER } from './civStyle.js';
 import { hash32, personSpot, hexTotal, largestCiv, shortCount, LABEL_R, PERSON_R, SPREAD_R } from './peopleMaths.js';
 
 // Moved to peopleMaths.js (no PixiJS there, so the How to play pictures can share them); re-exported for existing importers.
@@ -115,7 +114,7 @@ export class PeopleLayer {
       this.hexX[h] = c.x;
       this.hexY[h] = c.y;
     }
-    this.tints = CIV_STYLES.map((s) => rgbToHex(s.rgb));
+    this.tints = CIV_TINTS;
 
     this.container = new Container();
     this.labels = new Container();
