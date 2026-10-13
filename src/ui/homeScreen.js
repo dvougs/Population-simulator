@@ -5,9 +5,10 @@
 // Canvas 2D map code draws it instead. It only runs while the page is shown,
 // and stands still for people who ask for reduced motion.
 //
-// The 2D / 3D switch on the world turns the 3D graphics flag (flags.js) on and
-// off; while it is on, the same world is drawn in 3D by homeScene3d.js over
-// the 2D board, which fades out under it.
+// While the 3D graphics flag (flags.js) is on, the same world is drawn in 3D
+// by homeScene3d.js over the 2D board, which fades out under it. The 2D / 3D
+// switch that turns the flag on and off is on the game settings screen; this
+// screen still drives it, so the switch shows the 3D world's state.
 
 import { h, formatNumber } from './dom.js';
 import { DemoWorld, DEMO } from './demoWorld.js';

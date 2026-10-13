@@ -27,10 +27,6 @@
         <canvas id="home-canvas" role="img" aria-label="A small world, alive: civilisations spreading across a hex map"></canvas>
         <!-- The same world in 3D (src/render3d/homeScene3d.js), shown while the 3D graphics flag is on. -->
         <canvas id="home-3d" class="home-3d" aria-hidden="true"></canvas>
-        <button id="btn-3d" class="view-toggle" type="button" role="switch" aria-checked="false" aria-label="3D graphics (preview)">
-          <span class="vt-track" aria-hidden="true"><span class="vt-thumb"></span><span class="vt-opt vt-2d">2D</span><span class="vt-opt vt-3d">3D</span></span>
-          <span class="vt-tag">Preview</span>
-        </button>
         <figcaption class="home-caption"><span class="live-dot" aria-hidden="true"></span><span id="home-caption"></span></figcaption>
       </figure>
       <div class="home-text">
@@ -96,6 +92,13 @@
         <button id="btn-resume" class="btn ghost" type="button" hidden>Back to game</button>
       </div>
     </header>
+    <!-- The 3D graphics flag (src/flags.js): the map's look, for a new game and for the one running. -->
+    <div class="view-row enter" style="--i:1">
+      <span class="view-row-label">Graphics <span class="vt-tag">Preview</span></span>
+      <button id="btn-3d" class="view-toggle" type="button" role="switch" aria-checked="false" aria-label="3D graphics (preview)">
+        <span class="vt-track" aria-hidden="true"><span class="vt-thumb"></span><span class="vt-opt vt-2d">2D</span><span class="vt-opt vt-3d">3D</span></span>
+      </button>
+    </div>
     <form id="setup-form" class="setup-form enter" style="--i:1" novalidate></form>
     <div class="start-bar"><div class="inner">
       <button id="btn-start" class="btn primary" type="submit" form="setup-form">Start simulation</button>

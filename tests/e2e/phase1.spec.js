@@ -249,22 +249,32 @@ test.describe('home page and How to play', () => {
 });
 
 test.describe('3D graphics flag', () => {
-  // RULES.md "Feature flags": off by default, switched on the home page's world, kept on the device.
+  // RULES.md "Feature flags": off by default, switched on the game settings screen, kept on the device.
   const state = (page) => page.evaluate(() => ({ flag: window.popsim.flags.get('graphics3d'), ...window.popsim.home3d() }));
 
-  test('the home page starts in 2D, and the switch rises into 3D and back, kept across reloads', async ({ page }, testInfo) => {
+  test('the home page starts in 2D with no switch; the game settings switch rises it into 3D and back, kept across reloads', async ({ page }, testInfo) => {
     await page.goto('/');
-    const toggle = page.locator('#btn-3d');
-    await expect(toggle).toBeVisible();
-    await expect(toggle).toHaveAttribute('aria-checked', 'false');
+    await expect(page.locator('#home #btn-3d')).toHaveCount(0);
     expect((await state(page)).flag).toBe(false);
     // The 3D code is not even downloaded while the flag is off.
     expect(await page.evaluate(() => performance.getEntriesByType('resource').some((r) => r.name.includes('three.mjs')))).toBe(false);
+
+    // The switch is on the game settings screen (step 2 of a new game).
+    await page.locator('#btn-new-game').click();
+    await page.locator('#btn-continue').click();
+    await expect(page.locator('#setup')).toBeVisible();
+    const toggle = page.locator('#btn-3d');
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-checked', 'false');
     const box = await toggle.boundingBox();
     expect(box.height).toBeGreaterThanOrEqual(44);
-
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-checked', 'true');
+    expect((await state(page)).flag).toBe(true);
+
+    // The home page follows the flag.
+    await page.locator('#btn-setup-home').click();
+    await expect.poll(() => shownScreens(page)).toEqual(['home']);
     await expect.poll(async () => (await state(page)).opacity, { timeout: 15_000 }).toBe(1);
     await expect.poll(async () => (await state(page)).progress).toBe(1);
     await expect(page.locator('#home-3d')).toBeVisible();
@@ -272,11 +282,15 @@ test.describe('3D graphics flag', () => {
     await shot(page, testInfo, 'home-3d');
 
     await page.reload();
-    await expect(page.locator('#btn-3d')).toHaveAttribute('aria-checked', 'true');
+    expect((await state(page)).flag).toBe(true);
     await expect.poll(async () => (await state(page)).opacity, { timeout: 15_000 }).toBe(1);
 
+    await page.locator('#btn-new-game').click();
+    await page.locator('#btn-continue').click();
+    await expect(page.locator('#btn-3d')).toHaveAttribute('aria-checked', 'true');
     await page.locator('#btn-3d').click();
     await expect(page.locator('#btn-3d')).toHaveAttribute('aria-checked', 'false');
+    await page.locator('#btn-setup-home').click();
     await expect.poll(async () => (await state(page)).opacity).toBe(0);
     await expect(page.locator('#home-3d')).toBeHidden();
     await page.reload();
@@ -285,12 +299,11 @@ test.describe('3D graphics flag', () => {
 
   test('an address with ?3d=1 turns the flag on, and ?3d=0 off', async ({ page }) => {
     await page.goto('/?3d=1');
-    await expect(page.locator('#btn-3d')).toHaveAttribute('aria-checked', 'true');
+    expect((await state(page)).flag).toBe(true);
     await expect.poll(async () => (await state(page)).opacity, { timeout: 15_000 }).toBe(1);
     await page.goto('/');
     expect((await state(page)).flag).toBe(true);
     await page.goto('/?3d=0');
-    await expect(page.locator('#btn-3d')).toHaveAttribute('aria-checked', 'false');
     expect((await state(page)).flag).toBe(false);
   });
 
@@ -346,12 +359,12 @@ test.describe('3D graphics flag', () => {
     expect(await page.evaluate(() => window.popsim.insideHex())).toBeNull();
     expect(page.errors).toEqual([]);
 
-    // Back on the home page the switch turns 3D off; the running game comes back in 2D.
+    // In the game settings (☰) the switch turns 3D off; the running game comes back in 2D.
     await page.locator('#btn-setup').click();
-    await page.locator('#btn-setup-home').click();
+    await expect(page.locator('#btn-3d')).toHaveAttribute('aria-checked', 'true');
     await page.locator('#btn-3d').click();
     await expect(page.locator('#btn-3d')).toHaveAttribute('aria-checked', 'false');
-    await page.locator('#btn-home-resume').click();
+    await page.locator('#btn-resume').click();
     await expect.poll(() => page.evaluate(() => window.popsim.mapRenderer())).toBe('2d');
     await expect(page.locator('#map3d')).toBeHidden();
     // Stepping inside a hex is for the 3D map only.
