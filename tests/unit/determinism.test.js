@@ -62,3 +62,48 @@ test('src/sim uses no DOM, timers, Date or engine-dependent maths', () => {
     else assert.equal(randoms, 0, `${file} uses Math.random`);
   }
 });
+
+test('shortcuts change nothing: migration\'s kept head counts give the same game as counts retaken every round', () => {
+  const params = { seed: 'kept-counts', size: 15, civCount: 4, startPop: 30 };
+  const kept = new Simulation(params);
+  const retaken = new Simulation(params);
+  // Without the kept counts every round (and contact) counts everyone again.
+  retaken.round.cnt = null;
+  kept.tick(300);
+  retaken.tick(300);
+  assert.equal(kept.hash(), retaken.hash());
+  assert.ok(kept.stats().civs.some((c) => c.fights > 0 || c.population > 0));
+});
+
+test('shortcuts change nothing: eating with birthdays, deaths and the births count in one pass equals the steps one by one', async () => {
+  const { eat, deaths, births, BirthScratch } = await import('../../src/sim/life.js');
+  const { Rng } = await import('../../src/sim/rng.js');
+  const make = () => {
+    const s = new Simulation({ seed: 'one-pass', size: 12, civCount: 3, startPop: 40 });
+    s.tick(60);
+    return s;
+  };
+  const run = (s, fused) => {
+    const p = s.people;
+    const rng = { eat: new Rng('e'), death: new Rng('d'), birth: new Rng('b'), traits: new Rng('t') };
+    const died = [];
+    const onDeath = (i, cause) => died.push([p.id[i], cause]);
+    const born = [];
+    const onBirth = (i) => born.push([p.id[i], p.parent[i], p.father[i], p.female[i]]);
+    const scratch = new BirthScratch(s.map.count, s.civCount, p.capacity);
+    const parents = new Int32Array(p.capacity);
+    if (fused) {
+      eat(p, s.map, rng.eat, s.hexPop, s.seen, s.picked, s.needSum, s.eaten, null, null, { rng: rng.death, onDeath, delay: null, births: scratch });
+    } else {
+      for (let i = 0; i < p.high; i++) if (p.alive[i] && p.age[i] < 65535) p.age[i]++;
+      eat(p, s.map, rng.eat, s.hexPop, s.seen, s.picked, s.needSum, s.eaten);
+      deaths(p, rng.death, onDeath);
+    }
+    births(p, s.map, rng.birth, s.hexPop, parents, onBirth, rng.traits, 0.02, null, scratch, onDeath);
+    return { died, born, hash: s.hash() };
+  };
+  const a = run(make(), true);
+  const b = run(make(), false);
+  assert.ok(a.died.length > 0 && a.born.length > 0);
+  assert.deepEqual(a, b);
+});

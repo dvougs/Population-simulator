@@ -195,19 +195,52 @@ export function buildReach(map, movePoints = MIGRATION.movePoints, boatCost = 0,
  * minus the people in it now. Fills pop and spare (scratch, per hex) and
  * held[civ × hex count + hex] = 1 where that civ has people.
  */
-function snapshot(people, map, pop, spare, held) {
+function snapshot(people, map, pop, spare, held, cnt = null) {
   const { alive, hex, civ } = people;
   const n = map.count;
   pop.fill(0);
   held.fill(0);
-  for (let i = 0; i < people.high; i++) {
-    if (!alive[i]) continue;
-    pop[hex[i]]++;
-    held[civ[i] * n + hex[i]] = 1;
+  if (cnt) {
+    cnt.fill(0);
+    for (let i = 0; i < people.high; i++) {
+      if (!alive[i]) continue;
+      pop[hex[i]]++;
+      const k = civ[i] * n + hex[i];
+      cnt[k]++;
+      held[k] = 1;
+    }
+  } else {
+    for (let i = 0; i < people.high; i++) {
+      if (!alive[i]) continue;
+      pop[hex[i]]++;
+      held[civ[i] * n + hex[i]] = 1;
+    }
   }
+  spareFood(map, pop, spare);
+}
+
+function spareFood(map, pop, spare) {
   for (let h = 0; h < map.count; h++) {
     const cap = map.foodCap[h];
     spare[h] = Math.min(cap, map.food[h] + LIFE.foodRegrowth * cap) - pop[h];
+  }
+}
+
+/**
+ * Keeping a round's counts (see migrate's round.cnt) right between rounds: a person
+ * of civ c leaves hex `from` (to −1 when they die) and arrives in `to` (−1: nowhere).
+ * Does nothing while the counts are stale (round.fresh false); the next round retakes them.
+ */
+export function presenceMove(round, map, pop, held, c, from, to) {
+  if (!round.fresh) return;
+  const n = map.count;
+  if (from >= 0) {
+    pop[from]--;
+    if (--round.cnt[c * n + from] === 0) held[c * n + from] = 0;
+  }
+  if (to >= 0) {
+    pop[to]++;
+    if (round.cnt[c * n + to]++ === 0) held[c * n + to] = 1;
   }
 }
 
@@ -338,6 +371,9 @@ function markThreats(map, held, rules, civs) {
   }
 }
 
+/** Places in the people pool per migration block (see migrate's round). */
+export const MOVE_BLOCK = 64;
+
 /** Scratch for callers that do not pass one (tests); the Simulation passes its own. */
 let sharedHeld = new Uint8Array(0);
 
@@ -352,9 +388,12 @@ let sharedHeld = new Uint8Array(0);
  * the mover's civ (rules.holder, rules.rel) to it. With no such hex it stays.
  * dest: scratch Int32Array at least people.high long. held: scratch
  * Uint8Array of (civ count × map.count); without it a shared one sized for any civ id is used.
- * round (optional, see calendar.js): { month, months, closed } — only people whose id
- * mod months is month may set out this time, and in winter (closed[terrain] = 1) nobody
- * leaves or enters a closed hex. Returns how many moved.
+ * round (optional, see calendar.js): { month, months, closed, cnt, fresh } — only people whose
+ * slot in the pool ÷ MOVE_BLOCK (rounded down) mod months is month may set out this time, and in winter (closed[terrain] = 1)
+ * nobody leaves or enters a closed hex. cnt (optional Int32Array, civ count × map.count) keeps the
+ * people per civ and hex between rounds; while fresh is true pop, held and cnt are taken as
+ * current (the caller sets fresh false whenever people change other than through presenceMove).
+ * Returns how many moved.
  */
 export function migrate(people, map, reach, rng, pop, spare, dest, held = null, rules = null, round = null) {
   const n = map.count;
@@ -362,8 +401,12 @@ export function migrate(people, map, reach, rng, pop, spare, dest, held = null, 
     if (sharedHeld.length < 256 * n) sharedHeld = new Uint8Array(256 * n);
     held = sharedHeld;
   }
-  snapshot(people, map, pop, spare, held);
-  const { alive, hex, hunger, civ, id } = people;
+  // Counts kept from the last round (round.cnt, people per civ and hex), when nothing has changed them
+  // since but what presenceMove followed, are the same as retaken ones and save a pass over everyone.
+  const cnt = round?.cnt ?? null;
+  if (cnt && round.fresh) spareFood(map, pop, spare);
+  else snapshot(people, map, pop, spare, held, cnt);
+  const { alive, hex, hunger, civ } = people;
   const civs = rules ? rules.hungryChance.length : 0;
   const month = round ? round.month : -1;
   const months = round ? round.months : 1;
@@ -377,10 +420,13 @@ export function migrate(people, map, reach, rng, pop, spare, dest, held = null, 
   const threat = rules?.threat ?? null;
   const near = rules?.near ?? null;
   if (want || rules?.anyApart) markThreats(map, held, rules, civs);
-  for (let i = 0; i < people.high; i++) {
+  // A person's month comes from their place in the pool, kept for life: places run in blocks of
+  // MOVE_BLOCK, block b moving in month b mod months, so each round walks only its own twelfth, in order.
+  const first = month >= 0 ? month * MOVE_BLOCK : 0;
+  const skip = month >= 0 ? (months - 1) * MOVE_BLOCK : 0;
+  for (let i = first; i < people.high; i = (i + 1) % MOVE_BLOCK === 0 ? i + 1 + skip : i + 1) {
     dest[i] = -1;
     if (!alive[i]) continue;
-    if (month >= 0 && id[i] % months !== month) continue;
     const h = hex[i];
     if (shut(h)) continue;
     const c = civ[i];
@@ -447,8 +493,13 @@ export function migrate(people, map, reach, rng, pop, spare, dest, held = null, 
     }
   }
   let moved = 0;
-  for (let i = 0; i < people.high; i++) {
-    if (dest[i] >= 0) { hex[i] = dest[i]; moved++; }
+  if (cnt) round.fresh = true;
+  for (let i = first; i < people.high; i = (i + 1) % MOVE_BLOCK === 0 ? i + 1 + skip : i + 1) {
+    const t = dest[i];
+    if (t < 0) continue;
+    if (cnt) presenceMove(round, map, pop, held, civ[i], hex[i], t);
+    hex[i] = t;
+    moved++;
   }
   return moved;
 }

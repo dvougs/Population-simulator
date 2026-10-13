@@ -221,9 +221,21 @@ export const isHarsh = (t) => t === DESERT || t === TUNDRA || t === MOUNTAIN;
  * shelter: optional per-civ multiplier of hunger's health loss in desert,
  * tundra and mountain (see levels.js); 1 for every civ when absent. hungerMul:
  * optional per-civ multiplier of hunger's health loss anywhere (buildings.js).
+ * then: optional { rng, onDeath, delay } to age everyone a year first and run deaths()
+ * in the same pass (the Simulation's year; one pass over everyone instead of three).
  */
-export function eat(people, map, rng, pop, seen, picked, needSum, eaten, shelter = null, hungerMul = null) {
-  const { alive, hex, health, hunger, need, traits, civ } = people;
+export function eat(people, map, rng, pop, seen, picked, needSum, eaten, shelter = null, hungerMul = null, then = null) {
+  const { alive, hex, health, hunger, need, traits, civ, age, female, rest } = people;
+  const life = traits[LIFE_EXPECTANCY];
+  // With then.births (a BirthScratch), the survivors are also counted for births() here.
+  const bs = then?.births ?? null;
+  let nWomen = 0;
+  let nMen = 0;
+  if (bs) {
+    bs.fit(people.capacity);
+    bs.men.fill(0, 0, map.count * bs.civs);
+    bs.pop.fill(0);
+  }
   const fert = traits[FERTILITY];
   const meta = traits[METABOLISM];
   const heat = traits[HEAT_TOLERANCE];
@@ -238,14 +250,20 @@ export function eat(people, map, rng, pop, seen, picked, needSum, eaten, shelter
   eaten.fill(0);
   for (let i = 0; i < people.high; i++) {
     if (!alive[i]) continue;
+    if (then && age[i] < 65535) age[i]++;
     pop[hex[i]]++;
     needSum[hex[i]] += need[i];
+  }
+  // How many eat in each hex, once per hex (needSum is not needed after this).
+  for (let h = 0; h < map.count; h++) {
+    const n = pop[h];
+    needSum[h] = food[h] >= needSum[h] ? n : Math.min(n, Math.floor((food[h] * n) / needSum[h]));
   }
   for (let i = 0; i < people.high; i++) {
     if (!alive[i]) continue;
     const h = hex[i];
     const n = pop[h];
-    const k = food[h] >= needSum[h] ? n : Math.min(n, Math.floor((food[h] * n) / needSum[h]));
+    const k = needSum[h];
     let fed;
     if (k >= n) fed = true;
     else fed = rng.next() * (n - seen[h]) < k - picked[h];
@@ -261,8 +279,40 @@ export function eat(people, map, rng, pop, seen, picked, needSum, eaten, shelter
       const s = (shelter && isHarsh(terrain[h]) ? shelter[civ[i]] : 1) * (hungerMul ? hungerMul[civ[i]] : 1);
       health[i] = Math.max(0, health[i] - hungryLoss(fert[i], meta[i], heat[i], cold[i], terrain[h], s));
     }
+    if (!then) continue;
+    // Deaths in the same pass: each depends only on the person's own state after eating,
+    // and each step draws from its own stream in the same order, so this is the same as
+    // eating for everyone first.
+    const cause = deathCause(age[i], health[i], life[i], then.delay ? then.delay[civ[i]] : 0, then.rng);
+    if (cause >= 0) {
+      then.onDeath(i, cause);
+      people.remove(i);
+      continue;
+    }
+    if (!bs) continue;
+    // births()'s own first pass, for this survivor (see there).
+    bs.pop[h]++;
+    if (female[i]) {
+      if (rest[i] > 0 && --rest[i] > 0) continue;
+      if (hunger[i] === 0 && age[i] >= LIFE.fertileMin && age[i] <= LIFE.fertileMax) bs.women[nWomen++] = i;
+    } else if (age[i] >= LIFE.fatherMin) {
+      bs.men[h * bs.civs + civ[i]]++;
+      bs.fathers[nMen++] = i;
+    }
+  }
+  if (bs) {
+    bs.nWomen = nWomen;
+    bs.nMen = nMen;
+    bs.collected = true;
   }
   for (let h = 0; h < map.count; h++) if (picked[h]) food[h] = Math.max(0, food[h] - eaten[h]);
+}
+
+/** A person's death this year, or −1: starvation at health 0, else childhood or old age by chance. */
+function deathCause(age, health, life, delay, rng) {
+  if (health === 0) return DEATH_STARVATION;
+  if (age <= 15) return rng.next() < childDeathChance(age) ? DEATH_CHILDHOOD : -1;
+  return age >= oldAgeStart(life) + delay && rng.next() < oldAgeChance(age, life, delay) ? DEATH_OLD_AGE : -1;
 }
 
 /**
@@ -276,14 +326,7 @@ export function deaths(people, rng, onDeath, delay = null) {
   const life = people.traits[LIFE_EXPECTANCY];
   for (let i = 0; i < people.high; i++) {
     if (!alive[i]) continue;
-    let cause = -1;
-    if (health[i] === 0) cause = DEATH_STARVATION;
-    else if (age[i] <= 15) {
-      if (rng.next() < childDeathChance(age[i])) cause = DEATH_CHILDHOOD;
-    } else {
-      const d = delay ? delay[civ[i]] : 0;
-      if (age[i] >= oldAgeStart(life[i]) + d && rng.next() < oldAgeChance(age[i], life[i], d)) cause = DEATH_OLD_AGE;
-    }
+    const cause = deathCause(age[i], health[i], life[i], delay ? delay[civ[i]] : 0, rng);
     if (cause < 0) continue;
     onDeath(i, cause);
     people.remove(i);
@@ -305,6 +348,11 @@ export class BirthScratch {
     this.list = new Int32Array(capacity);
     this.fathers = new Int32Array(capacity);
     this.women = new Int32Array(capacity);
+    /** People per hex after deaths, and the women and men who could have a child, when eat() collected them. */
+    this.pop = new Int32Array(hexes);
+    this.nWomen = 0;
+    this.nMen = 0;
+    this.collected = false;
   }
 
   /** Grows the per-person arrays to the pool's capacity. */
@@ -368,12 +416,21 @@ export function births(people, map, rng, pop, parents, onBirth, traitRng = null,
   const C = s.civs;
   const keys = map.count * C;
   const { men, start, list, women, fathers } = s;
-  men.fill(0, 0, keys);
-  pop.fill(0);
-  // One pass over everyone: head counts, rest years, and the men and the women who could have a child.
   let nMen = 0;
   let nWomen = 0;
-  for (let i = 0; i < people.high; i++) {
+  // eat() may already have made the first pass (the Simulation's year).
+  const collected = s.collected;
+  s.collected = false;
+  if (collected) {
+    pop = s.pop;
+    nMen = s.nMen;
+    nWomen = s.nWomen;
+  } else {
+    men.fill(0, 0, keys);
+    pop.fill(0);
+  }
+  // One pass over everyone: head counts, rest years, and the men and the women who could have a child.
+  for (let i = 0; i < (collected ? 0 : people.high); i++) {
     if (!alive[i]) continue;
     pop[hex[i]]++;
     if (female[i]) {

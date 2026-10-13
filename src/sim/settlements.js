@@ -976,6 +976,8 @@ export class Settlements {
         const want = (wantPlan && local ? need[m] : 0) + (wantCiv ? civNeed[m] : 0);
         if (want <= 0) continue;
         const i = s * MATERIAL_COUNT + m;
+        // Nothing in store, nothing spare (the shortcut skips the reckoning below).
+        if (store[i] <= 0) continue;
         const spare = this.spare(s, c, m);
         if (spare <= 0) continue;
         let v = Math.min(spare, want, left[s]);

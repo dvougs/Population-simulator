@@ -12,14 +12,14 @@ import { generateMap, countTerrain, hashMap, fnv } from './mapgen.js';
 import { indexToAxial } from './hex.js';
 import { Rng } from './rng.js';
 import { People, NO_PARENT } from './people.js';
-import { pickStarts, found, eat, deaths, births, regrow, BirthScratch } from './life.js';
+import { pickStarts, found, eat, births, regrow, BirthScratch } from './life.js';
 
 /** Age bands of the population pyramid: 5 years each, the last one PYRAMID_TOP and over. */
 export const PYRAMID_BAND = 5;
 export const PYRAMID_TOP = 80;
 export const PYRAMID_BANDS = PYRAMID_TOP / PYRAMID_BAND + 1;
 const BAND_OF = Uint8Array.from({ length: PYRAMID_TOP }, (_, a) => Math.floor(a / PYRAMID_BAND));
-import { buildStepReach, landPieces, migrate, migrationRules, setReach } from './migration.js';
+import { buildStepReach, landPieces, migrate, migrationRules, presenceMove, setReach } from './migration.js';
 import { Contact } from './contact.js';
 import { War, WAR } from './war.js';
 import { TRUCE } from './diplomacy.js';
@@ -47,7 +47,7 @@ export class Simulation {
     this.tickCount = 0;
     this.dayCount = 0;
     this.winterClosed = winterClosedMask(TERRAIN_COUNT);
-    this.round = { month: 0, months: MONTHS, closed: null };
+    this.round = { month: 0, months: MONTHS, closed: null, cnt: null, fresh: false };
     this.finished = false;
     this.endReason = null;
     /** How the run ended ('extinction', 'lastCiv', 'kingdom', 'dominance', 'years', 'player') and the winning civ, if any. */
@@ -127,8 +127,12 @@ export class Simulation {
     /** Sum, then average, of each trait per civ: civTraits[civ × TRAIT_COUNT + trait]. */
     this.civTraits = new Float64Array(civs * TRAIT_COUNT);
     war.civTraits = this.civTraits;
+    // Battles move people between migration rounds; the round's kept counts follow them.
+    war.noteMove = (i, to) => presenceMove(this.round, this.map, this.hexPop, this.civHeld, this.people.civ[i], this.people.hex[i], to);
     this.spare = new Float64Array(n);
     this.civHeld = new Uint8Array(n * civs);
+    this.round.cnt = new Int32Array(n * civs);
+    this.contactCounts = { cnt: this.round.cnt, pop: this.hexPop };
     /** People of each civ in each hex at the end of the last year: hexCivPop[hex × civs + civ]. */
     this.hexCivPop = new Int32Array(n * civs);
     war.cnt = this.hexCivPop;
@@ -150,9 +154,11 @@ export class Simulation {
     this.records.founders(people);
     const rec = this.records;
     this.onDeath = (i, cause) => {
+      presenceMove(this.round, this.map, this.hexPop, this.civHeld, people.civ[i], people.hex[i], -1);
       st.death(people.civ[i], cause, people.age[i], people.female[i], people.kids[i]);
       rec.death(i, people, cause, this.tickCount);
     };
+    this.yearDeaths = { rng: this.rng.death, onDeath: this.onDeath, delay: null, births: null };
     this.onBirth = (i) => { st.birth(people.civ[i]); rec.birth(i, people, this.tickCount); };
     this.onBattle = (h, attacker, defender, holder, winner, byWinner, byLoser) => {
       st.fight(attacker, defender, winner);
@@ -186,17 +192,20 @@ export class Simulation {
   /** The first day of the year: gathering and levels, birthdays, eating, deaths and births. */
   yearStart() {
     const people = this.people;
-    const { alive, age } = people;
     const lv = this.levels;
     // From the counts at the end of last year, so before anyone ages, eats or moves.
     const r = this.migrationRules;
+    // Births, deaths, eating and civs absorbing people: the month's counts are retaken.
+    this.round.fresh = false;
     this.war.newYear();
     lv.year(people, this.map, this.tickCount, this.hexCivPop, this.contact.fightWinner, this.onLevel, this.onSwitch,
       r.hostile, r.beats, this.onBuild);
     this.applyMove();
-    for (let i = 0; i < people.high; i++) if (alive[i] && age[i] < 65535) age[i]++;
-    eat(people, this.map, this.rng.eat, this.hexPop, this.seen, this.picked, this.needSum, this.eaten, lv.shelter, lv.hungerMul);
-    deaths(people, this.rng.death, this.onDeath, lv.oldAgeDelay);
+    // Birthdays, eating and deaths in one pass (see eat).
+    const then = this.yearDeaths;
+    then.delay = lv.oldAgeDelay;
+    then.births = this.birthScratch;
+    eat(people, this.map, this.rng.eat, this.hexPop, this.seen, this.picked, this.needSum, this.eaten, lv.shelter, lv.hungerMul, then);
     births(people, this.map, this.rng.birth, this.hexPop, this.parents, this.onBirth, this.rng.traits, this.mutation, lv.birthBonus,
       this.birthScratch, this.onDeath);
     if (this.dest.length < people.capacity) this.allocPersonScratch();
@@ -214,7 +223,10 @@ export class Simulation {
 
   /** The last day of the year: switching civ, then the year's stats and the end conditions. */
   yearEnd() {
-    this.contact.year(this.people, this.map, this.war.fought, this.rng.switch, this.onSwitch);
+    // Migration's kept counts are who is where now, when nothing has made them stale since its last round.
+    const kept = this.round.fresh ? this.contactCounts : null;
+    this.contact.year(this.people, this.map, this.war.fought, this.rng.switch, this.onSwitch, kept);
+    this.round.fresh = false;
     this.recordYear();
     // Wars end in truces and truces turn to peace, from this year's fights and people.
     this.diplomacy.endYear(this.tickCount, this.civPop, this.levels.settlements, this.forgive, this.onDiplomacy);

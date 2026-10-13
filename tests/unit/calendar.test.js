@@ -7,7 +7,7 @@ import {
   seasonOf, monthOf, winterClosedMask,
 } from '../../src/sim/calendar.js';
 import { regrow, LIFE } from '../../src/sim/life.js';
-import { migrate } from '../../src/sim/migration.js';
+import { migrate, MOVE_BLOCK } from '../../src/sim/migration.js';
 import { People } from '../../src/sim/people.js';
 import { BASE_TPS, SPEEDS, STEP_DAYS } from '../../src/loop.js';
 import { PLAINS, TUNDRA, MOUNTAIN, TERRAIN_COUNT, FOREST, DESERT } from '../../src/sim/terrain.js';
@@ -86,18 +86,21 @@ function line(terrain) {
 }
 const rng = { next: () => 0 };
 
-test('each month only the people whose id mod 12 is the month may set out', () => {
+test('each month only the people whose place in the pool, in blocks of 64, falls in the month may set out (block mod 12)', () => {
   const { map, reach } = line([PLAINS, PLAINS, PLAINS]);
-  const people = new People(16);
-  for (let k = 0; k < 12; k++) { const i = people.add(); people.hex[i] = 1; people.hunger[i] = 1; }
-  const n = 3; const pop = new Int32Array(n); const spare = new Float64Array(n); const dest = new Int32Array(16);
+  // Room for everyone next door.
+  map.foodCap.fill(1e6); map.food[0] = 1e6; map.food[2] = 1e6;
+  const count = 13 * MOVE_BLOCK;
+  const people = new People(count);
+  for (let k = 0; k < count; k++) { const i = people.add(); people.hex[i] = 1; people.hunger[i] = 1; }
+  const n = 3; const pop = new Int32Array(n); const spare = new Float64Array(n); const dest = new Int32Array(count);
   let moved = 0;
   for (let month = 0; month < 12; month++) {
-    const before = Array.from(people.hex.slice(0, 12));
+    const before = Array.from(people.hex.slice(0, count));
     moved += migrate(people, map, reach, rng, pop, spare, dest, null, null, { month, months: 12, closed: null });
-    for (let i = 0; i < 12; i++) if (people.hex[i] !== before[i]) assert.equal(people.id[i] % 12, month);
+    for (let i = 0; i < count; i++) if (people.hex[i] !== before[i]) assert.equal(Math.floor(i / MOVE_BLOCK) % 12, month);
   }
-  assert.equal(moved, 12);
+  assert.equal(moved, count, 'everyone set out once, in their own month');
 });
 
 test('in winter nobody leaves or enters tundra or mountains', () => {
