@@ -48,7 +48,8 @@ const dl = (rows) => h('dl', {}, rows.flatMap(([k, v, build]) => [
 ]));
 
 /**
- * Hex card. opts.people is SimHost.hexPeople() for this hex while the people
+ * Hex card. opts.battle is the SimHost.battles() entry for this hex, if a battle
+ * or siege is under way there (else null). opts.people is SimHost.hexPeople() for this hex while the people
  * list is open (else null); opts.onToggleList() asks for it; opts.onPerson(slot, id)
  * opens a person's card.
  */
@@ -78,6 +79,7 @@ export function renderInspector(el, hex, onClose, opts = {}) {
         h('h3', { id: 'inspector-title' }, hex.name, h('small', {}, ` (${hex.col}, ${hex.row})`)),
         h('button', { type: 'button', class: 'btn ghost', 'aria-label': 'Close hex details', onclick: onClose }, '✕')),
       h('button', { type: 'button', class: 'btn primary small enter-hex', hidden: true }, 'Step inside'),
+      h('div', { class: 'battle-card' }),
       h('div', { class: 'settlement-card' }),
       h('div', { class: 'building-cards' }),
       dl(rows),
@@ -97,6 +99,7 @@ export function renderInspector(el, hex, onClose, opts = {}) {
   const enter = el.querySelector('.enter-hex');
   enter.hidden = !opts.onEnter;
   enter.onclick = opts.onEnter ?? null;
+  fillBattle(el.querySelector('.battle-card'), opts.battle ?? null);
   fillSettlement(el.querySelector('.settlement-card'), hex.settlement);
   fillBuildingCards(el.querySelector('.building-cards'), hex.buildings ?? []);
   const open = el.dataset.list === 'open';
@@ -146,6 +149,40 @@ function fillSettlement(box, st) {
   box.replaceChildren(
     h('h4', {}, emblem(st.holder, 14), st.name, h('span', { class: 'tag' }, st.tierName), st.capital ? h('span', { class: 'tag wonder-tag' }, 'Capital') : null),
     h('dl', { class: 'building-facts' }, rows.flatMap(([k, v]) => [h('dt', {}, k), h('dd', { 'data-field': `settlement-${k.toLowerCase()}` }, v)])));
+}
+
+/** One side of a battle: "5 of 8 fit · 2 dead · morale 75%". */
+export function battleSideText(b, s) {
+  return `${formatNumber(b.warriors[s])} of ${formatNumber(b.start[s])} fit · ${formatNumber(b.dead[s])} dead · morale ${b.morale[s]}%`;
+}
+
+/** Where a battle stands: "day 4", or "siege: 20 of 30 days left". */
+export function battleStage(b) {
+  return b.siege ? `siege: ${formatNumber(b.siegeLeft)} of ${formatNumber(b.siegeDays)} days left` : `day ${formatNumber(b.day)}`;
+}
+
+/** The battle or siege in the hex (RULES.md "War"): the two sides, its day, and each side's warriors, dead and morale. */
+function fillBattle(box, b) {
+  if (!box) return;
+  if (!b) { box.hidden = true; box.dataset.key = ''; return; }
+  const side = (s) => {
+    const civ = s === 0 ? b.attacker : b.defender;
+    return [`Civ ${civ + 1} ${s === 0 ? 'attacks' : 'defends'}`, battleSideText(b, s), civ];
+  };
+  const rows = [['Stage', battleStage(b)], side(0), side(1)];
+  const key = `${b.attacker}|${b.defender}|${rows.map((r) => r[1]).join('|')}`;
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  box.hidden = false;
+  box.dataset.siege = String(!!b.siege);
+  box.style.borderLeftColor = rgbCss(civStyle(b.attacker).rgb);
+  box.replaceChildren(
+    h('h4', {}, h('span', { class: 'tag battle-tag' }, b.siege ? 'Siege' : 'Battle'),
+      emblem(b.attacker, 14), `Civ ${b.attacker + 1}`, ' against ', emblem(b.defender, 14), `Civ ${b.defender + 1}`),
+    h('dl', { class: 'building-facts' }, rows.flatMap(([k, v, civ]) => [
+      h('dt', {}, civ === undefined ? k : [emblem(civ, 12), k]),
+      h('dd', { 'data-field': civ === undefined ? 'battle-stage' : `battle-${civ === b.attacker ? 'attacker' : 'defender'}` }, v),
+    ])));
 }
 
 /** The civ type whose era building has this id (BUILDINGS), or null. */

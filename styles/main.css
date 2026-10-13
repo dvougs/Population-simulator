@@ -577,6 +577,11 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 6px 
 .inspector dd .emblem { margin-right: 3px; }
 .inspector h3 .emblem { vertical-align: -1px; }
 .people-toggle { width: 100%; margin-top: 8px; }
+/* The battle or siege in the hex (inspector.js fillBattle); border in the attacker's colour. */
+.battle-card { background: var(--surface-2); border-radius: 10px; border-left: 4px solid #e63946; padding: 6px 8px; margin-bottom: 8px; }
+.battle-card h4 { margin: 0 0 4px; font-size: 0.95rem; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.battle-card dd { font-variant-numeric: tabular-nums; }
+.tag.battle-tag { color: #ff8a8a; border-color: #8a2a2a; }
 /* The settlement in the hex (inspector.js fillSettlement). */
 .settlement-card { background: var(--surface-2); border-radius: 10px; border-left: 4px solid #c9a46a; padding: 6px 8px; margin-bottom: 8px; }
 .settlement-card h4 { margin: 0 0 4px; font-size: 0.95rem; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
