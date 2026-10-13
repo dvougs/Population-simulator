@@ -312,6 +312,8 @@ test.describe('3D graphics flag', () => {
     await startGame(page);
     await expect.poll(() => page.evaluate(() => window.popsim.mapRenderer()), { timeout: 15_000 }).toBe('3d');
     await expect(page.locator('#map3d')).toBeVisible();
+    // Let the first day run: before it there is no season to show (RULES.md "Day, night and the seasons").
+    await expect.poll(() => page.evaluate(() => window.popsim.days())).toBeGreaterThan(0);
     await pause(page);
     // A land hex near the middle, tapped where its tile's top is drawn.
     const hex = await page.evaluate(() => {
