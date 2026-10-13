@@ -399,3 +399,24 @@ test('RULES.md "Kingdoms are closed": nobody of another civ migrates into a hex 
   migrate(v.people, v.map, v.reach, new Rng('open'), v.s.pop, v.s.spare, v.s.dest, civHeld(v.map, 1), open);
   assert.ok(shareToA(v, 0).a > 50);
 });
+
+test('RULES.md "Migration" Borders at peace: nobody moves into a hex held by a civ in a truce or at peace with them; war, no relation and its own holder do not close it', () => {
+  const trial = (relation) => {
+    const w = twoTargets({ movers: [...new Array(300).fill(0), ...new Array(300).fill(1), ...new Array(300).fill(2)] });
+    const rules = migrationRules(['expansionist', 'expansionist', 'expansionist'], w.map, w.reach);
+    rules.holder = new Int8Array(w.map.count).fill(-1);
+    rules.holder[w.A] = 1; // civ 1 holds A
+    rules.rel = new Uint8Array(9);
+    rules.rel[0 * 3 + 1] = relation; // civ 0 and civ 1; civ 2 has no relation with civ 1
+    migrate(w.people, w.map, w.reach, new Rng('borders'), w.s.pop, w.s.spare, w.s.dest, civHeld(w.map, 3), rules);
+    return [shareToA(w, 0).a, shareToA(w, 1).a, shareToA(w, 2).a];
+  };
+  for (const [name, rel] of [['truce', 2], ['peace', 3]]) {
+    const [a0, a1, a2] = trial(rel);
+    assert.equal(a0, 0, `civ 0 never enters A in a ${name}`);
+    assert.ok(a1 > 30, 'the holder itself does');
+    assert.ok(a2 > 30, 'a civ with no relation does');
+  }
+  assert.ok(trial(1)[0] > 30, 'at war it does');
+  assert.ok(trial(0)[0] > 30, 'no relation: it does');
+});

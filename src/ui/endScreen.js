@@ -79,6 +79,8 @@ function civsCard(r) {
     `${formatNumber(c.peakHexes)} hexes at most`,
     c.avgLifespan === null ? 'no deaths' : `lived ${c.avgLifespan} years on average`,
     `switched in ${formatNumber(c.switchesIn)}, out ${formatNumber(c.switchesOut)}`,
+    c.trade && c.trade.bought + c.trade.sold >= 1
+      ? `traded ${formatNumber(Math.round(c.trade.bought + c.trade.sold))} worth${c.trade.partner >= 0 ? `, most with ${civName(c.trade.partner)}` : ''}` : null,
     c.extinctYear === null ? null : `died out in year ${c.extinctYear}`,
   ].filter(Boolean).join(' · ');
   return card('end-civs', 'Civs by final population',
@@ -100,17 +102,25 @@ export function warCard(r) {
   const wars = r.records.wars ?? [];
   if (wars.length === 0) return card('end-war', 'War', h('p', { class: 'muted' }, 'No wars.'));
   const two = (x, y) => h('td', {}, h('span', {}, formatNumber(x)), h('span', {}, formatNumber(y)));
+  const now = new Map((r.relations ?? []).map((p) => [p.civs.join(' '), p]));
   return card('end-war', 'War',
     h('p', { class: 'muted' }, 'Every pair of civs that fought, deadliest first: fights won, and the other side\'s people killed.'),
     h('div', { class: 'table-wrap' },
       h('table', { class: 'end-war' },
-        h('thead', {}, h('tr', {}, ['Sides', 'Years', 'Fights', 'Won', 'Killed'].map((t) => h('th', { scope: 'col' }, t)))),
+        h('thead', {}, h('tr', {}, ['Sides', 'Years', 'Fights', 'Won', 'Killed', 'Now'].map((t) => h('th', { scope: 'col' }, t)))),
         h('tbody', {}, wars.map((w) => h('tr', { 'data-civs': w.civs.join(' '), title: warText(w) },
           h('th', { scope: 'row' }, civLabel(w.civs[0]), civLabel(w.civs[1])),
           h('td', {}, w.firstYear === w.lastYear ? String(w.firstYear) : `${w.firstYear}–${w.lastYear}`),
           h('td', {}, formatNumber(w.fights)),
           two(w.won[0], w.won[1]),
-          two(w.killed[0], w.killed[1])))))));
+          two(w.killed[0], w.killed[1]),
+          h('td', {}, relationText(now.get(w.civs.join(' '))))))))));
+}
+
+/** Where a pair stands at the end: war, truce or peace, and whether they trade. */
+export function relationText(p) {
+  if (!p) return 'war';
+  return `${p.relation}${p.tradeOpen ? ', trading' : ''}`;
 }
 
 /**
@@ -325,6 +335,13 @@ export function eventText(e) {
   if (e.type === 'wonder') return `${civName(e.civ)} finished the ${wonderName(e.era)}`;
   if (e.type === 'city') return `${e.name ?? 'A settlement'} became ${civName(e.civ)}'s first ${TIER_NAMES[e.tier]?.toLowerCase() ?? 'city'}`;
   if (e.type === 'cityTaken') return `${civName(e.civ)} took ${e.name ?? 'a city'} from ${civName(e.other)}`;
+  if (e.type === 'truce') {
+    const paid = e.tribute === null || e.tribute === undefined ? '' : `; ${civName(e.tribute)} asked for it and paid tribute`;
+    return `${civName(e.civ)} and ${civName(e.other)} made a truce${paid}`;
+  }
+  if (e.type === 'warAgain') return `${civName(e.civ)} and ${civName(e.other)} went back to war`;
+  if (e.type === 'trade') return `${civName(e.civ)} and ${civName(e.other)} began to trade`;
+  if (e.type === 'oldRoute') return `The trade road between ${civName(e.civ)} and ${civName(e.other)} became an old route`;
   if (e.type === 'captured') {
     return e.other === null || e.other === undefined
       ? `${civName(e.civ)} took over the abandoned ${wonderName(e.era)}`
