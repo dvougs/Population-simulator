@@ -5,7 +5,11 @@
 import { TERRAIN_NAMES, FOOD_CAPACITY, MOVE_COST, DEFENCE_BONUS, RIVER_FOOD_BONUS, DEEP_WATER } from '../sim/terrain.js';
 import { LIFE } from '../sim/life.js';
 import { MIGRATION } from '../sim/migration.js';
-import { TRAITS, TRAIT_NAMES, TRAIT_RULES, CIV_TYPE_TRAITS } from '../sim/traits.js';
+import { TRAIT_RULES } from '../sim/traits.js';
+import { traitFacts, mutationText } from './traitText.js';
+
+export { traitFacts };
+import { PEOPLES, TRAIT_COSTS, BUDGET_SLACK, traitBudget } from '../sim/peoples.js';
 import { CIV_TYPES, CIV_TYPE_NAMES, TYPE_RULES, civTypeText } from '../sim/civTypes.js';
 import { CONTACT } from '../sim/contact.js';
 import { WAR } from '../sim/war.js';
@@ -149,20 +153,25 @@ export function buildingsSection() {
   };
 }
 
-const TRAIT_TEXT = {
-  fertility: `More children: a birth chance from ${pct(TRAIT_RULES.birthBase)} to ${pct(TRAIT_RULES.birthBase + TRAIT_RULES.birthPerFertility)} a year. But hunger hits harder.`,
-  lifeExpectancy: `Old age starts between ${TRAIT_RULES.oldAgeBase} and ${TRAIT_RULES.oldAgeBase + TRAIT_RULES.oldAgePerLife} years.`,
-  strength: 'Helps them win their duels in a battle.',
-  aggression: 'How ready their civ is to declare war and to attack.',
-  cooperation: 'How easily they switch civ, and how much they gather.',
-  metabolism: `Eats ${num(TRAIT_RULES.needBase)} to ${num(TRAIT_RULES.needBase + TRAIT_RULES.needPerMetabolism)} food a year. Fast burners have more children and starve sooner.`,
-  heatTolerance: 'Copes with hunger in the desert; suffers more in tundra and mountains.',
-  coldTolerance: 'Copes with hunger in tundra and mountains; suffers more in the desert.',
+
+const TRAIT_WORDS = {
+  fertility: 'fertility', lifeExpectancy: 'life expectancy', strength: 'strength', aggression: 'aggression',
+  cooperation: 'cooperation', metabolism: 'metabolism', heatTolerance: 'heat tolerance', coldTolerance: 'cold tolerance',
 };
 
-/** The eight traits: name and what it does. */
-export function traitFacts() {
-  return TRAITS.map((id, k) => ({ id, name: TRAIT_NAMES[k], text: TRAIT_TEXT[id] }));
+/** The peoples: name, type, history line, and their traits that differ from the average (highest first). */
+export function peopleFacts() {
+  return PEOPLES.map((p) => {
+    const diff = Object.entries(p.traits).filter(([, v]) => v !== TRAIT_RULES.base).sort((a, b) => b[1] - a[1]);
+    return {
+      id: p.id,
+      name: p.name,
+      type: CIV_TYPE_NAMES[p.type],
+      about: p.about,
+      traits: diff.map(([k, v]) => `${TRAIT_WORDS[k]} ${num(v)}`).join(', '),
+      budget: traitBudget(p.traits),
+    };
+  });
 }
 
 /** The five civ types: name, the setup screen's explanation, and how it levels differently (or null). */
@@ -179,7 +188,6 @@ export function typeFacts() {
       name: CIV_TYPE_NAMES[type],
       text: civTypeText(type),
       levels: parts.length ? `Levels: ${parts.join(', ')}.` : null,
-      traits: Object.keys(CIV_TYPE_TRAITS[type] ?? {}),
     };
   });
 }
@@ -310,16 +318,31 @@ export function howText() {
           `Every person carries eight traits, each from 0 to 1, where ${TRAIT_RULES.base} is average.`,
         ],
         traits: traitFacts(),
-        after: `Children inherit their parent's traits, each nudged by a random mutation of up to ±${pct(D.mutation)} `
-          + `(you choose ${pct(LIMITS.mutation.min)} to ${pct(LIMITS.mutation.max)}). Over the centuries the world quietly selects: `
-          + 'famines weed out the fast burners, and peoples who live by the desert grow to bear its heat.',
+        after: [
+          'Each trait helps somewhere and costs somewhere else; the ⓘ next to a trait on the setup screen gives its exact rule.',
+          `Mutation nudges each trait of a child by up to ±${pct(D.mutation)} by default (you choose ${pct(LIMITS.mutation.min)} to ${pct(LIMITS.mutation.max)}, and each civ can have its own). ${mutationText(D.mutation)}`,
+        ],
+      },
+      {
+        id: 'peoples',
+        kicker: 'Peoples',
+        title: 'Real civilisations, from Sumer on',
+        paras: [
+          `Each civ is a people from history (or a Custom one you name): one of the five types below, plus its own starting traits. `
+            + `Every people's traits are bought from the same budget (a trait above ${TRAIT_RULES.base} costs points, one below gives them back), `
+            + 'so none starts stronger, only different. Tap Edit next to a civ on the setup screen to change its people, colour, type, traits, '
+            + 'mutation or starting people; going over the budget shows a ⚠ but is allowed.',
+          `Budget points per 0.1 above ${TRAIT_RULES.base}: ${Object.entries(TRAIT_COSTS).map(([k, v]) => `${TRAIT_WORDS[k]} ${v}`).join(', ')}. `
+            + `A civ is fair up to ${BUDGET_SLACK} points.`,
+        ],
+        peoples: peopleFacts(),
       },
       {
         id: 'types',
         kicker: 'Civ types',
         title: 'Five ways to be a people',
         paras: [
-          'On the setup screen each civ gets a type. It sets the founders\' starting traits and bends how its people move, fight and grow. '
+          'Each civ has a type, its people\'s by default. It bends how its people move, fight and grow. '
             + 'A person always acts by the type of the civ they belong to now.',
         ],
         types: typeFacts(),
@@ -429,7 +452,7 @@ export function howText() {
           'Drag to pan, pinch or scroll to zoom, and ⤢ fits the whole map again. On a keyboard, the arrow keys move the map and + and − zoom.',
           'Zoom in to see each settlement drawn by its size, its buildings, and carts on the routes between them.',
           'Tap a hex to fly in and see its terrain, food, deposits, people, its settlement (store, buildings and routes) and any building or wonder there. Tap a person for their age, health, family and traits.',
-          'Swipe up the bottom sheet for each civ\'s people, hexes, level, buildings, wonders and capital store, and a guide to every level and settlement.',
+          'Swipe up the bottom sheet for each civ\'s people, hexes, level, buildings, wonders and capital store, and a guide to every level and settlement. Tap a building or wonder there to fly the map to it.',
           'The ☰ button pauses and goes back to setup. Add the page to your Home Screen for a full-screen app.',
         ],
       },

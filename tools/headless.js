@@ -4,7 +4,7 @@
 //   node tools/headless.js [--seed s] [--ticks n] [--size n] [--water f] [--mountains f]
 //                          [--rivers n] [--plains f] [--forest f] [--desert f] [--tundra f]
 //                          [--civs n] [--types expansionist,aggressive,…] [--start-pop n] [--mutation f]
-//                          [--preset name] [--every n] [--min-tps n] [--json]
+//                          [--preset name] [--peoples romans,assyrians,…] [--every n] [--min-tps n] [--json]
 //                          [--end lastCiv,dominance,years|sandbox] [--end-years n]
 //                          [--dominance-share f] [--dominance-years n]
 //
@@ -43,6 +43,12 @@ const params = { ...(args.preset ? presetParams(args.preset) : DEFAULT_PARAMS) }
 if (args.seed) params.seed = String(args.seed);
 for (const key of ['size', 'water', 'mountains', 'rivers', 'plains', 'forest', 'desert', 'tundra']) if (args[key] !== undefined) params[key] = Number(args[key]);
 if (args.civs !== undefined) params.civCount = Number(args.civs);
+if (args.peoples !== undefined) {
+  // Each civ is that people with its own history's traits and type (unless --types says otherwise).
+  params.civs = String(args.peoples).split(',').map((id) => ({ people: id }));
+  params.civTypes = [];
+  if (args.civs === undefined) params.civCount = params.civs.length;
+}
 if (args.types !== undefined) params.civTypes = String(args.types).split(',');
 if (args['start-pop'] !== undefined) params.startPop = Number(args['start-pop']);
 if (args.mutation !== undefined) params.mutation = Number(args.mutation);
@@ -133,7 +139,7 @@ const result = {
   history: historyJson(sim.history(), civNames),
 };
 
-function civNamesOf(k) { return `Civ ${k + 1}`; }
+function civNamesOf(k) { return civNames[k] ?? `Civ ${k + 1}`; }
 
 /** Settlements per civ by size, buildings standing by kind, and this year's routes. */
 function settlementsJson(st) {
@@ -236,34 +242,34 @@ if (args.json) {
       : `built by ${w.builder} in year ${w.year} at (${w.at.col}, ${w.at.row}); ${w.owner ? `held by ${w.owner}` : 'abandoned'}; captured ${w.captures}×`;
     console.log(`    ${w.era} ${w.name}: ${done}${by}`);
   }
-  if (result.firstKingdom) console.log(`  first Kingdom: Civ ${result.firstKingdom.civ + 1} in year ${result.firstKingdom.year}`);
+  if (result.firstKingdom) console.log(`  first Kingdom: ${civNamesOf(result.firstKingdom.civ)} in year ${result.firstKingdom.year}`);
   console.log(result.extinctions.length
     ? `  extinctions: ${result.extinctions.map((e) => `${e.civ} in year ${e.year} (${e.cause})`).join(', ')}`
     : '  extinctions: none');
   const rec = result.records;
-  const who = (r) => `#${r.id} (Civ ${r.civ + 1})`;
+  const who = (r) => `#${r.id} (${civNamesOf(r.civ)})`;
   console.log(`  records: oldest ever ${rec.oldestEver ? `${who(rec.oldestEver)} age ${rec.oldestEver.age}` : '-'}; `
     + `longest line ${rec.longestLine.generations} generations; `
     + `most descendants ${rec.mostDescendants ? `${who(rec.mostDescendants)} ${rec.mostDescendants.descendants}` : '-'}; `
-    + `worst famine ${rec.worstFamine ? `Civ ${rec.worstFamine.civ + 1} years ${rec.worstFamine.startYear}-${rec.worstFamine.endYear}, ${rec.worstFamine.deaths} starved` : 'none'}; `
+    + `worst famine ${rec.worstFamine ? `${civNamesOf(rec.worstFamine.civ)} years ${rec.worstFamine.startYear}-${rec.worstFamine.endYear}, ${rec.worstFamine.deaths} starved` : 'none'}; `
     + `${result.fights} fights; ${rec.events.length} events`);
   const kinds = {};
   for (const e of rec.events) kinds[e.type] = (kinds[e.type] ?? 0) + 1;
   console.log(`  events: ${Object.entries(kinds).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}; ${rec.chronicle.length} in the chronicle`);
   for (const w of rec.wars) {
     const [a, b] = w.civs;
-    console.log(`  war Civ ${a + 1} v Civ ${b + 1}: years ${w.firstYear}-${w.lastYear}, ${w.fights} fights; `
+    console.log(`  war ${civNamesOf(a)} v ${civNamesOf(b)}: years ${w.firstYear}-${w.lastYear}, ${w.fights} fights; `
       + `won ${w.won[0]}/${w.won[1]}, killed ${w.killed[0]}/${w.killed[1]}`);
   }
   for (const r of stats.relations) {
     const [a, b] = r.civs;
     const trade = r.tradeOpen ? `, trading ${r.tradeYears} years (road ${r.roadSteps} steps)` : '';
-    console.log(`  Civ ${a + 1} and Civ ${b + 1}: ${r.relation} since year ${r.since}${r.truceEnds !== null ? ` until ${r.truceEnds}` : ''}${trade}`);
+    console.log(`  ${civNamesOf(a)} and ${civNamesOf(b)}: ${r.relation} since year ${r.since}${r.truceEnds !== null ? ` until ${r.truceEnds}` : ''}${trade}`);
   }
   const traders = stats.civs.filter((c) => c.trade.bought + c.trade.sold > 0);
   if (traders.length) {
     console.log(`  trade (value): ${traders.map((c) => `${c.name} bought ${Math.round(c.trade.bought)}, sold ${Math.round(c.trade.sold)}`
-      + `${c.trade.partner >= 0 ? `, mostly with Civ ${c.trade.partner + 1}` : ''}`).join('; ')}`);
+      + `${c.trade.partner >= 0 ? `, mostly with ${civNamesOf(c.trade.partner)}` : ''}`).join('; ')}`);
   }
   console.log(`  end conditions: ${p.endConditions.length ? p.endConditions.join(', ') : 'sandbox'}`);
   if (stats.finished) console.log(`  ended: ${stats.endReason}; winner: ${result.winner ?? 'none'}`);

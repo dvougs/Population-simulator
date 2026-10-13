@@ -9,6 +9,7 @@ import { CIV_TYPE_NAMES } from '../sim/civTypes.js';
 import { LEVEL_NAMES } from '../sim/levels.js';
 import { rgbCss } from '../render/palette.js';
 import { civStyle } from '../render/civStyle.js';
+import { civName } from './civNames.js';
 
 const materialName = (id) => MATERIAL_NAMES[MATERIAL_IDS.indexOf(id)] ?? id;
 
@@ -215,14 +216,14 @@ function buildingCard(b) {
   const owned = b.civ >= 0;
   const type = wonder ? null : typeOfBuilding(b.id);
   const what = wonder ? `Wonder of era ${b.era} (${LEVEL_NAMES[b.era - 1]})`
-    : `Era ${b.era} building of Civ ${b.civ + 1}${type ? ` (${CIV_TYPE_NAMES[type] ?? type})` : ''}`;
-  const ownerName = owned ? `Civ ${b.civ + 1}` : 'Nobody';
+    : `Era ${b.era} building of ${civName(b.civ)}${type ? ` (${CIV_TYPE_NAMES[type] ?? type})` : ''}`;
+  const ownerName = owned ? civName(b.civ) : 'Nobody';
   const rows = [
     ['Owner', ownerName, () => (owned ? [emblem(b.civ, 12), ownerName] : [ownerName])],
     ['Status', buildingStatus(b)],
   ];
   if (wonder && b.year !== undefined) {
-    rows.push(['Built', `by Civ ${b.builder + 1} in year ${b.year}`, () => ['by ', emblem(b.builder, 12), `Civ ${b.builder + 1} in year ${b.year}`]]);
+    rows.push(['Built', `by ${civName(b.builder)} in year ${b.year}`, () => ['by ', emblem(b.builder, 12), `${civName(b.builder)} in year ${b.year}`]]);
     rows.push(['Captured', b.captures === 1 ? 'once' : b.captures ? `${b.captures} times` : 'never']);
   }
   const off = b.status === 'abandoned' ? ' (off until someone settles here)' : b.status === 'building' ? ' (once it stands)' : '';
@@ -262,7 +263,7 @@ function fillPeopleList(el, list, data) {
     btn.replaceChildren(
       emblem(p.civ),
       h('span', { class: 'pid' }, `#${p.id}`),
-      h('span', { class: 'pinfo' }, `Civ ${p.civ + 1} · age ${p.age} · health ${p.health}${p.hunger ? ' · hungry' : ''}`),
+      h('span', { class: 'pinfo' }, `${civName(p.civ)} · age ${p.age} · health ${p.health}${p.hunger ? ' · hungry' : ''}`),
     );
   });
   if (more > 0) {
@@ -280,8 +281,9 @@ const oneDecimal = (v) => (Math.floor(v * 10 + 1e-9) / 10).toFixed(1);
 
 /** One civ's gathering in the hex: materials worked, gatherers and this year's take. */
 function gatherPart(g) {
-  const what = g.materials.length ? `${g.materials.map(materialName).join(', ').toLowerCase()}, ${oneDecimal(g.gatherers)} gatherers` : 'won the yield in a battle';
-  return `Civ ${g.civ + 1}: ${what}; got ${oneDecimal(g.amount)}`;
+
+  const what = g.materials.length ? `${g.materials.map(materialName).join(', ').toLowerCase()}, ${oneDecimal(g.gatherers)} gatherers` : 'won the yield in a fight';
+  return `${civName(g.civ)}: ${what}; got ${oneDecimal(g.amount)}`;
 }
 
 function gatheringText(hex) {
@@ -298,7 +300,7 @@ function gatheringNodes(hex) {
 
 function peopleText(hex) {
   if (!hex.people) return 'None';
-  const parts = (hex.peopleByCiv ?? []).map((n, c) => (n > 0 ? `Civ ${c + 1}: ${formatNumber(n)}` : null)).filter(Boolean);
+  const parts = (hex.peopleByCiv ?? []).map((n, c) => (n > 0 ? `${civName(c)}: ${formatNumber(n)}` : null)).filter(Boolean);
   return `${formatNumber(hex.people)} (${parts.join(', ')})`;
 }
 
@@ -311,7 +313,7 @@ function peopleNodes(hex) {
     if (n <= 0) return;
     if (!first) out.push(', ');
     first = false;
-    out.push(emblem(c, 12), `Civ ${c + 1}: ${formatNumber(n)}`);
+    out.push(emblem(c, 12), `${civName(c)}: ${formatNumber(n)}`);
   });
   out.push(')');
   return out;
@@ -326,10 +328,10 @@ export function renderPersonCard(el, person, { onClose, onShowHex, dead = false 
   el.hidden = false;
   el.removeAttribute('data-index');
   el.dataset.person = String(person.id);
-  const civName = `Civ ${person.civ + 1}`;
+  const name = civName(person.civ);
   const rows = [
     ['Status', dead ? 'Died' : 'Alive'],
-    ['Civ', civName, () => [emblem(person.civ), civName]],
+    ['Civ', name, () => [emblem(person.civ), name]],
     ['Age', `${person.age} years`],
     ['Health', `${person.health} / 100`],
     ['Hunger', person.hunger === 0 ? 'Ate this year' : `${person.hunger} year${person.hunger === 1 ? '' : 's'} without food`],

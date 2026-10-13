@@ -45,13 +45,13 @@ test('How to play text: formatting helpers', () => {
 
 test('How to play text: has the sections in the RULES.md order and every number is the one in RULES.md', () => {
   const t = howText();
-  assert.deepEqual(t.sections.map((s) => s.id), ['map', 'people', 'year', 'migration', 'civs', 'traits', 'types', 'contact', 'peace', 'levels', 'end', 'controls']);
+  assert.deepEqual(t.sections.map((s) => s.id), ['map', 'people', 'year', 'migration', 'civs', 'traits', 'peoples', 'types', 'contact', 'peace', 'levels', 'end', 'controls']);
   const text = all();
   for (const must of [
     'from 10 × 10 up to 50 × 50', 'regrows 50%', '+30 food',
     'costs 1 movement point', 'desert or tundra 1.5', 'forest or hills 2', 'mountain 3', '+25% in forest, +50% in hills and +100% in mountain',
     'health from 0 to 100', 'they gain 25 health', 'they lose about 35', 'Between 16 and 40', 'about a 5% chance', 'From about 45', 'past about 85',
-    '2 days every second', 'a season in 45 seconds and a year in 3 minutes', '5×, 20×, 100× or Max', 'step a month (30 days)', 'years of 360 days',
+    '2 days every second', 'a season in 45 seconds and a year in 3 minutes', '50×, 100×, 500× or Max', 'step a month (30 days)', 'years of 360 days',
     'hungry sets out with a 50% chance', 'more people than 50% of its food', 'sets out with a 20% chance',
     'People move one hex a year', 'with 5 movement points a year', 'needs counts × 3', 'cannot beat, × 0.25', 'can beat, × 2', '+20% for each neighbouring hex', 'counted twice',
     '1 to 8 civilisations', '2 to 200 people (20 by default)', 'at least 3 steps',
@@ -106,18 +106,17 @@ test('typeFacts: the five civ types with the setup text and their level changes'
   assert.equal(by.cooperative.levels, 'Levels: gathers 25% more.');
   assert.equal(by.nomadic.levels, 'Levels: needs 10% more years at each level.');
   assert.equal(by.isolationist.levels, 'Levels: needs 20% fewer years at each level, but 25% more materials.');
-  assert.deepEqual(by.nomadic.traits, ['metabolism', 'heatTolerance', 'coldTolerance']);
-  assert.deepEqual(by.aggressive.traits, ['aggression', 'strength']);
 });
 
 test('traitFacts: eight traits in order with RULES.md numbers in the text', () => {
   const f = traitFacts();
   assert.deepEqual(f.map((t) => t.id), TRAITS);
   assert.deepEqual(f.map((t) => t.name), TRAIT_NAMES);
-  assert.match(f[0].text, /2\.5% to 7\.5%/);
-  assert.match(f[1].text, /between 35 and 55/);
-  assert.match(f[5].text, /0\.75 to 1\.25/);
-  assert.ok(f.every((t) => t.text.length > 10));
+  assert.match(f[0].rule, /2\.5% to 7\.5%/);
+  assert.match(f[1].rule, /35 to 55 years/);
+  assert.match(f[5].rule, /0\.75 to 1\.25/);
+  assert.match(f[4].rule, /0\.5 to 1\.5/);
+  assert.ok(f.every((t) => t.text.length > 10 && t.rule.length > 40));
 });
 
 test('terrainFacts: land terrains with the RULES.md food, movement and defence, most food first', () => {

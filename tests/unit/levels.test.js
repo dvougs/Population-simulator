@@ -940,7 +940,7 @@ test('RULES.md "End of the game": First to Kingdom ends the game in the year the
   assert.equal(sim.finished, true);
   assert.equal(sim.endKind, 'kingdom');
   assert.equal(sim.winner, 1);
-  assert.equal(sim.endReason, 'Civ 2 became the first Kingdom');
+  assert.equal(sim.endReason, 'Assyrians became the first Kingdom');
   assert.equal(sim.tickCount, 4);
   assert.deepEqual(sim.stats().firstKingdom, { civ: 1, year: 4 });
   assert.equal(sim.stats().civs[1].reached[4], 4);

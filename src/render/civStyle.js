@@ -35,19 +35,48 @@ export const EMBLEM_SHAPES = Object.freeze({
   ring: [ring(0.95), ring(0.5)],
 });
 
-/** One entry per civ, by civ index (Civ 1 first). Up to 8 civs. */
-export const CIV_STYLES = Object.freeze([
-  { colour: 'red', rgb: [230, 57, 70], emblem: 'circle' },
-  { colour: 'blue', rgb: [58, 134, 255], emblem: 'square' },
-  { colour: 'yellow', rgb: [255, 214, 10], emblem: 'triangle' },
-  { colour: 'magenta', rgb: [220, 60, 220], emblem: 'diamond' },
-  { colour: 'cyan', rgb: [0, 220, 230], emblem: 'plus' },
-  { colour: 'orange', rgb: [255, 140, 20], emblem: 'star' },
-  { colour: 'white', rgb: [245, 245, 245], emblem: 'down triangle' },
-  { colour: 'violet', rgb: [150, 100, 255], emblem: 'ring' },
-]);
+/**
+ * The 12 colours a civ can take (setup screen, Edit). Civ k starts with colour
+ * k; the last four are only ever picked by hand.
+ */
+export const CIV_COLOURS = Object.freeze([
+  { colour: 'red', rgb: [230, 57, 70] },
+  { colour: 'blue', rgb: [58, 134, 255] },
+  { colour: 'yellow', rgb: [255, 214, 10] },
+  { colour: 'magenta', rgb: [220, 60, 220] },
+  { colour: 'cyan', rgb: [0, 220, 230] },
+  { colour: 'orange', rgb: [255, 140, 20] },
+  { colour: 'white', rgb: [245, 245, 245] },
+  { colour: 'violet', rgb: [150, 100, 255] },
+  { colour: 'lime', rgb: [160, 235, 50] },
+  { colour: 'pink', rgb: [255, 125, 175] },
+  { colour: 'teal', rgb: [20, 160, 140] },
+  { colour: 'tan', rgb: [215, 175, 120] },
+].map((c) => Object.freeze(c)));
 
-export const EMBLEM_ORDER = CIV_STYLES.map((s) => s.emblem);
+/** The emblem of each civ, by civ index (Civ 1 first). Up to 8 civs. */
+export const EMBLEM_ORDER = Object.freeze(['circle', 'square', 'triangle', 'diamond', 'plus', 'star', 'down triangle', 'ring']);
+
+const rgbHex = ([r, g, b]) => (r << 16) | (g << 8) | b;
+
+/**
+ * One entry per civ, by civ index: its colour (as picked for this game) and
+ * emblem. Changed in place by setCivColours, so layers holding it (or
+ * CIV_TINTS) see the new colours.
+ */
+export const CIV_STYLES = EMBLEM_ORDER.map((emblem, k) => ({ ...CIV_COLOURS[k], emblem }));
+/** Each civ's colour as a 0xRRGGBB number, kept in step with CIV_STYLES. */
+export const CIV_TINTS = CIV_STYLES.map((s) => rgbHex(s.rgb));
+
+/** Give civ k colour colours[k] (an index into CIV_COLOURS); missing entries take the default colour k. */
+export function setCivColours(colours = []) {
+  CIV_STYLES.forEach((s, k) => {
+    const c = CIV_COLOURS[colours[k]] ?? CIV_COLOURS[k];
+    s.colour = c.colour;
+    s.rgb = c.rgb;
+    CIV_TINTS[k] = rgbHex(c.rgb);
+  });
+}
 
 export function civStyle(c) {
   return CIV_STYLES[c % CIV_STYLES.length];

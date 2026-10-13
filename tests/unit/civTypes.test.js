@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   CIV_TYPES, CIV_TYPE_NAMES, TYPE_RULES, defaultCivType, civTypeText,
 } from '../../src/sim/civTypes.js';
-import { CIV_TYPE_TRAITS } from '../../src/sim/traits.js';
+import { peopleTraits } from '../../src/sim/peoples.js';
 import { MIGRATION, migrationRules, buildReach, migrate } from '../../src/sim/migration.js';
 import { People } from '../../src/sim/people.js';
 import { Rng } from '../../src/sim/rng.js';
@@ -31,18 +31,13 @@ test('RULES.md "Civ types": the type table numbers', () => {
   assert.deepEqual({ ...TYPE_RULES.nomadic }, { movePoints: 5, setOutFactor: 2 });
 });
 
-test('RULES.md "Civ types": the setup screen text is the type\'s sentence, then "Starts with" its traits and "other traits 0.5"', () => {
+test('RULES.md "Civ types": the setup screen text is the type\'s sentence (starting traits come from the people)', () => {
   assert.equal(civTypeText('expansionist'),
-    'Moves on early: its people set out once their hex holds 30% of its food capacity, long before it is crowded at 50%. '
-    + 'Starts with heat tolerance 0.55, cold tolerance 0.55; other traits 0.5.');
-  assert.equal(civTypeText('aggressive'), 'Declares war on any civ it borders. Starts with aggression 0.7, strength 0.65; other traits 0.5.');
-  assert.equal(civTypeText('cooperative'),
-    'Never declares war and only fights for its own land, and its people leave it for another civ half as often as others do. Starts with cooperation 0.7; other traits 0.5.');
-  assert.equal(civTypeText('isolationist'),
-    'Keeps to itself: when its hex is crowded, its people only move to land with no other civ in or next to it. Starts with life expectancy 0.6; other traits 0.5.');
-  assert.equal(civTypeText('nomadic'),
-    'Wanders far: 5 movement points a year instead of 3, and sets out twice as often. Starts with metabolism 0.45, heat tolerance 0.6, cold tolerance 0.6; other traits 0.5.');
-  assert.deepEqual(Object.keys(CIV_TYPE_TRAITS.aggressive), ['aggression', 'strength']);
+    'Moves on early: its people set out once their hex holds 30% of its food capacity, long before it is crowded at 50%.');
+  assert.equal(civTypeText('aggressive'), 'Always fights any civ it shares a hex with.');
+  assert.equal(civTypeText('cooperative'), 'Never starts a fight, and its people leave it for another civ half as often as others do.');
+  assert.equal(civTypeText('isolationist'), 'Keeps to itself: when its hex is crowded, its people only move to land with no other civ in or next to it.');
+  assert.equal(civTypeText('nomadic'), 'Wanders far: 5 movement points a year instead of 3, and sets out twice as often.');
 });
 
 test('RULES.md "Migration" by civ type: the per-civ migration table', () => {
@@ -195,21 +190,16 @@ test('a Simulation builds its migration and contact rules from params.civTypes',
   assert.deepEqual(padded.civTypes, ['nomadic', 'aggressive', 'cooperative', 'isolationist', 'nomadic']);
 });
 
-test('founders of each civ start at their type\'s traits (civ averages at year 0)', () => {
-  const sim = new Simulation({ seed: 'foundtypes', civCount: 5, startPop: 200, civTypes: CIV_TYPES });
+test('founders of each civ start at their people\'s traits, whatever the type (civ averages at year 0)', () => {
+  const ids = ['romans', 'assyrians', 'babylonians', 'egyptians', 'mongols'];
+  // Civ 5 is Mongols with the Cooperative type: the traits stay the Mongols'.
+  const sim = new Simulation({ seed: 'foundtypes', civCount: 5, startPop: 200, civs: ids.map((people) => ({ people })),
+    civTypes: ['expansionist', 'aggressive', 'cooperative', 'isolationist', 'cooperative'] });
   const s = sim.stats().civs;
-  const mean = (c, k) => c.startTraits[k];
-  assert.ok(Math.abs(mean(s[0], 'heatTolerance') - 0.55) < 0.02);
-  assert.ok(Math.abs(mean(s[0], 'coldTolerance') - 0.55) < 0.02);
-  assert.ok(Math.abs(mean(s[0], 'fertility') - 0.5) < 0.02);
-  assert.ok(Math.abs(mean(s[1], 'aggression') - 0.7) < 0.02);
-  assert.ok(Math.abs(mean(s[1], 'strength') - 0.65) < 0.02);
-  assert.ok(Math.abs(mean(s[2], 'cooperation') - 0.7) < 0.02);
-  assert.ok(Math.abs(mean(s[3], 'lifeExpectancy') - 0.6) < 0.02);
-  assert.ok(Math.abs(mean(s[4], 'metabolism') - 0.45) < 0.02);
-  assert.ok(Math.abs(mean(s[4], 'heatTolerance') - 0.6) < 0.02);
-  assert.ok(Math.abs(mean(s[4], 'coldTolerance') - 0.6) < 0.02);
-  assert.ok(Math.abs(mean(s[0], 'aggression') - 0.5) < 0.02, 'other traits 0.5');
+  s.forEach((c, k) => {
+    for (const [t, v] of Object.entries(peopleTraits(ids[k]))) assert.ok(Math.abs(c.startTraits[t] - v) < 0.02, `${ids[k]} ${t}`);
+  });
+  assert.equal(s[4].type, 'cooperative');
 });
 
 test('same params and seed give the same state hash with every civ type', () => {

@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  TRAITS, TRAIT_COUNT, TRAIT_RULES, CIV_TYPE_TRAITS, typeTraits, foodNeed, birthChance, oldAgeStart,
+  TRAITS, TRAIT_COUNT, TRAIT_RULES, traitValues, foodNeed, birthChance, oldAgeStart,
   hungerBurden, tolerance, climateFactor, FERTILITY, LIFE_EXPECTANCY, STRENGTH, AGGRESSION, COOPERATION,
   METABOLISM, HEAT_TOLERANCE, COLD_TOLERANCE,
 } from '../../src/sim/traits.js';
@@ -240,24 +240,23 @@ test('RULES.md A year 5 Births: chance (2.5% + 5% f)(0.75 + 0.5 m) + 0.5% per le
   near(rate(0.5, 0.5, Float64Array.of(0.02)), 0.07);
 });
 
-test('RULES.md Traits: founders start at their civ type values plus up to 0.1, clamped; every other trait 0.5', () => {
-  assert.deepEqual(typeTraits('aggressive'), [0.5, 0.5, 0.65, 0.7, 0.5, 0.5, 0.5, 0.5]);
-  assert.deepEqual(typeTraits('cooperative'), [0.5, 0.5, 0.5, 0.5, 0.7, 0.5, 0.5, 0.5]);
-  assert.deepEqual(typeTraits('expansionist'), [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.55, 0.55]);
-  assert.deepEqual(typeTraits('isolationist'), [0.5, 0.6, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]);
-  assert.deepEqual(typeTraits('nomadic'), [0.5, 0.5, 0.5, 0.5, 0.5, 0.45, 0.6, 0.6]);
-  assert.deepEqual(typeTraits('none'), Array(8).fill(0.5));
-  assert.deepEqual(typeTraits('nonsense'), Array(8).fill(0.5));
+test('RULES.md Traits: a civ\'s starting traits in TRAITS order; missing ones are 0.5', () => {
+  assert.deepEqual(traitValues({ aggression: 0.7, strength: 0.65 }), [0.5, 0.5, 0.65, 0.7, 0.5, 0.5, 0.5, 0.5]);
+  assert.deepEqual(traitValues([0.1, 0.2]), [0.1, 0.2, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]);
+  assert.deepEqual(traitValues(undefined), Array(8).fill(0.5));
   assert.equal(TRAIT_RULES.founderSpread, 0.1);
-  assert.deepEqual(Object.keys(CIV_TYPE_TRAITS.nomadic), ['metabolism', 'heatTolerance', 'coldTolerance']);
 });
 
-test('RULES.md Traits: founders are within ±0.1 of the type value, and vary (uniform spread)', () => {
-  const types = ['expansionist', 'aggressive', 'cooperative', 'isolationist', 'nomadic'];
+const BASES = [
+  { heatTolerance: 0.55, coldTolerance: 0.55 }, { aggression: 0.7, strength: 0.65 }, { cooperation: 0.7 },
+  { lifeExpectancy: 0.6 }, { metabolism: 0.45, heatTolerance: 0.6, coldTolerance: 0.6 },
+];
+
+test('RULES.md Traits: founders are within ±0.1 of their civ\'s starting value, and vary (uniform spread)', () => {
   const people = new People(2000);
-  found(people, [0, 1, 2, 3, 4], 200, new Rng('f'), new Rng('ft'), types);
+  found(people, [0, 1, 2, 3, 4], 200, new Rng('f'), new Rng('ft'), BASES);
   assert.equal(people.count, 1000);
-  const base = types.map(typeTraits);
+  const base = BASES.map(traitValues);
   for (let i = 0; i < people.high; i++) {
     const c = people.civ[i];
     for (let t = 0; t < 8; t++) {
@@ -267,21 +266,30 @@ test('RULES.md Traits: founders are within ±0.1 of the type value, and vary (un
     }
     close(people.need[i], foodNeed(people.metabolism[i]), 1e-6);
   }
-  // Both ends of the spread are used, and the mean is near the type value.
+  // Both ends of the spread are used, and the mean is near the starting value.
   let min = 1; let max = 0; let sum = 0;
   for (let i = 0; i < 200; i++) { min = Math.min(min, people.aggression[i]); max = Math.max(max, people.aggression[i]); sum += people.aggression[i]; }
   assert.ok(min < 0.42 && max > 0.58, `${min} ${max}`);
   assert.ok(Math.abs(sum / 200 - 0.5) < 0.02);
-  // Without a trait stream, exact type values.
+  // Without a trait stream, exact values.
   const exact = new People(64);
-  found(exact, [0], 5, new Rng('f'), null, ['nomadic']);
-  for (let i = 0; i < 5; i++) assert.deepEqual([...exact.traits.map((a) => a[i])], typeTraits('nomadic').map(Math.fround));
+  found(exact, [0], 5, new Rng('f'), null, [BASES[4]]);
+  for (let i = 0; i < 5; i++) assert.deepEqual([...exact.traits.map((a) => a[i])], traitValues(BASES[4]).map(Math.fround));
 });
 
-test('RULES.md Traits: founders are clamped to 0 .. 1 (a type value near the end cannot leave the range)', () => {
-  // Heat tolerance 0.6 + 0.1 = 0.7 never leaves 0..1, so force it with a type-less civ pushed by a custom base.
+test('founders: each civ can have its own number, numbered on from the civs before', () => {
+  const people = new People(64);
+  found(people, [0, 1, 2], [3, 5, 2], new Rng('f'), null, null);
+  assert.equal(people.count, 10);
+  const perCiv = [0, 0, 0];
+  for (let i = 0; i < people.high; i++) perCiv[people.civ[i]]++;
+  assert.deepEqual(perCiv, [3, 5, 2]);
+  assert.deepEqual([...people.founder.slice(0, 10)], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+});
+
+test('RULES.md Traits: founders are clamped to 0 .. 1 (a starting value near the end cannot leave the range)', () => {
   const people = new People(512);
-  found(people, [0], 400, new Rng('c'), new Rng('ct'), ['nomadic']);
+  found(people, [0], 400, new Rng('c'), new Rng('ct'), [{ fertility: 0.98, strength: 0.03 }]);
   for (let i = 0; i < people.high; i++) for (let t = 0; t < 8; t++) assert.ok(people.traits[t][i] >= 0 && people.traits[t][i] <= 1);
 });
 
@@ -371,4 +379,16 @@ test('RULES.md Traits: with mutation 0% every descendant keeps its founder\'s tr
     if (p.gen[i] > 1) children++;
   }
   assert.ok(children > 0);
+});
+
+test('RULES.md Traits: a civ\'s own mutation applies to the children born into it', () => {
+  const parent = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5];
+  // The parents are all in civ 0: its entry decides, the other civ's does not.
+  const exact = children(parent, Float64Array.of(0, 0.1), 'own0');
+  // children() makes every parent's fertility 1.
+  const copied = [1, ...parent.slice(1)].map(Math.fround);
+  for (const t of exact) assert.deepEqual(t, copied);
+  const mutated = children(parent, Float64Array.of(0.1, 0), 'own1');
+  assert.ok(mutated.some((t) => t.some((v, k) => Math.abs(v - copied[k]) > 0.01)));
+  for (const t of mutated) t.forEach((v, k) => assert.ok(Math.abs(v - copied[k]) <= 0.1 + 1e-6));
 });

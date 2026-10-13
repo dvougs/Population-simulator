@@ -25,12 +25,14 @@ import { initBottomSheet } from './ui/bottomSheet.js';
 import { initControls } from './ui/controls.js';
 import { renderInspector, renderPersonCard } from './ui/inspector.js';
 import { formatNumber } from './ui/dom.js';
-import { renderStats, renderCivStats, renderHudCivs } from './ui/statsPanel.js';
+import { renderCivStats, renderHudCivs } from './ui/statsPanel.js';
 import { renderEndScreen } from './ui/endScreen.js';
-import { renderLevels, renderLevelGuide } from './ui/levelsPanel.js';
+import { renderLevels, renderLevelGuide, onBuildingTap } from './ui/levelsPanel.js';
 import { mapParams } from './sim/params.js';
 import { randomSeedString } from './sim/rng.js';
 import { DEEP_WATER } from './sim/terrain.js';
+import { civName, setCivNames } from './ui/civNames.js';
+import { setCivColours } from './render/civStyle.js';
 
 const $ = (id) => document.getElementById(id);
 const ui = {
@@ -38,7 +40,7 @@ const ui = {
   mapgen: $('mapgen'), setup: $('setup'), game: $('game'), end: $('end'), endBody: $('end-body'), resume: $('btn-resume'),
   endNow: $('btn-end-now'),
   canvas: $('map'), year: $('hud-year'), pop: $('hud-pop'), hudCivs: $('hud-civs'), inspector: $('inspector'), toast: $('toast'),
-  sheet: $('sheet'), handle: $('sheet-handle'), stats: $('stats'), civStats: $('civ-stats'),
+  sheet: $('sheet'), handle: $('sheet-handle'), civStats: $('civ-stats'),
   civLevels: $('civ-levels'), levelGuide: $('level-guide-body'),
 };
 
@@ -83,7 +85,7 @@ const loop = new Loop({
       renderer3d.setDay(seasonDay, loop.paused ? 0 : (BASE_TPS * SPEEDS[loop.speedIndex].mult) / DAYS_PER_YEAR);
     }
     if (renderer === renderer3d) {
-      // At 100× and Max the map holds a summer day; paused, it shows the real hour and season.
+      // At 100×, 500× and Max the map holds a summer day; paused, it shows the real hour and season.
       const steady = !loop.paused && SPEEDS[loop.speedIndex].steadyLook === true;
       if (steady !== renderer3d.steady) { renderer3d.setSteady(steady); dirty = true; if (seasonDay >= 0) renderer3d.setDay(seasonDay, steady ? Infinity : 0); }
     }
@@ -101,7 +103,7 @@ const controls = initControls({
   // "End now" belongs to the paused game.
   onChange: () => { ui.endNow.hidden = !loop.paused; },
 });
-initBottomSheet(ui.sheet, ui.handle);
+const sheet = initBottomSheet(ui.sheet, ui.handle);
 
 /** The screen on show: 'home', 'how', 'mapgen', 'setup', 'game' or 'end'. */
 let screen = null;
@@ -148,6 +150,9 @@ async function startGame(params) {
   }
   host.start(params);
   startParams = host.params;
+  // Names and colours belong to this game: set them before anything is drawn.
+  setCivNames(host.stats().civs.map((c) => c.name));
+  setCivColours(startParams.civs.map((c) => c.colour));
   map = host.map();
   renderLevelGuide(ui.levelGuide, map, startParams.civCount);
   renderer.setMap(map, host.stats().civs.map((c) => c.type));
@@ -176,6 +181,8 @@ function showScreen(name) {
   if (name !== 'game' && inside) leaveHex();
   const first = screen === null;
   screen = name;
+  // The pictured worlds keep the default colours; the game's own are set again on the way back.
+  if (name === 'home' || name === 'how') setCivColours();
   ui.home.hidden = name !== 'home';
   ui.how.hidden = name !== 'how';
   ui.mapgen.hidden = name !== 'mapgen';
@@ -334,7 +341,7 @@ async function enterHex(index) {
   // The holder's level decides how its homes look inside (huts and a bonfire at level 1).
   hex.level = owner >= 0 ? host.stats()?.civs[owner]?.level ?? 1 : 1;
   const bits = [s ? `${s.tierName ?? TIER_NAMES[s.tier]} on ${hex.name.toLowerCase()}` : hex.name];
-  if (hex.people > 0 && owner >= 0) bits.push(`Civ ${owner + 1}`);
+  if (hex.people > 0 && owner >= 0) bits.push(civName(owner));
   bits.push(`${formatNumber(hex.people)} ${hex.people === 1 ? 'person' : 'people'}`);
   if (hex.peopleByCiv.filter((n) => n > 0).length >= 2) bits.push('at war');
   $('hex-view-info').textContent = bits.join(' · ');
@@ -357,7 +364,7 @@ const KIND_NAMES = { housing: 'Housing', food: 'Food', industry: 'Industry', tra
 function fillHexBuildings(hex) {
   const box = $('hex-buildings'); const list = $('hex-buildings-list');
   const items = [
-    ...(hex.buildings ?? []).map((b) => ({ ...b, note: `${b.kind === 'wonder' ? 'Wonder' : `Civ ${b.civ + 1}'s building`}, era ${b.era}` })),
+    ...(hex.buildings ?? []).map((b) => ({ ...b, note: `${b.kind === 'wonder' ? 'Wonder' : `${civName(b.civ)}'s building`}, era ${b.era}` })),
     ...(hex.settlement?.buildings ?? []).map((b) => ({ ...b, note: KIND_NAMES[b.kind] ?? b.kind })),
   ];
   list.replaceChildren();
@@ -398,10 +405,30 @@ function leaveHex() {
 
 $('btn-hex-leave').addEventListener('click', leaveHex);
 window.addEventListener('keydown', (e) => { if (inside && e.key === 'Escape') leaveHex(); });
+/**
+ * A building or wonder tapped in the sheet: open its hex's card and fly the map there. On a phone
+ * the sheet folds away first and the flight starts once it has, so the hex lands in the middle of
+ * the map that is left; the corner panel of wider screens stays open beside the map.
+ */
+function showBuilding(index) {
+  if (!map || inside || index < 0 || index >= map.cols * map.rows) return;
+  const go = () => { select(index, false); flyTo(index); };
+  if (!sheet.isOpen() || sheetInsets().right !== undefined) { go(); return; }
+  sheet.setOpen(false);
+  const body = $('sheet-body');
+  let done = false;
+  const once = () => { if (done) return; done = true; body.removeEventListener('transitionend', once); go(); };
+  body.addEventListener('transitionend', once);
+  setTimeout(once, 300);
+}
+onBuildingTap(ui.civLevels, showBuilding);
+
 new ResizeObserver(() => { if (inside) hexView.resize(); }).observe($('hex-canvas'));
 
 /** Back to the running game, on the renderer the 3D flag asks for. */
 async function resumeGame() {
+  // The setup screen may have shown other colours meanwhile.
+  if (startParams) setCivColours(startParams.civs.map((c) => c.colour));
   showScreen('game');
   try {
     if (await pickRenderer() && map) reloadRenderer();
@@ -420,7 +447,6 @@ function updatePanels() {
   renderCivStats(ui.civStats, stats);
   renderLevels(ui.civLevels, stats);
   renderHudCivs(ui.hudCivs, stats);
-  renderStats(ui.stats, stats);
   if (renderer.setBuildings(host.buildings())) dirty = true;
   if (renderer.setBattles?.(host.battles())) dirty = true;
   if (renderer.setLevels?.(stats.civs.map((c) => c.level))) dirty = true;

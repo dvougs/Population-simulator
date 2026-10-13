@@ -151,7 +151,7 @@ async function expectInspectorMatchesRules(page, sample) {
   // RULES.md "Statistics": tapping a hex shows its people per civ.
   const peopleDd = insp.locator('dd[data-field="people"]');
   if (h.people === 0) await expect(peopleDd).toHaveText('None');
-  else await expect(peopleDd).toHaveText(new RegExp(`^${h.people} \\(Civ \\d+: \\d+`));
+  else await expect(peopleDd).toHaveText(new RegExp(`^${h.people} \\([A-Z][\\w ]*: \\d+`));
   await expect(insp.locator('dd[data-field="food-capacity"]')).toHaveText(String(cap));
   // RULES.md "Material deposits": the card lists the hex's deposits by name (or None); who gathered there this year is a row of its own.
   const deposits = h.deposits.map((id) => id[0].toUpperCase() + id.slice(1)).join(', ');
@@ -312,6 +312,8 @@ test.describe('3D graphics flag', () => {
     await startGame(page);
     await expect.poll(() => page.evaluate(() => window.popsim.mapRenderer()), { timeout: 15_000 }).toBe('3d');
     await expect(page.locator('#map3d')).toBeVisible();
+    // Let the first day run: before it there is no season to show (RULES.md "Day, night and the seasons").
+    await expect.poll(() => page.evaluate(() => window.popsim.days())).toBeGreaterThan(0);
     await pause(page);
     // A land hex near the middle, tapped where its tile's top is drawn.
     const hex = await page.evaluate(() => {
@@ -512,6 +514,44 @@ test.describe('map generation screen', () => {
 });
 
 test.describe('setup screen', () => {
+  test('RULES.md "Game settings": Edit opens a civ\'s sidebar; its people, colour and traits reach the game', async ({ page }, testInfo) => {
+    await page.locator('#btn-continue').click();
+    await expect(page.locator('#f-civ-0-name')).toHaveText('Romans');
+    await expect(page.locator('#f-civ-1-name')).toHaveText('Assyrians');
+    await page.locator('#btn-edit-civ-1').click();
+    const side = page.locator('#civ-editor');
+    await expect(side).toBeVisible();
+    // The sidebar fits the screen (full width on a phone, at most 440 pixels).
+    const box = await side.boundingBox();
+    const vw = page.viewportSize().width;
+    expect(box.width).toBeLessThanOrEqual(Math.min(440, vw) + 1);
+    await page.locator('#f-civ-people').selectOption('vikings');
+    await expect(page.locator('#f-civ-type')).toHaveValue('aggressive');
+    await expect(page.locator('#civ-editor-title')).toHaveText('Vikings');
+    // ⓘ shows the exact rule.
+    await page.locator('.trait-row[data-trait="fertility"] .info-btn').click();
+    await expect(page.locator('#f-trait-fertility-rule')).toBeVisible();
+    // Going over the fair budget shows the ⚠, but nothing stops it.
+    await expect(page.locator('#f-civ-budget-warn')).toHaveCount(0);
+    await page.locator('#f-trait-fertility-num').fill('0.9');
+    await page.locator('#f-trait-fertility-num').press('Tab');
+    await expect(page.locator('#f-civ-budget-warn')).toBeVisible();
+    // Taking the Romans' colour swaps the two.
+    await page.locator('#f-civ-colour-0').click();
+    await expect(page.locator('#f-civ-colour-0')).toHaveAttribute('aria-checked', 'true');
+    await page.screenshot({ path: testInfo.outputPath('civ-editor.png') });
+    await page.locator('#civ-editor-done').click();
+    await expect(side).toBeHidden();
+    await expect(page.locator('#f-civ-1-name')).toContainText('Vikings');
+    await expect(page.locator('#f-civ-1-warn')).toBeVisible();
+    await page.locator('#btn-start').click();
+    await expect(page.locator('#game')).toBeVisible();
+    const civs = await page.evaluate(() => window.popsim.host.stats().civs.map((c) => [c.name, c.colour]));
+    expect(civs).toEqual([['Romans', 1], ['Vikings', 0], ['Babylonians', 2]]);
+    const params = await page.evaluate(() => window.popsim.host.params.civs[1].traits.fertility);
+    expect(params).toBe(0.9);
+  });
+
   test('continue shows the chosen map, change map goes back with it kept', async ({ page }, testInfo) => {
     await page.locator('#m-preset').selectOption('highlands');
     await expect.poll(() => previewParams(page)).toEqual(PRESETS.highlands);
@@ -598,7 +638,7 @@ test.describe('game', () => {
     await page.waitForTimeout(300);
     expect(await days(page)).toBe(afterStep);
 
-    const labels = ['1×', '5×', '20×', '100×', 'Max'];
+    const labels = ['1×', '50×', '100×', '500×', 'Max'];
     await expect(page.locator('#speed button')).toHaveText(labels);
     for (let i = 0; i < labels.length; i++) {
       const btn = page.locator('#speed button', { hasText: labels[i] }).first();
@@ -828,29 +868,40 @@ test.describe('game', () => {
     await expect.poll(async () => (await camera(page)).scale).toBeLessThan(panned.scale);
   });
 
-  test('bottom sheet opens and lists hexes per terrain', async ({ page }, testInfo) => {
+  test('bottom sheet opens with civs and levels, and no map terrain list', async ({ page }, testInfo) => {
     await startGame(page);
     const sheet = page.locator('#sheet');
     await expect(sheet).toHaveAttribute('data-open', 'false');
     await page.locator('#sheet-handle').click();
     await expect(sheet).toHaveAttribute('data-open', 'true');
     await expect(page.locator('#sheet-handle')).toHaveAttribute('aria-expanded', 'true');
-    await expect(page.locator('#stats')).toBeVisible();
-    const listed = await page.locator('#stats li').evaluateAll((lis) => lis.map((li) => ({
-      t: Number(li.dataset.terrain), name: li.querySelector('.name').textContent,
-      n: Number(li.querySelector('.num').firstChild.textContent.replace(/\D/g, '')),
-    })));
-    const counts = await page.evaluate(() => window.popsim.host.stats().terrainCounts);
-    const names = ['Deep water', 'Coast', 'Plains', 'Forest', 'Hills', 'Mountain', 'Desert', 'Tundra'];
-    expect(listed.length).toBe(counts.filter((n) => n > 0).length);
-    for (const row of listed) {
-      expect(row.name).toBe(names[row.t]);
-      expect(row.n).toBe(counts[row.t]);
-    }
-    expect(listed.reduce((s, r) => s + r.n, 0)).toBe(100);
+    await expect(page.locator('#civ-stats')).toBeVisible();
+    await expect(page.locator('#sheet .sheet-title')).toHaveText(['Civilisations', 'Levels']);
+    await expect(page.locator('#stats')).toHaveCount(0);
     await shot(page, testInfo, 'sheet-open');
     await page.locator('#sheet-handle').click();
     await expect(sheet).toHaveAttribute('data-open', 'false');
+  });
+
+  test('tapping a building in the sheet opens its hex and flies the map there', async ({ page }) => {
+    await startGame(page);
+    await page.locator('#speed button', { hasText: 'Max' }).click();
+    await expect(page.locator('#civ-levels li[data-hex]').first()).toBeAttached({ timeout: 20_000 });
+    await page.locator('#btn-play').click();
+    await expect.poll(() => page.evaluate(() => window.popsim.loop.paused)).toBe(true);
+    await page.locator('#sheet-handle').click();
+    await expect(page.locator('#sheet')).toHaveAttribute('data-open', 'true');
+    const row = page.locator('#civ-levels li[data-hex]').first();
+    await row.scrollIntoViewIfNeeded();
+    const hex = Number(await row.getAttribute('data-hex'));
+    if (test.info().project.use.hasTouch) await row.tap();
+    else await row.click();
+    await expect.poll(() => page.evaluate(() => window.popsim.selected())).toBe(hex);
+    await landed(page);
+    await expect(page.locator('#inspector')).toBeVisible();
+    // On a phone the sheet folds away to show the map; the corner panel of wider screens stays.
+    const corner = await page.locator('#sheet').evaluate((el) => el.getBoundingClientRect().left > 20);
+    if (!corner) await expect(page.locator('#sheet')).toHaveAttribute('data-open', 'false');
   });
 
   test('back to setup pauses, and the game can be resumed', async ({ page }) => {
@@ -980,7 +1031,7 @@ test.describe('narrow phones', () => {
     await startGame(page);
     const rects = await controlRects(page);
     const speeds = rects.slice(2);
-    expect(speeds.map((r) => r.id)).toEqual(['1×', '5×', '20×', '100×', 'Max']);
+    expect(speeds.map((r) => r.id)).toEqual(['1×', '50×', '100×', '500×', 'Max']);
     for (const r of rects) {
       expect(r.left, r.id).toBeGreaterThanOrEqual(0);
       expect(r.right, r.id).toBeLessThanOrEqual(342);

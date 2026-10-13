@@ -7,7 +7,7 @@
 
 import { Graphics } from '../../vendor/pixi.mjs';
 import { hexPolygon, hexCentre } from './layout.js';
-import { CIV_STYLES } from './civStyle.js';
+import { CIV_TINTS } from './civStyle.js';
 import { rgbToHex } from './palette.js';
 import { DEEP_WATER } from '../sim/terrain.js';
 import {
@@ -20,7 +20,7 @@ export class TerritoryLayer {
   constructor(map) {
     this.map = map;
     this.n = map.cols * map.rows;
-    this.colours = CIV_STYLES.map((s) => rgbToHex(s.rgb));
+    this.colours = CIV_TINTS;
     this.centres = [];
     for (let h = 0; h < this.n; h++) this.centres.push(hexCentre(map.cols, h));
     this.tint = new Graphics();

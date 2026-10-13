@@ -14,12 +14,12 @@ import { LEVEL_NAMES, MAX_LEVEL } from '../sim/levels.js';
 import { amount } from './levelsPanel.js';
 import { WONDERS } from '../sim/buildings.js';
 import { TIER_NAMES } from '../sim/settlements.js';
+import { civName } from './civNames.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 /** Chart points per civ at most; longer histories are sampled evenly (the last row always kept). */
 const CHART_POINTS = 400;
 
-const civName = (c) => `Civ ${c + 1}`;
 const wonderName = (era) => WONDERS[era - 1]?.name ?? `era ${era} wonder`;
 const civLabel = (c) => h('span', { class: 'civ-chip' }, emblem(c), civName(c));
 const card = (id, title, ...body) => h('section', { class: 'card', id }, h('h2', {}, title), ...body);

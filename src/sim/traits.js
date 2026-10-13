@@ -1,10 +1,7 @@
-// Inherited traits: what each of the 8 traits does, the founders' starting
-// values per civ type, and mutation. Every number here is listed in RULES.md
+// Inherited traits: what each of the 8 traits does, and mutation. Founders
+// start at their civ's traits (its people's, see peoples.js, or as edited). Every number here is listed in RULES.md
 // ("Traits"). A trait is 0 to 1 and 0.5 gives the base values everyone had
 // before traits existed.
-//
-// Strength, aggression and cooperation are carried and inherited but have no
-// effect yet; fights and civ switching will read them.
 
 import { DESERT, TUNDRA, MOUNTAIN } from './terrain.js';
 
@@ -26,7 +23,7 @@ export const HEAT_TOLERANCE = 6;
 export const COLD_TOLERANCE = 7;
 
 export const TRAIT_RULES = Object.freeze({
-  /** Value every trait has unless a civ type says otherwise; also what a person gets when added without traits. */
+  /** Average value; what a Custom civ starts with and a person gets when added without traits. */
   base: 0.5,
   /** Birth chance = (birthBase + birthPerFertility × f) × (metabolism factor, see foodNeed). */
   birthBase: 0.025,
@@ -46,23 +43,10 @@ export const TRAIT_RULES = Object.freeze({
   founderSpread: 0.1,
 });
 
-/**
- * Founders' starting values by civ type; traits not listed are TRAIT_RULES.base.
- * Every civ is type-less ('none') until civ types ship.
- */
-export const CIV_TYPE_TRAITS = Object.freeze({
-  none: Object.freeze({}),
-  aggressive: Object.freeze({ aggression: 0.7, strength: 0.65 }),
-  cooperative: Object.freeze({ cooperation: 0.7 }),
-  expansionist: Object.freeze({ heatTolerance: 0.55, coldTolerance: 0.55 }),
-  isolationist: Object.freeze({ lifeExpectancy: 0.6 }),
-  nomadic: Object.freeze({ metabolism: 0.45, heatTolerance: 0.6, coldTolerance: 0.6 }),
-});
-
-/** The 8 starting values of a civ type, in TRAITS order (unknown types are type-less). */
-export function typeTraits(type) {
-  const t = CIV_TYPE_TRAITS[type] ?? CIV_TYPE_TRAITS.none;
-  return TRAITS.map((k) => t[k] ?? TRAIT_RULES.base);
+/** A civ's starting traits (an object by trait id, or already an array) in TRAITS order; missing traits are TRAIT_RULES.base. */
+export function traitValues(t) {
+  if (Array.isArray(t)) return TRAITS.map((_, k) => t[k] ?? TRAIT_RULES.base);
+  return TRAITS.map((k) => t?.[k] ?? TRAIT_RULES.base);
 }
 
 export const clamp01 = (v) => Math.min(1, Math.max(0, v));

@@ -16,6 +16,7 @@ import { BUILDING_COST, WONDERS, WONDER_RULES, ERAS, materialText, effectText } 
 import {
   TIERS, TIER_NAMES, HAND, SETTLE, SETTLEMENT_BUILDINGS, MAX_PROGRESS_BONUS, settlementEffectText,
 } from '../sim/settlements.js';
+import { civName } from './civNames.js';
 
 const materialName = (id) => MATERIAL_NAMES[MATERIAL_IDS.indexOf(id)] ?? id;
 /** Stockpile amounts, rounded down to one decimal so 79.96 never reads as 80. */
@@ -81,37 +82,79 @@ export function renderLevels(el, stats) {
 
 const share = (work, years) => `${years > 0 ? Math.floor((work / years) * 100) : 0}%`;
 
-const BUILDING_STATUS = { none: 'not built', building: 'building', standing: 'standing' };
+const BUILDING_STATUS = { building: 'building', standing: 'standing' };
 
 /** The wonder chase in plain words: free, gathering, building x%, owned, taken by Civ N. */
 export function wonderStatus(w) {
   if (w.status === 'owned') return 'owned';
   if (w.status === 'building') return `building ${share(w.work, w.years)}`;
   if (w.status === 'gathering') return 'going for it, gathering materials';
-  if (w.status === 'taken') return w.owner >= 0 ? `taken by Civ ${w.owner + 1}` : 'built, now abandoned';
+  if (w.status === 'taken') return w.owner >= 0 ? `taken by ${civName(w.owner)}` : 'built, now abandoned';
   return 'free';
 }
 
-/** A civ's era buildings, its current era's wonder and any it is going for or owns, and its total bonuses. */
+/** Attributes that make a building's row a button to its hex (none while it has no hex, as when gathering for a wonder). */
+const goTo = (hex, name) => (hex >= 0
+  ? { class: 'go', 'data-hex': hex, role: 'button', tabindex: '0', 'aria-label': `${name}: show on the map` }
+  : {});
+
+/**
+ * Calls onHex(hex) when a building or wonder row in el is tapped or picked with the keyboard.
+ * The panel is rebuilt about ten times a second while the game runs, so a click (which needs the
+ * same element under the press and the release) would often be lost: a tap is taken from the
+ * press and release instead, and a press that turns into a scroll is cancelled by the browser.
+ */
+export function onBuildingTap(el, onHex) {
+  let down = null;
+  const hexOf = (e) => {
+    const row = e.target.closest?.('[data-hex]');
+    return row && el.contains(row) ? Number(row.dataset.hex) : -1;
+  };
+  el.addEventListener('pointerdown', (e) => {
+    const hex = hexOf(e);
+    down = hex >= 0 && e.isPrimary ? { hex, x: e.clientX, y: e.clientY, id: e.pointerId } : null;
+  });
+  el.addEventListener('pointercancel', () => { down = null; });
+  el.addEventListener('pointerup', (e) => {
+    const d = down;
+    down = null;
+    if (!d || e.pointerId !== d.id || Math.abs(e.clientX - d.x) > 10 || Math.abs(e.clientY - d.y) > 10) return;
+    onHex(d.hex);
+  });
+  el.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const hex = hexOf(e);
+    if (hex < 0) return;
+    e.preventDefault();
+    onHex(hex);
+  });
+}
+
+/**
+ * A civ's era buildings and wonders that stand or are under way, and its total bonuses.
+ * Ones it has not started are left out: listing them for every civ made the sheet long and noisy.
+ */
 function buildingsBlock(c) {
   const { eras, bonusText } = c.buildings;
-  const items = eras.map((e) => {
+  const items = eras.filter((e) => e.building.status !== 'none').map((e) => {
     const b = e.building;
     const status = b.status === 'building' ? `building ${share(b.work, b.years)}` : BUILDING_STATUS[b.status];
     const lost = b.destroyed ? `, lost ${b.destroyed === 1 ? 'once' : `${b.destroyed} times`}` : '';
-    return h('li', { 'data-era': e.era, 'data-status': b.status, class: e.era > c.level ? 'later' : undefined },
+    const go = goTo(b.hex, b.name);
+    const cls = [e.era > c.level ? 'later' : '', go.class ?? ''].join(' ').trim();
+    return h('li', { 'data-era': e.era, 'data-status': b.status, ...go, class: cls || undefined },
       h('span', { class: 'b-name' }, `${e.era} ${b.name}`), h('span', { class: 'b-status' }, `${status}${lost}`),
       h('small', {}, b.bonuses.join('; ')));
   });
-  const wonders = eras.filter((e) => e.era === c.level || ['owned', 'building', 'gathering'].includes(e.wonder.status)).map((e) => {
+  const wonders = eras.filter((e) => ['owned', 'building', 'gathering'].includes(e.wonder.status)).map((e) => {
     const w = e.wonder;
-    return h('li', { 'data-era': e.era, 'data-status': w.status },
+    return h('li', { 'data-era': e.era, 'data-status': w.status, ...goTo(w.hex, w.name) },
       h('span', { class: 'b-name' }, w.name), h('span', { class: 'b-status' }, wonderStatus(w)),
       h('small', {}, w.bonuses.join('; ')));
   });
   return h('div', { class: 'level-buildings' },
     h('p', { class: 'b-head' }, 'Buildings'),
-    h('ul', { class: 'b-list' }, items),
+    items.length ? h('ul', { class: 'b-list' }, items) : h('p', { class: 'muted' }, 'None built or under way yet.'),
     wonders.length ? h('p', { class: 'b-head' }, 'Wonders') : null,
     wonders.length ? h('ul', { class: 'b-list wonders' }, wonders) : null,
     h('p', { class: 'b-bonus' }, h('span', { class: 'p-label' }, 'Bonuses: '), bonusText.length ? bonusText.join('; ') : 'none yet'));
