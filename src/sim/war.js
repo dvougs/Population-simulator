@@ -153,6 +153,8 @@ export class War {
     this.eff = null;
     this.diplomacy = null;
     this.civTraits = null;
+    /** Called (slot, to hex) just before a battle moves a person (the Simulation keeps migration's counts with it). */
+    this.noteMove = null;
     this.hungryHex = null;
     this.want = null;
     /** The Kingdom enclosing each hex (−1: none): never a refuge for other civs. */
@@ -576,7 +578,12 @@ export class War {
     }
     const to = fleeHex(map, h, this.pop, this.cnt, civs, w, l, this.inside);
     if (to >= 0 && losers > 0) {
-      for (let j = 0; j < m; j++) if (tag[j] === e && alive[list[j]] && civ[list[j]] === l) hex[list[j]] = to;
+      for (let j = 0; j < m; j++) {
+        const i = list[j];
+        if (tag[j] !== e || !alive[i] || civ[i] !== l) continue;
+        this.noteMove?.(i, to);
+        hex[i] = to;
+      }
       // Who is where, as the month's decisions read it: the loser has gone next door.
       this.pres[h] &= ~(1 << l);
       this.pres[to] |= 1 << l;
@@ -588,7 +595,10 @@ export class War {
     }
     // The winning attackers move in.
     if (win === 0 && bt.fit[0] > 0) {
-      for (let j = 0; j < bt.fit[0]; j++) hex[bt.slots[0][j]] = h;
+      for (let j = 0; j < bt.fit[0]; j++) {
+        this.noteMove?.(bt.slots[0][j], h);
+        hex[bt.slots[0][j]] = h;
+      }
       here = true;
       this.pres[h] |= 1 << w;
       this.cnt[h * civs + w] += bt.fit[0];

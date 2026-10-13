@@ -34,18 +34,26 @@ export class Contact {
    * One year of switching civ, in every land hex shared by several civs where no battle was
    * fought this year (fought[hex] = 1, see war.js). onSwitch(from, to). Returns the switches.
    */
-  year(people, map, fought, switchRng, onSwitch) {
+  year(people, map, fought, switchRng, onSwitch, kept = null) {
     const civs = this.civs;
     const n = map.count;
     const { cnt, pop, shared } = this;
     const { alive, hex, civ } = people;
     const cooperation = people.traits[COOPERATION];
-    cnt.fill(0); pop.fill(0);
-    for (let i = 0; i < people.high; i++) {
-      if (!alive[i]) continue;
-      const h = hex[i];
-      cnt[h * civs + civ[i]]++;
-      pop[h]++;
+    if (kept) {
+      // Counts kept up to date elsewhere ({ cnt: people per civ × n + hex, pop }): no pass over everyone.
+      for (let h = 0; h < n; h++) {
+        pop[h] = kept.pop[h];
+        for (let c = 0; c < civs; c++) cnt[h * civs + c] = kept.cnt[c * n + h];
+      }
+    } else {
+      cnt.fill(0); pop.fill(0);
+      for (let i = 0; i < people.high; i++) {
+        if (!alive[i]) continue;
+        const h = hex[i];
+        cnt[h * civs + civ[i]]++;
+        pop[h]++;
+      }
     }
     let anyShared = false;
     for (let h = 0; h < n; h++) {

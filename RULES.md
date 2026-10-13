@@ -252,7 +252,7 @@ Each year runs these steps, in this order, on these days. Steps 1–5 run on the
 
 ## Migration
 
-- **Monthly.** Migration runs on the 16th day of each month, for the people whose number (id) divided by 12 leaves the month's number (0 in the first month … 11 in the last): each person may set out once a year, in their own month, so new land fills over the year rather than all at once. The counts below are retaken each month.
+- **Monthly.** Migration runs on the 16th day of each month, for a twelfth of the people: each person has a month of their own for life (the game keeps people in a list of places, cut into blocks of 64; the people in block b move in month b mod 12, 0 being the first month … 11 the last, and a place freed by a death goes to a newborn), and may set out once a year, in that month, so new land fills over the year rather than all at once. The counts below are retaken each month.
 - **Winter.** In the three winter months nobody sets out from a tundra or mountain hex and no tundra or mountain hex is in reach.
 - A person who went hungry this year sets out with chance 50%.
 - A person who ate, in a crowded hex, sets out with chance 20%. A hex is crowded when it holds more people (all civs) than 50% of its support (its food capacity + 2 × the food carried in; see "A year", Births), or more than its settlement's housing. Food regrows by 50% of the capacity a year, so 50% is about as many people as a hex feeds year after year: above it the stored food runs down until people go hungry.

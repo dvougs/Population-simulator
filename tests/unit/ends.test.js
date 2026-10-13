@@ -204,7 +204,7 @@ test('host: endNow, keepWatching and report go through the host', () => {
 });
 
 
-test('pinned state hash (re-pinned when traits, civ types, contact and levels shipped, for Kingdom borders and land-based minimums, and for one-hex moves and expansion priorities, when buildings and wonders shipped, for the 500-year balancing pass, when settlements shipped (the hash includes each hex store, building and tier), for rafts, boats and the +20% progress cap, when one tick became one day, for the 1000-year playtest fixes, for peace and trade, for historical peoples, and for war, battles and sieges, and for men and women, and for 30% gatherers and walking in; same run twice gives the same hash)', () => {
+test('pinned state hash (re-pinned when traits, civ types, contact and levels shipped, for Kingdom borders and land-based minimums, and for one-hex moves and expansion priorities, when buildings and wonders shipped, for the 500-year balancing pass, when settlements shipped (the hash includes each hex store, building and tier), for rafts, boats and the +20% progress cap, when one tick became one day, for the 1000-year playtest fixes, for peace and trade, for historical peoples, and for war, battles and sieges, and for men and women, and for 30% gatherers and walking in, and for moving in blocks of the people list; same run twice gives the same hash)', () => {
 
   const run = () => {
     const s = new Simulation({ seed: 'hashcheck', size: 15, civCount: 4 });
@@ -212,5 +212,5 @@ test('pinned state hash (re-pinned when traits, civ types, contact and levels sh
     return [s.hash(), s.people.count];
   };
   assert.deepEqual(run(), run());
-  assert.deepEqual(run(), ['f99284c6', 5930]);
+  assert.deepEqual(run(), ['174e6ae9', 5288]);
 });
