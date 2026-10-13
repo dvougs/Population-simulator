@@ -18,6 +18,7 @@ import { pickStarts, found, eat, deaths, births, regrow, BirthScratch } from './
 export const PYRAMID_BAND = 5;
 export const PYRAMID_TOP = 80;
 export const PYRAMID_BANDS = PYRAMID_TOP / PYRAMID_BAND + 1;
+const BAND_OF = Uint8Array.from({ length: PYRAMID_TOP }, (_, a) => Math.floor(a / PYRAMID_BAND));
 import { buildStepReach, landPieces, migrate, migrationRules, setReach } from './migration.js';
 import { Contact } from './contact.js';
 import { War, WAR } from './war.js';
@@ -134,9 +135,8 @@ export class Simulation {
     this.civPop = new Int32Array(civs);
     this.civHexes = new Int32Array(civs);
     this.civOldest = new Int32Array(civs);
-    /** Women per civ, and people per civ by sex and age band: pyramid[(civ × 2 + female) × PYRAMID_BANDS + band], at the end of the last year. */
+    /** Women per civ at the end of the last year. */
     this.civWomen = new Int32Array(civs);
-    this.pyramid = new Int32Array(civs * 2 * PYRAMID_BANDS);
     /** Years in a row each civ has held at least the dominance share of the land. */
     this.dominanceStreak = new Int32Array(civs);
     this.landHexes = n - this.terrainCounts[DEEP_WATER];
@@ -335,9 +335,8 @@ export class Simulation {
     ct.fill(0);
     // Locals, not traits[t][i]: this loop runs over everyone every year.
     const [t0, t1, t2, t3, t4, t5, t6, t7] = p.traits;
-    const { civPop, civHexes, civOldest, hexCivPop, civWomen, pyramid } = this;
+    const { civPop, civHexes, civOldest, hexCivPop, civWomen } = this;
     civWomen.fill(0);
-    pyramid.fill(0);
     const female = p.female;
     civPop.fill(0);
     civHexes.fill(0);
@@ -375,8 +374,6 @@ export class Simulation {
       if (age[i] >= adultAge) effort[k] += personBase + coop[i];
       if (age[i] > civOldest[c]) civOldest[c] = age[i];
       if (female[i]) civWomen[c]++;
-      const band = age[i] < PYRAMID_TOP ? Math.floor(age[i] / PYRAMID_BAND) : PYRAMID_BANDS - 1;
-      pyramid[(c * 2 + female[i]) * PYRAMID_BANDS + band]++;
       const b = c * TRAIT_COUNT;
       ct[b] += t0[i]; ct[b + 1] += t1[i]; ct[b + 2] += t2[i]; ct[b + 3] += t3[i];
       ct[b + 4] += t4[i]; ct[b + 5] += t5[i]; ct[b + 6] += t6[i]; ct[b + 7] += t7[i];
@@ -501,6 +498,18 @@ export class Simulation {
    * run (plain data plus the history's typed arrays), so it costs one pass
    * over the living at most.
    */
+  /** Everyone alive by civ, sex and age band (counted now, only for the end screen): counts[(civ × 2 + female) × bands + band]. */
+  pyramid() {
+    const p = this.people;
+    const counts = new Int32Array(this.civCount * 2 * PYRAMID_BANDS);
+    for (let i = 0; i < p.high; i++) {
+      if (!p.alive[i]) continue;
+      const a = p.age[i];
+      counts[(p.civ[i] * 2 + p.female[i]) * PYRAMID_BANDS + (a < PYRAMID_TOP ? BAND_OF[a] : PYRAMID_BANDS - 1)]++;
+    }
+    return { band: PYRAMID_BAND, top: PYRAMID_TOP, bands: PYRAMID_BANDS, counts };
+  }
+
   report() {
     const civs = this.civStats.summary();
     const deaths = { oldAge: 0, starvation: 0, war: 0, childhood: 0, childbirth: 0 };
@@ -512,7 +521,7 @@ export class Simulation {
       landHexes: this.landHexes,
       deaths,
       /** People by sex and age band at the end: pyramid[(civ × 2 + female) × bands + band], bands of PYRAMID_BAND years, the last PYRAMID_TOP and over. */
-      pyramid: { band: PYRAMID_BAND, top: PYRAMID_TOP, bands: PYRAMID_BANDS, counts: this.pyramid.slice() },
+      pyramid: this.pyramid(),
       famine: { ...FAMINE },
       history: this.history(),
       records: this.namedRecords(),

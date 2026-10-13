@@ -304,11 +304,16 @@ export class BirthScratch {
     this.fill = new Int32Array(hexes * civs);
     this.list = new Int32Array(capacity);
     this.fathers = new Int32Array(capacity);
+    this.women = new Int32Array(capacity);
   }
 
   /** Grows the per-person arrays to the pool's capacity. */
   fit(capacity) {
-    if (this.list.length < capacity) { this.list = new Int32Array(capacity); this.fathers = new Int32Array(capacity); }
+    if (this.list.length < capacity) {
+      this.list = new Int32Array(capacity);
+      this.fathers = new Int32Array(capacity);
+      this.women = new Int32Array(capacity);
+    }
   }
 }
 
@@ -352,46 +357,58 @@ export function births(people, map, rng, pop, parents, onBirth, traitRng = null,
   const { alive, age, hunger, hex, civ, female, rest } = people;
   const fert = people.traits[FERTILITY];
   const meta = people.traits[METABOLISM];
-  let civs = 1;
-  for (let i = 0; i < people.high; i++) if (alive[i] && civ[i] >= civs) civs = civ[i] + 1;
-  if (!scratch || scratch.civs < civs || scratch.men.length < map.count * scratch.civs) scratch = new BirthScratch(map.count, civs, people.capacity);
+  if (!scratch) {
+    // Tests call births without a Simulation; size the scratch from the people.
+    let civs = 1;
+    for (let i = 0; i < people.high; i++) if (alive[i] && civ[i] >= civs) civs = civ[i] + 1;
+    scratch = new BirthScratch(map.count, civs, people.capacity);
+  }
   scratch.fit(people.capacity);
   const s = scratch;
   const C = s.civs;
   const keys = map.count * C;
-  s.men.fill(0, 0, keys);
+  const { men, start, list, women, fathers } = s;
+  men.fill(0, 0, keys);
   pop.fill(0);
+  // One pass over everyone: head counts, rest years, and the men and the women who could have a child.
+  let nMen = 0;
+  let nWomen = 0;
   for (let i = 0; i < people.high; i++) {
     if (!alive[i]) continue;
     pop[hex[i]]++;
-    if (rest[i] > 0) rest[i]--;
-    if (!female[i] && age[i] >= LIFE.fatherMin) s.men[hex[i] * C + civ[i]]++;
+    if (female[i]) {
+      if (rest[i] > 0 && --rest[i] > 0) continue;
+      if (hunger[i] === 0 && age[i] >= LIFE.fertileMin && age[i] <= LIFE.fertileMax) women[nWomen++] = i;
+    } else if (age[i] >= LIFE.fatherMin) {
+      men[hex[i] * C + civ[i]]++;
+      fathers[nMen++] = i;
+    }
   }
-  s.start[0] = 0;
-  for (let k = 0; k < keys; k++) s.start[k + 1] = s.start[k] + s.men[k];
+  // The men bucketed by hex and civ, so a father can be drawn (fathers[] is free again after this).
+  start[0] = 0;
+  for (let k = 0; k < keys; k++) start[k + 1] = start[k] + men[k];
   s.fill.fill(0, 0, keys);
-  for (let i = 0; i < people.high; i++) {
-    if (!alive[i] || female[i] || age[i] < LIFE.fatherMin) continue;
+  for (let j = 0; j < nMen; j++) {
+    const i = fathers[j];
     const k = hex[i] * C + civ[i];
-    s.list[s.start[k] + s.fill[k]++] = i;
+    list[start[k] + s.fill[k]++] = i;
   }
   let n = 0;
-  for (let i = 0; i < people.high; i++) {
-    if (!alive[i] || !female[i] || hunger[i] !== 0 || rest[i] > 0) continue;
-    if (age[i] < LIFE.fertileMin || age[i] > LIFE.fertileMax) continue;
+  for (let j = 0; j < nWomen; j++) {
+    const i = women[j];
     const h = hex[i];
     if (pop[h] >= room(map, h)) continue;
     const chance = womanBirthChance(age[i], fert[i], meta[i], bonus ? bonus[civ[i]] : 0);
     if (rng.next() >= chance) continue;
     const f = pickFather(s, map, h, civ[i], rng);
     if (f < 0) continue;
-    s.fathers[n] = f;
+    fathers[n] = f;
     parents[n++] = i;
   }
   let born = 0;
   for (let k = 0; k < n; k++) {
     const p = parents[k];
-    const f = s.fathers[k];
+    const f = fathers[k];
     const twins = rng.next() < LIFE.twinChance ? 2 : 1;
     const gen = Math.min(65535, Math.max(people.gen[p], people.gen[f]) + 1);
     const c = people.civ[p];
