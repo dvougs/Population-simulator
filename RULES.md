@@ -172,9 +172,11 @@ Every person has 8 traits, each a number from 0 to 1: fertility (f), life expect
 
 Each civ has one of 5 types, picked per civ on the setup screen. A type biases the odds on top of each person's own traits: it sets the founders' starting traits (see "Traits") and changes how its people migrate and go to war. A person always acts by the type of the civ they belong to now (after switching civ, by their new civ's type).
 
+| Type | What it does differently |
+|---|---|
 | Expansionist | Moves on early: a fed person sets out (20% a year) once their hex holds more people than 30% of its food capacity, instead of 50%. |
-| Aggressive | Always fights any civ it shares a hex with (trigger (a) in "Contact"). |
-| Cooperative | Never starts a fight. Its people switch away to another civ half as often (× 0.5). |
+| Aggressive | Declares war on any civ it borders (see "War"). |
+| Cooperative | Never declares war, and at war only attacks hexes it holds (see "War"). Its people switch away to another civ half as often (× 0.5). |
 | Isolationist | Keeps to itself: a fed person in a crowded hex sets out (20% a year) only towards land with no other civ's people in it or next to it. |
 | Nomadic | Wanders far: 5 movement points a year instead of 3, and sets out at twice the usual chance (100% when hungry, 40% when fed in a crowded hex). |
 
@@ -302,7 +304,7 @@ Civs fight by going to war: a civ **declares war** on a civ it borders, then eac
 ### Warriors
 
 - A civ's **warriors** are its people aged 16 to 45 with health 50 or more who are not already in a battle.
-- **Levy.** For a battle, each side calls up 25% (rounded, at least 1 when it has any) of its **warriors near the hex**, picked at random: the people who were in the battle hex or the 6 hexes next to it at the end of last year aged 15 to 45 (they turn 16 to 46 at the next birthday), and who are now still alive, of the same civ, in the battle hex or next to it, aged 16 to 45, with health 50 or more and not in a battle. The share is counted from all of them (its people aged 15 to 45 in those 7 hexes at the end of last year). The levy is the same for every type for now. Nobody farther away comes, and nobody else (children, the old, the sick, the rest of the adults) ever fights or dies in a battle.
+- **Levy.** For a battle, each side calls up its **levy share** (rounded, at least 1 when it has any) of its **warriors near the hex**, picked at random: the people who were in the battle hex or the 6 hexes next to it at the end of last year aged 15 to 45 (they turn 16 to 46 at the next birthday), and who are now still alive, of the same civ, in the battle hex or next to it, aged 16 to 45, with health 50 or more and not in a battle. The share is counted from all of them (its people aged 15 to 45 in those 7 hexes at the end of last year). The levy share is 25% for every type. Nobody farther away comes, and nobody else (children, the old, the sick, the rest of the adults) ever fights or dies in a battle.
 - **Attack** of a civ = its weapons × (1 + its strength bonus from buildings and wonders; see "Buildings and wonders"). Weapons by level: × 1 at levels 1 and 2 (stone), × 1.25 at level 3 (bronze), × 1.5 at levels 4 and 5 (iron).
 - **Defence.** The side holding the hex (see "Settlements") fights with its attack × (1 + the terrain's defence bonus (forest +25%, hills +50%, mountain +100%, otherwise 0) + its defence bonus from buildings and wonders + the settlement's walls (Palisade +25%, Stone walls +75%, Palace +50%), the walls only when it holds the settlement). A side that does not hold the hex gets no defence.
 - **Morale** starts at 100%, +25% for a Kingdom fighting a civ that is not one, −25% when at least a quarter of the warriors it called up went hungry this year. It falls by the share of its warriors killed or wounded so far.
@@ -330,13 +332,14 @@ Each day of a battle:
 - The loser's people in the battle hex (not only its warriors) flee together to a neighbouring land hex where the winner had no people at the start of the month, the one with the most food left over for its people (food − people, counted then; on a tie the lower index); if the winner has people in every land neighbour, to the best of those. A hex enclosed by a Kingdom other than the loser is never chosen. With no land neighbour they stay. The loser's warriors from the hexes next door just go home (they never left).
 - An attacker that wins moves its warriors still fit into the hex.
 - The winner, if it now has people in the hex, takes the hex at once if it did not hold it: a hex taken loses its planned building and 50% of its store is looted to the winner's capital (as far as it has room; see "Settlements"). If it was the loser's capital, the loser's biggest hex left (by people at the end of last year, lowest index on ties) becomes its capital.
-- The battle counts as a fight for the statistics, the War card and truces (see "Peace and trade"): its war deaths are killed by the other side.
+- The battle counts as a fight for the statistics, the War card, revenge and truces (see "Peace and trade"): its war deaths are killed by the other side.
+- **Walking in.** When the defender called up nobody (no warriors near the hex) and the hex is not besieged, there is no fight: the attacker still takes the hex as above, but it is not counted as a battle or a fight anywhere (statistics, War card, revenge, the quiet years and the wins that let an Aggressive civ refuse a truce). It is counted in the game's war totals as a hex occupied.
 
 ### Sieges
 
 - A hex whose settlement has walls (a defence building: Palisade, Stone walls or Palace) and is held by the defender is **besieged** before any duel: for its walls' defence bonus × 120 days (Palisade 30 days, Palace 60, Stone walls 90; together they add up).
 - During a siege nothing grows back in the hex (its fields are the enemy's): the hex's food stays as it was at each season's regrowth.
-- **Breaking the siege.** On the first day of each month (outside winter), before any attack is chosen, a besieged civ that is not attacking elsewhere comes out to fight when its fresh levy (25% of its people aged 15 to 45 in and next to the hex at the end of last year, rounded, at least 1), with the warriors already inside, × its attack, is at least the besiegers' fit warriors × theirs. Sieges are visited in the order they began. The battle starts at once, without the walls' bonus (terrain and buildings still count), and the fresh levy joins the defenders.
+- **Breaking the siege.** On the first day of each month (outside winter), before any attack is chosen, a besieged civ that is not attacking elsewhere comes out to fight when its fresh levy (its levy share of its people aged 15 to 45 in and next to the hex at the end of last year, rounded, at least 1), with the warriors already inside, × its attack, is at least the besiegers' fit warriors × theirs. Sieges are visited in the order they began. The battle starts at once, without the walls' bonus (terrain and buildings still count), and the fresh levy joins the defenders.
 - **Winter lifts a siege:** a siege still going on the first day of winter ends; the attackers go home and nobody wins.
 - When a besieged hex falls to the attacker (not after the defenders came out to break the siege), ⌊5%⌋ of the loser's people in the hex who were not in the battle die (the sack, war deaths), picked at random, before the rest flee.
 
