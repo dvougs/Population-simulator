@@ -242,6 +242,12 @@ export function migrationRules(types, map, reach) {
     /** Scratch: civs with people in or next to each hex, and each hex's threat for each civ (−1 avoid, 0, +1 push). */
     near: new Uint32Array(map.count),
     threat: new Int8Array(map.count * n),
+    /** Per civ, 1 when its fed movers only go where no other civ lives in or next to the hex (Isolationist), with their own cached sums. */
+    keepApart: new Uint8Array(n),
+    anyApart: false,
+    totalApart: new Float64Array(map.count * n),
+    cumApart: new Array(n),
+    stampApart: new Int32Array(map.count * n),
   };
   // Reach tables by kind ('step', '5', 'stepr3b1', …), built as civs need them.
   rules.byPoints = new Map();
@@ -251,7 +257,9 @@ export function migrationRules(types, map, reach) {
     const t = TYPE_RULES[types[c]] ?? {};
     const factor = t.setOutFactor ?? 1;
     rules.hungryChance[c] = Math.min(1, MIGRATION.hungryChance * factor);
-    rules.crowdedChance[c] = t.fedNeverSetsOut ? 0 : Math.min(1, MIGRATION.crowdedChance * factor);
+    rules.crowdedChance[c] = Math.min(1, MIGRATION.crowdedChance * factor);
+    rules.keepApart[c] = t.fedKeepsApart ? 1 : 0;
+    if (t.fedKeepsApart) rules.anyApart = true;
     rules.crowdedShare[c] = t.crowdedShare ?? MIGRATION.crowdedShare;
     // 0: one hex a year (buildStepReach).
     rules.movePoints[c] = t.movePoints ?? 0;
@@ -275,6 +283,7 @@ export function setReach(rules, c, map, boatRange, boatCost = 1) {
   rules.boats[c] = range;
   rules.reach[c] = rules.byPoints.get(key);
   rules.cum[c] = new Float64Array(rules.reach[c].targets.length);
+  rules.cumApart[c] = new Float64Array(rules.reach[c].targets.length);
 }
 
 /**
@@ -360,7 +369,8 @@ export function migrate(people, map, reach, rng, pop, spare, dest, held = null, 
   const inside = rules?.inside ?? null;
   const want = rules?.want ?? null;
   const threat = rules?.threat ?? null;
-  if (want) markThreats(map, held, rules, civs);
+  const near = rules?.near ?? null;
+  if (want || rules?.anyApart) markThreats(map, held, rules, civs);
   for (let i = 0; i < people.high; i++) {
     dest[i] = -1;
     if (!alive[i]) continue;
@@ -380,22 +390,27 @@ export function migrate(people, map, reach, rng, pop, spare, dest, held = null, 
     const base = c * n;
     if (rules) {
       // Same choice as the scan below: the first target whose running weight passes r.
+      // A fed Isolationist only goes where no other civ lives in or next to the hex (its own cached sums).
+      const apart = rules.keepApart[c] === 1 && hunger[i] === 0;
+      const others = ~(1 << c);
       const key = h * civs + c;
-      const cum = rules.cum[c];
-      if (rules.stamp[key] !== rules.gen) {
+      const cum = apart ? rules.cumApart[c] : rules.cum[c];
+      const stamp = apart ? rules.stampApart : rules.stamp;
+      const totals = apart ? rules.totalApart : rules.total;
+      if (stamp[key] !== rules.gen) {
         let total = 0;
         for (let k = offsets[h]; k < offsets[h + 1]; k++) {
           const t = targets[k];
           const s = spare[t];
-          if (s > 0 && s > own && !(inside && inside[t] >= 0 && inside[t] !== c) && !shut(t)) {
+          if (s > 0 && s > own && !(inside && inside[t] >= 0 && inside[t] !== c) && !shut(t) && !(apart && (near[t] & others) !== 0)) {
             total += want ? s * priority(map, held, base, t, c, n, want[c], threat[t * civs + c]) : (held[base + t] ? s * MIGRATION.ownCivWeight : s);
           }
           cum[k] = total;
         }
-        rules.stamp[key] = rules.gen;
-        rules.total[key] = total;
+        stamp[key] = rules.gen;
+        totals[key] = total;
       }
-      const total = rules.total[key];
+      const total = totals[key];
       if (total <= 0) continue;
       const r = rng.next() * total;
       let lo = offsets[h];

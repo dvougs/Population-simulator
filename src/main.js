@@ -82,6 +82,11 @@ const loop = new Loop({
       seasonDay = host.dayOfYear();
       renderer3d.setDay(seasonDay, loop.paused ? 0 : (BASE_TPS * SPEEDS[loop.speedIndex].mult) / DAYS_PER_YEAR);
     }
+    if (renderer === renderer3d) {
+      // At 100× and Max the map holds a summer day; paused, it shows the real hour and season.
+      const steady = !loop.paused && SPEEDS[loop.speedIndex].steadyLook === true;
+      if (steady !== renderer3d.steady) { renderer3d.setSteady(steady); dirty = true; if (seasonDay >= 0) renderer3d.setDay(seasonDay, steady ? Infinity : 0); }
+    }
     // The water shimmer keeps redrawing on its own clock; the sim never sees it.
     if (dirty || (!ui.game.hidden && renderer.needsFrame(now))) { renderer.draw(camera, outlinedHex(), now); dirty = false; }
     // Panels catch up at most every 100 ms, and at once when the game stops, so a paused game never shows a stale day.
@@ -124,6 +129,7 @@ const mapgen = new MapgenScreen(
 const setup = new SetupScreen($('setup-form'), {
   preview: (params) => host.preview(params),
   starts: (params) => host.starts(params),
+  spread: (params) => host.spreadStarts(params),
   onStart: (params) => startGame(params),
   onChangeMap: (params) => {
     mapgen.setParams(params, 'custom');

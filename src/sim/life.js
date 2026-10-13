@@ -39,6 +39,8 @@ export const LIFE = Object.freeze({
   founderAgeMax: 40,
   /** Civs start at least this many steps apart when the land allows it. */
   startMinDistance: 3,
+  /** Random positions: at most this many rounds of moving each civ to a hex farther from the others (spreadStarts). */
+  spreadRounds: 20,
   /** Start hexes need at least this food capacity when the land allows it. */
   startMinFood: 40,
 });
@@ -99,6 +101,60 @@ export function pickStarts(map, civs, rng, fixed = []) {
     placed.push(h);
   }
   return starts;
+}
+
+/**
+ * Random positions (the setup screen's button): one good start hex per civ, spread so the
+ * gaps between civs are as even as possible. The first civ starts on a random good hex and
+ * each next one on the good hex farthest from those placed (the farthest-point rule); then,
+ * for up to spreadRounds rounds, each civ in turn moves to the good hex whose nearest other
+ * civ is farthest away, while that raises the smallest gap. Ties are broken by `random`
+ * (the SimHost passes the browser's random numbers: a new spread each press; this never runs during a game).
+ */
+export function spreadStarts(map, civs, random) {
+  const pool = [];
+  const land = [];
+  for (let i = 0; i < map.count; i++) {
+    if (map.terrain[i] === DEEP_WATER) continue;
+    land.push(i);
+    if (map.foodCap[i] >= LIFE.startMinFood) pool.push(i);
+  }
+  const hexes = pool.length >= civs ? pool : land;
+  if (!hexes.length || civs <= 0) return [];
+  const ax = hexes.map((i) => indexToAxial(i, map.cols));
+  const dist = (a, b) => distance(ax[a].q, ax[a].r, ax[b].q, ax[b].r);
+  const at = [Math.floor(random() * hexes.length)];
+  // Distance from hex k to the nearest placed civ other than civ `skip`.
+  const gap = (k, skip) => {
+    let best = Infinity;
+    for (let c = 0; c < at.length; c++) if (c !== skip) best = Math.min(best, dist(k, at[c]));
+    return best;
+  };
+  // The hex farthest from the others (skip: the civ being moved), ties at random.
+  const farthest = (skip) => {
+    let bestD = -1;
+    let pick = [];
+    for (let k = 0; k < hexes.length; k++) {
+      if (at.includes(k) && at[skip] !== k) continue;
+      const d = gap(k, skip);
+      if (d > bestD) { bestD = d; pick = [k]; } else if (d === bestD) pick.push(k);
+    }
+    return { k: pick[Math.floor(random() * pick.length)], d: bestD };
+  };
+  while (at.length < civs && at.length < hexes.length) at.push(farthest(-1).k);
+  for (let round = 0; round < LIFE.spreadRounds; round++) {
+    let moved = false;
+    for (let c = 0; c < at.length; c++) {
+      const now = gap(at[c], c);
+      const best = farthest(c);
+      if (best.d > now) { at[c] = best.k; moved = true; }
+    }
+    if (!moved) break;
+  }
+  const out = at.map((k) => hexes[k]);
+  // Fewer hexes than civs: the rest share the first ones.
+  for (let c = out.length; c < civs; c++) out.push(out[c % at.length]);
+  return out;
 }
 
 /** Old-age death chance this year at a given age, for life expectancy l, with old age starting `delay` years later. */

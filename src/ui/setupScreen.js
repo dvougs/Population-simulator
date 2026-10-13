@@ -14,12 +14,13 @@ const END_KEYS = ['endConditions', 'endTicks', 'dominanceShare', 'dominanceYears
 
 export class SetupScreen {
   /** preview(params) and starts(params) come from the SimHost: the map, and where each civ would start. */
-  constructor(form, { onStart, onChangeMap, preview = null, starts = null }) {
+  constructor(form, { onStart, onChangeMap, preview = null, starts = null, spread = null }) {
     this.form = form;
     this.onStart = onStart;
     this.onChangeMap = onChangeMap;
     this.previewFn = preview;
     this.startsFn = starts;
+    this.spreadFn = spread;
     this.params = normalizeParams({});
     this.map = null;
     /** The civ the next tap on the start map places. */
@@ -152,6 +153,10 @@ export class SetupScreen {
       h('div', { class: 'start-frame' }, this.startCanvas),
       this.startNote,
       h('div', { class: 'row' },
+        this.spreadFn ? h('button', { type: 'button', class: 'btn grow', id: 'btn-starts-random', onclick: () => {
+          this.params.starts = normalizeParams({ ...this.params, starts: this.spreadFn(this.params) }).starts;
+          this.refreshStarts();
+        } }, 'Random positions') : null,
         h('button', { type: 'button', class: 'btn grow', id: 'btn-starts-auto', onclick: () => {
           this.params.starts = [];
           this.refreshStarts();

@@ -19,7 +19,7 @@
 // outcome. Neither gathering nor absorbing uses randomness.
 
 import { WINTER_YIELD, winterClosedMask } from './calendar.js';
-import { MATERIAL_COUNT, MATERIAL_TIER, MATERIAL_IDS } from './materials.js';
+import { MATERIAL_COUNT, MATERIAL_TIER, MATERIAL_IDS, COST_EPS } from './materials.js';
 import { PLAINS, DEEP_WATER, TERRAIN_COUNT } from './terrain.js';
 import { COOPERATION } from './traits.js';
 import { Buildings, ERAS, WONDERS, reduce } from './buildings.js';
@@ -31,6 +31,7 @@ const WINTER_SHUT = winterClosedMask(TERRAIN_COUNT);
 const SETTLE_CARRY_COST = SETTLE.carryGatherCost;
 
 export const LEVEL_NAMES = Object.freeze(['Foragers', 'Farmers', 'Builders', 'Organised', 'Kingdom']);
+const FOOD_STATES = ['secure', 'short', 'famine'];
 export const MAX_LEVEL = 5;
 
 /**
@@ -41,19 +42,23 @@ export const MAX_LEVEL = 5;
  * what binds (see levelMinimums). Materials use MATERIAL_IDS order.
  */
 export const REQUIREMENTS = Object.freeze([
-  Object.freeze({ years: 150, landPct: 15, perHex: 10, materials: Object.freeze([80, 30, 30, 0, 0, 0, 0, 0, 0]) }),
-  Object.freeze({ years: 300, landPct: 30, perHex: 12, materials: Object.freeze([200, 150, 100, 30, 0, 0, 0, 0, 0]) }),
-  Object.freeze({ years: 500, landPct: 50, perHex: 14, materials: Object.freeze([0, 300, 0, 80, 60, 40, 0, 0, 0]) }),
-  Object.freeze({ years: 800, landPct: 75, perHex: 16, materials: Object.freeze([0, 0, 0, 0, 150, 0, 30, 15, 20]) }),
+  Object.freeze({ years: 100, landPct: 15, perHex: 10, materials: Object.freeze([80, 30, 30, 0, 0, 0, 0, 0, 0]) }),
+  Object.freeze({ years: 200, landPct: 30, perHex: 12, materials: Object.freeze([200, 150, 100, 30, 0, 0, 0, 0, 0]) }),
+  Object.freeze({ years: 300, landPct: 50, perHex: 14, materials: Object.freeze([0, 300, 0, 80, 60, 40, 0, 0, 0]) }),
+  Object.freeze({ years: 400, landPct: 75, perHex: 16, materials: Object.freeze([0, 0, 0, 0, 150, 0, 30, 15, 20]) }),
 ]);
 
 export const GATHER = Object.freeze({
   /**
-   * Food is secure when at most this % of the civ's people went hungry last year. A full map always
-   * has some hunger (about 5% at level 2 rising to 17% at level 4, as births grow with level), so
-   * asking for none (or for no starvation, or spare food) stops gathering for good.
+   * A civ's food is shown as secure when at most this % of its people went hungry last year and
+   * starvation killed fewer than starveShortPct % of its people over the last starveYears years;
+   * as a famine when it killed at least starveFamishPct %; otherwise as short. Shown only: gathering
+   * goes by each hex's own hunger (SETTLE.secureHungry).
    */
-  secureHungryPct: 20,
+  secureHungryPct: 10,
+  starveYears: 10,
+  starveShortPct: 2,
+  starveFamishPct: 10,
   /** Share of a secure civ's adults (in hexes with a deposit it wants) that gather. */
   gatherShare: 0.2,
   /** Adults are people of this age or older. */
@@ -64,7 +69,7 @@ export const GATHER = Object.freeze({
 
 /** Per-type changes to levelling and gathering, in whole percent. */
 export const TYPE_LEVEL_RULES = Object.freeze({
-  nomadic: Object.freeze({ yearsPct: 125 }),
+  nomadic: Object.freeze({ yearsPct: 110 }),
   isolationist: Object.freeze({ yearsPct: 80, materialsPct: 125 }),
   cooperative: Object.freeze({ gatherPct: 125 }),
 });
@@ -180,7 +185,10 @@ export class Levels {
     /** First civ to reach Kingdom, and the year (−1 until one does). */
     this.kingdomCiv = -1;
     this.kingdomYear = -1;
+    /** Per civ: 0 food secure, 1 short, 2 famine (shown only); starvation deaths over the last starveYears years (a ring). */
     this.secure = new Uint8Array(civs);
+    this.starveRing = new Int32Array(civs * GATHER.starveYears);
+    this.starvePos = 0;
     /** Filled at the end of each year by the Simulation: people of each civ who went hungry that year. */
     this.hungry = new Int32Array(civs);
     this.gatherPct = new Int32Array(civs);
@@ -298,7 +306,8 @@ export class Levels {
     const { target, later, capWant } = this;
     const cost = this.costScratch;
     for (let m = 0; m < MATERIAL_COUNT; m++) { target[base + m] = 0; later[base + m] = 0; capWant[base + m] = 0; }
-    if (L >= MAX_LEVEL) return;
+    const we = bd.committedEra(c);
+    if (L >= MAX_LEVEL && we < 0) return;
     let first = true;
     let now = true;
     const take = (list) => {
@@ -309,9 +318,10 @@ export class Levels {
       }
       first = false;
     };
+    // A wonder it is committed to (of its era or an earlier one) comes first.
+    if (we > 0) take(WONDERS[we - 1].materials);
     for (let l = L; l < MAX_LEVEL; l++) {
       now = l === L;
-      if (l === L && bd.waitingForWonder(c, L)) take(WONDERS[L - 1].materials);
       for (let m = 0; m < MATERIAL_COUNT; m++) cost[m] = this.levelCost(c, l, m);
       take(cost);
       if (l <= ERAS && bd.state[c * ERAS + l - 1] === 0) take(bd.buildingCost(c, l, cost));
@@ -345,9 +355,9 @@ export class Levels {
     for (let c = 0; c < this.civs; c++) {
       const L = this.level[c];
       let mask = 0;
-      if (L < MAX_LEVEL) {
+      if (L < MAX_LEVEL || this.buildings.committedEra(c) > 0) {
         const b = c * MATERIAL_COUNT;
-        for (let m = 0; m < MATERIAL_COUNT; m++) if (this.held[b + m] < this.target[b + m]) mask |= 1 << m;
+        for (let m = 0; m < MATERIAL_COUNT; m++) if (this.held[b + m] + COST_EPS < this.target[b + m]) mask |= 1 << m;
       }
       out[c] = mask;
     }
@@ -391,15 +401,15 @@ export class Levels {
     st.update(cnt, fightWinner, this.level, year, this.onSettle);
     st.totals(this.held);
     for (let c = 0; c < civs; c++) {
-      this.secure[c] = this.civPop[c] > 0 && this.hungry[c] * 100 <= GATHER.secureHungryPct * this.civPop[c] ? 1 : 0;
+      this.secure[c] = this.foodState(c);
       this.nextMask[c] = 0;
       this.laterMask[c] = 0;
       this.targets(c);
-      if (this.level[c] >= MAX_LEVEL) continue;
+      if (this.level[c] >= MAX_LEVEL && this.buildings.committedEra(c) < 0) continue;
       for (let m = 0; m < MATERIAL_COUNT; m++) {
         const have = this.held[c * MATERIAL_COUNT + m];
-        if (have < this.target[c * MATERIAL_COUNT + m]) this.nextMask[c] |= 1 << m;
-        if (have < this.later[c * MATERIAL_COUNT + m]) this.laterMask[c] |= 1 << m;
+        if (have + COST_EPS < this.target[c * MATERIAL_COUNT + m]) this.nextMask[c] |= 1 << m;
+        if (have + COST_EPS < this.later[c * MATERIAL_COUNT + m]) this.laterMask[c] |= 1 << m;
       }
     }
 
@@ -468,9 +478,10 @@ export class Levels {
         else cost.fill(0);
         // The level and the era building together, since the building waits for both to fit.
         for (let m = 0; m < MATERIAL_COUNT; m++) top = Math.max(top, this.levelCost(c, L, m) + cost[m]);
-        if (L <= ERAS) {
-          if (bd.wYear[L - 1] < 0) for (let m = 0; m < MATERIAL_COUNT; m++) top = Math.max(top, WONDERS[L - 1].materials[m]);
-        }
+      }
+      // Any wonder of its era or an earlier one that nobody has finished.
+      for (let e = 1; e <= Math.min(L, ERAS); e++) {
+        if (bd.wYear[e - 1] < 0) for (let m = 0; m < MATERIAL_COUNT; m++) top = Math.max(top, WONDERS[e - 1].materials[m]);
       }
       this.settlements.capitalMin[c] = SETTLE.capitalNeed * top;
     }
@@ -519,7 +530,7 @@ export class Levels {
     if (this.civPop[c] < this.minPopFor(c, L + 1) || this.civHexes[c] < this.minHexesFor(c, L + 1)) return false;
     // A civ going for the era's wonder starts it first (the era building is not needed).
     if (L <= ERAS && this.buildings.waitingForWonder(c, L)) return false;
-    for (let m = 0; m < MATERIAL_COUNT; m++) if (this.stock[c * MATERIAL_COUNT + m] < this.levelCost(c, L, m)) return false;
+    for (let m = 0; m < MATERIAL_COUNT; m++) if (this.stock[c * MATERIAL_COUNT + m] + COST_EPS < this.levelCost(c, L, m)) return false;
     return true;
   }
 
@@ -671,6 +682,24 @@ export class Levels {
     }
   }
 
+  /** Called at the end of each year with that year's deaths per civ by cause ([civ × 3 + cause], starvation is 1). */
+  noteStarved(yearDeaths) {
+    const Y = GATHER.starveYears;
+    this.starvePos = (this.starvePos + 1) % Y;
+    for (let c = 0; c < this.civs; c++) this.starveRing[c * Y + this.starvePos] = yearDeaths[c * 3 + 1];
+  }
+
+  /** Civ c's food: 0 secure, 1 short, 2 famine, from last year's hunger and the last years' starvation. */
+  foodState(c) {
+    const pop = this.civPop[c];
+    if (pop === 0) return 1;
+    const Y = GATHER.starveYears;
+    let starved = 0;
+    for (let k = 0; k < Y; k++) starved += this.starveRing[c * Y + k];
+    if (starved * 100 >= GATHER.starveFamishPct * pop) return 2;
+    return this.hungry[c] * 100 <= GATHER.secureHungryPct * pop && starved * 100 < GATHER.starveShortPct * pop ? 0 : 1;
+  }
+
   /** Plain data for civ c: level, stockpile and progress towards the next level. */
   summary(c) {
     const L = this.level[c];
@@ -678,7 +707,9 @@ export class Levels {
     const out = {
       level: L,
       levelName: LEVEL_NAMES[L - 1],
-      foodSecure: this.secure[c] === 1,
+      foodSecure: this.civPop[c] > 0 && this.secure[c] === 0,
+      /** 'secure', 'short' or 'famine' (see GATHER). */
+      food: FOOD_STATES[this.secure[c]],
       yearsAtLevel: Math.floor(this.yearsAt[c]),
       yearsBelowMinimum: this.belowYears[c],
       minPop: this.minPopFor(c, L),

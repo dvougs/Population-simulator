@@ -7,8 +7,9 @@ export const SPEEDS = [
   { label: '1×', mult: 1 },
   { label: '5×', mult: 5 },
   { label: '20×', mult: 20 },
-  { label: '100×', mult: 100 },
-  { label: 'Max', mult: Infinity },
+  // At these speeds the 3D map shows a summer day throughout (the calendar runs on underneath).
+  { label: '100×', mult: 100, steadyLook: true },
+  { label: 'Max', mult: Infinity, steadyLook: true },
 ];
 /** Days one press of Step advances: a month. */
 export const STEP_DAYS = 30;

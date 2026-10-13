@@ -10,7 +10,7 @@
 // settlements rotate every year (a hash of hex and year), so no corner of the
 // map is always served first.
 
-import { MATERIAL_COUNT, MATERIAL_IDS, MATERIAL_NAMES, MATERIAL_TIER } from './materials.js';
+import { MATERIAL_COUNT, MATERIAL_IDS, MATERIAL_NAMES, MATERIAL_TIER, COST_EPS } from './materials.js';
 import { DEEP_WATER, PLAINS, COAST } from './terrain.js';
 
 const mats = (o) => Object.freeze(MATERIAL_IDS.map((id) => o[id] ?? 0));
@@ -46,7 +46,7 @@ export const SETTLE = Object.freeze({
   ruinYears: 30,
   /** Another civ takes a hex from its holder with this many times the holder's people there (or by winning a fight there). */
   takeOver: 1.25,
-  /** Share of the store lost (looted) when a hex changes hands. */
+  /** Share of the store carried off to the new holder's capital when a hex changes hands. */
   looted: 0.5,
   /** Stock above a store's cap loses this share a year. */
   overCapDecay: 0.2,
@@ -239,6 +239,9 @@ export class Settlements {
     this.planAge = new Int16Array(n);
     this.blockedTo = new Int32Array(n);
     this.capital = new Int32Array(civs).fill(-1);
+    /** Materials each civ carried off this year from hexes it took ([civ × MATERIAL_COUNT + m]), and in all. */
+    this.loot = new Float64Array(civs * MATERIAL_COUNT);
+    this.looted = new Float64Array(civs);
     /** The least each civ's capital store must hold of one material (set by levels.js from its next spends). */
     this.capitalMin = new Float64Array(civs);
     /** Food carried into each hex this year; its smoothed average (support); goods sent and received. */
@@ -346,8 +349,9 @@ export class Settlements {
    * was taken from).
    */
   update(cnt, fightWinner, level, year, onEvent = null) {
-    const { n, civs, holder, tier, pop, capBest } = this;
+    const { n, civs, holder, tier, pop, capBest, loot } = this;
     capBest.fill(-1);
+    loot.fill(0);
     for (let h = 0; h < n; h++) {
       const b0 = h * civs;
       let p = 0;
@@ -380,8 +384,13 @@ export class Settlements {
       this.empty[h] = 0;
       if (old >= 0 && old !== next) {
         if (tier[h] >= CITY) onEvent?.('taken', next, h, year, old);
+        // Half the store is carried off to the new holder's capital (below); half stays with the hex.
         const s0 = h * MATERIAL_COUNT;
-        for (let m = 0; m < MATERIAL_COUNT; m++) this.store[s0 + m] *= 1 - SETTLE.looted;
+        for (let m = 0; m < MATERIAL_COUNT; m++) {
+          const take = this.store[s0 + m] * SETTLE.looted;
+          this.store[s0 + m] -= take;
+          loot[next * MATERIAL_COUNT + m] += take;
+        }
         if (this.plan[h] >= 0) { this.plan[h] = -1; this.started[h] = 0; this.work[h] = 0; }
       }
       // Tier: up at once; down after shrinkYears below shrinkShare of the threshold; at once to the holder's cap.
@@ -406,6 +415,18 @@ export class Settlements {
     }
     this.capitals(cnt);
     this.effects();
+    // Loot reaches the capital, as much as its store has room for.
+    for (let c = 0; c < civs; c++) {
+      const h = this.capital[c];
+      if (h < 0) continue;
+      for (let m = 0; m < MATERIAL_COUNT; m++) {
+        const v = loot[c * MATERIAL_COUNT + m];
+        if (v <= 0) continue;
+        const add = Math.min(v, Math.max(0, this.storeCap[h] - this.store[h * MATERIAL_COUNT + m]));
+        this.store[h * MATERIAL_COUNT + m] += add;
+        this.looted[c] += add;
+      }
+    }
     this.capStores();
   }
 
@@ -538,7 +559,7 @@ export class Settlements {
     if (k < 0 || this.started[h]) return 0;
     const cost = SETTLEMENT_BUILDINGS[k].cost;
     let mask = 0;
-    for (let m = 0; m < MATERIAL_COUNT; m++) if (this.store[h * MATERIAL_COUNT + m] < cost[m]) mask |= bit(m);
+    for (let m = 0; m < MATERIAL_COUNT; m++) if (this.store[h * MATERIAL_COUNT + m] + COST_EPS < cost[m]) mask |= bit(m);
     return mask;
   }
 
@@ -632,9 +653,9 @@ export class Settlements {
       if (!this.started[h]) {
         const base = h * MATERIAL_COUNT;
         let ok = true;
-        for (let m = 0; m < MATERIAL_COUNT; m++) if (this.store[base + m] < b.cost[m]) { ok = false; break; }
+        for (let m = 0; m < MATERIAL_COUNT; m++) if (this.store[base + m] + COST_EPS < b.cost[m]) { ok = false; break; }
         if (!ok) continue;
-        for (let m = 0; m < MATERIAL_COUNT; m++) this.store[base + m] -= b.cost[m];
+        for (let m = 0; m < MATERIAL_COUNT; m++) this.store[base + m] = Math.max(0, this.store[base + m] - b.cost[m]);
         this.started[h] = 1;
         this.work[h] = 0;
       }

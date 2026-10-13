@@ -210,7 +210,7 @@ if (args.json) {
     const next = c.next ? `; next ${LEVEL_NAMES[c.next.level - 1]}: ${c.yearsAtLevel}/${c.next.years} years, ${c.pop}/${c.next.pop} people, `
       + `${c.hexes}/${c.next.hexes} hexes` : '';
     const capital = c.capital ? ` in ${c.capital.name} (${c.capital.tierName})` : '';
-    console.log(`  ${c.name} level ${c.level} ${c.levelName} (reached ${reached}); food ${c.foodSecure ? 'secure' : 'not secure'}${next}; capital store${capital} ${stock}`);
+    console.log(`  ${c.name} level ${c.level} ${c.levelName} (reached ${reached}); food ${c.food}${next}; capital store${capital} ${stock}`);
     const towns = Object.entries(result.settlements.byCiv[c.id] ?? {}).filter(([, v]) => v > 0).map(([t, v]) => `${v} ${t.toLowerCase()}`);
     if (towns.length) console.log(`    settlements: ${towns.join(', ')}; civic progress +${Math.round((c.progressBonus ?? 0) * 100)}%`);
   }

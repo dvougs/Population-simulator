@@ -104,7 +104,7 @@ test('typeFacts: the five civ types with the setup text and their level changes'
   assert.equal(by.expansionist.levels, null);
   assert.equal(by.aggressive.levels, null);
   assert.equal(by.cooperative.levels, 'Levels: gathers 25% more.');
-  assert.equal(by.nomadic.levels, 'Levels: needs 25% more years at each level.');
+  assert.equal(by.nomadic.levels, 'Levels: needs 10% more years at each level.');
   assert.equal(by.isolationist.levels, 'Levels: needs 20% fewer years at each level, but 25% more materials.');
   assert.deepEqual(by.nomadic.traits, ['metabolism', 'heatTolerance', 'coldTolerance']);
   assert.deepEqual(by.aggressive.traits, ['aggression', 'strength']);

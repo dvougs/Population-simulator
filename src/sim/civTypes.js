@@ -26,7 +26,7 @@ export const TYPE_RULES = Object.freeze({
   expansionist: Object.freeze({ crowdedShare: 0.3 }),
   aggressive: Object.freeze({ alwaysFights: true }),
   cooperative: Object.freeze({ neverStartsFights: true, switchAwayFactor: 0.5 }),
-  isolationist: Object.freeze({ fedNeverSetsOut: true }),
+  isolationist: Object.freeze({ fedKeepsApart: true }),
   nomadic: Object.freeze({ movePoints: 5, setOutFactor: 2 }),
 });
 
@@ -39,7 +39,7 @@ const BEHAVIOUR = {
   expansionist: 'Moves on early: its people set out once their hex holds 30% of its food capacity, long before it is crowded at 50%.',
   aggressive: 'Always fights any civ it shares a hex with.',
   cooperative: 'Never starts a fight, and its people leave it for another civ half as often as others do.',
-  isolationist: 'Stays home: its people only set out when they go hungry, never because the hex is crowded.',
+  isolationist: 'Keeps to itself: when its hex is crowded, its people only move to land with no other civ in or next to it.',
   nomadic: 'Wanders far: 5 movement points a year instead of 3, and sets out twice as often.',
 };
 

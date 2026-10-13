@@ -318,6 +318,7 @@ export class Simulation {
     for (let c = 0; c < civs; c++) {
       for (let t = 0; t < TRAIT_COUNT; t++) ct[c * TRAIT_COUNT + t] = this.civPop[c] > 0 ? ct[c * TRAIT_COUNT + t] / this.civPop[c] : NaN;
     }
+    this.levels.noteStarved(this.civStats.yearDeaths);
     this.civStats.endYear(this.tickCount, this.civPop, this.civHexes, this.civOldest, ct, this.levels.level);
     this.records.endYear(this.tickCount, this.civPop, this.civHexes, this.hexCivPop);
   }

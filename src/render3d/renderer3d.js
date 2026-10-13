@@ -41,6 +41,7 @@ const TWILIGHT_FRAME_MS = 33;
 const SOFTWARE_LIGHT_MS = 500;
 const SHADOW_MS = 400;
 const SEASON_EASE_S = 0.35; // the seasons' look catches up with the calendar over about this long
+const STEADY_EASE_S = 1.5; // the steady look (100× and Max) eases in and out over about this long
 const SKY_DAY = 0xe4f0ff; const SKY_NIGHT = 0x5d74b8;
 const GROUND_DAY = 0x30384a; const GROUND_NIGHT = 0x161b2b;
 const SUN = 0xfff1d6; const SUN_LOW = 0xff9a52; const MOON = 0x9fb6ff;
@@ -68,6 +69,7 @@ export class Renderer3D {
     this.lastShadow = -Infinity;
     /** The seasons: the look the calendar asks for, and the look on show. */
     this.lookWant = null; this.lookShown = null; this.lookPainted = null; this.lastLookAt = 0;
+    this.steady = false; this.steadyMix = 0;
     /** Mirrors the 2D renderer's people layer; step 1 of the 3D map draws no individual people. */
     this.people = { shown: false };
     const mq = typeof window !== 'undefined' ? window.matchMedia?.('(prefers-reduced-motion: reduce)') : null;
@@ -163,10 +165,16 @@ export class Renderer3D {
   /** Seconds on the day/night clock at render time `now`. */
   clock(now = performance.now()) { return (now - this.clockStart) / 1000; }
 
+  /**
+   * Steady look (at 100× and Max): the light eases to a summer noon and stays there, and the
+   * seasons' look fades to plain summer, while the clock and the calendar run on underneath.
+   */
+  setSteady(on) { this.steady = on; }
+
   /** The sim's day of the year (0 = first day of spring) and how many years pass a second (0 when paused). */
   setDay(day, yearsPerSecond) {
     if (day < 0) return;
-    this.lookWant = seasonLook(day, seasonAmount(yearsPerSecond));
+    this.lookWant = seasonLook(day, this.steady ? 0 : seasonAmount(yearsPerSecond));
     if (!this.lookShown || this.still) this.lookShown = { ...this.lookWant };
   }
 
@@ -174,7 +182,8 @@ export class Renderer3D {
   needsFrame(now) {
     if (!this.map) return false;
     if (this.riseStart >= 0) return true;
-    const d = daylight(this.clock(now));
+    if (this.steadyMix !== (this.steady ? 1 : 0) && now - this.lastDraw >= TWILIGHT_FRAME_MS) return true;
+    const d = this.dayAt(now);
     const every = this.software ? SOFTWARE_LIGHT_MS : d > 0 && d < 1 ? TWILIGHT_FRAME_MS : LIGHT_FRAME_MS;
     if (now - this.lastDraw >= every) return true;
     if (looksDiffer(this.lookShown, this.lookWant, 0.002) && now - this.lastDraw >= TWILIGHT_FRAME_MS) return true;
@@ -209,10 +218,20 @@ export class Renderer3D {
     return hex >= 0 && (this.diorama.show?.monument[hex] ?? -1) >= 0 ? hex : -1;
   }
 
+  /** Daylight on show at `now`: the clock's, pulled towards full day by the steady look. */
+  dayAt(now) {
+    const day = daylight(this.clock(now));
+    return day + (1 - day) * this.steadyMix;
+  }
+
   draw(camera, selected = -1, now = performance.now()) {
     if (!this.renderer || !this.map) return;
     const dt = Math.min(0.25, Math.max(0, (now - this.lastDraw) / 1000));
     this.lastDraw = now;
+    // The steady look comes and goes over STEADY_EASE_S rather than jumping.
+    const goal = this.steady ? 1 : 0;
+    const step = this.still ? 1 : dt / STEADY_EASE_S;
+    this.steadyMix = goal > this.steadyMix ? Math.min(goal, this.steadyMix + step) : Math.max(goal, this.steadyMix - step);
     this.light(now);
     this.season(dt);
     const d = this.diorama;
@@ -244,7 +263,8 @@ export class Renderer3D {
   /** Day and night: sky light, the sun and moon on their arcs, the background, and the lights where people live. */
   light(now) {
     const t = this.clock(now);
-    const day = daylight(t);
+    const day = this.dayAt(now);
+    const mix = this.steadyMix;
     const b = this.diorama.board;
     const full = Math.max(b.w, b.d);
     this.sky.intensity = 0.8 + 1.1 * day;
@@ -254,10 +274,11 @@ export class Renderer3D {
     const warm = day > 0 && day < 1 ? 1 - Math.abs(day * 2 - 1) : 0;
     this.sun.color.setHex(mixHex(SUN, SUN_LOW, warm));
     this.sun.intensity = 2.6 * day;
-    const sa = sunArc(t) * Math.PI;
+    // The steady look swings the sun to noon (half its arc).
+    const sa = (sunArc(t) + (0.5 - sunArc(t)) * mix) * Math.PI;
     this.sun.position.set(b.cx + Math.cos(sa) * full * 0.9, full * (0.25 + 0.9 * Math.sin(sa)), b.cz - full * 0.7);
     this.moon.intensity = 0.55 * (1 - day);
-    const ma = moonArc(t) * Math.PI;
+    const ma = (moonArc(t) + (0.5 - moonArc(t)) * mix) * Math.PI;
     this.moon.position.set(b.cx + Math.cos(ma) * full * 0.9, full * (0.3 + 0.8 * Math.sin(ma)), b.cz - full * 0.5);
     this.renderer.setClearColor(mixHex(BACKGROUND_NIGHT, BACKGROUND, day), 1);
     this.diorama.setGlow(1 - day);
