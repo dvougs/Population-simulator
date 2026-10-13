@@ -34,8 +34,8 @@ test('RULES.md "Civ types": the type table numbers', () => {
 test('RULES.md "Civ types": the setup screen text is the type\'s sentence (starting traits come from the people)', () => {
   assert.equal(civTypeText('expansionist'),
     'Moves on early: its people set out once their hex holds 30% of its food capacity, long before it is crowded at 50%.');
-  assert.equal(civTypeText('aggressive'), 'Always fights any civ it shares a hex with.');
-  assert.equal(civTypeText('cooperative'), 'Never starts a fight, and its people leave it for another civ half as often as others do.');
+  assert.equal(civTypeText('aggressive'), 'Declares war on any civ it borders.');
+  assert.equal(civTypeText('cooperative'), 'Never declares war and only fights for its own land, and its people leave it for another civ half as often as others do.');
   assert.equal(civTypeText('isolationist'), 'Keeps to itself: when its hex is crowded, its people only move to land with no other civ in or next to it.');
   assert.equal(civTypeText('nomadic'), 'Wanders far: 5 movement points a year instead of 3, and sets out twice as often.');
 });
