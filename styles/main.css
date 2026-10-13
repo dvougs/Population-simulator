@@ -204,8 +204,11 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 6px 
 .home-world:not(.live) .home-caption { bottom: 12px; }
 /* The 3D world (src/render3d/homeScene3d.js) sits over the 2D one; its script sets its opacity as it rises and sinks. */
 .home-world canvas.home-3d { position: absolute; inset: 0; opacity: 0; visibility: hidden; transition: none; }
-/* The 2D / 3D switch: the 3D graphics feature flag. */
-.view-toggle { position: absolute; top: 6px; right: 6px; z-index: 2; display: inline-flex; align-items: center; min-height: 44px;
+/* The 2D / 3D switch on the game settings screen. */
+.view-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 720px; margin: 0 auto 12px; }
+.view-row-label { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; color: var(--text-dim); }
+.view-row .vt-tag { position: static; transform: none; }
+.view-toggle { position: relative; display: inline-flex; align-items: center; min-height: 44px;
   padding: 5px; border-radius: 999px; border: 1px solid var(--line-hi); background: rgba(11, 14, 19, 0.72); color: var(--text);
   backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); font: inherit; cursor: pointer;
   -webkit-tap-highlight-color: transparent; transition: border-color 0.2s, opacity 0.2s; }
