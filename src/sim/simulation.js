@@ -12,7 +12,12 @@ import { generateMap, countTerrain, hashMap, fnv } from './mapgen.js';
 import { indexToAxial } from './hex.js';
 import { Rng } from './rng.js';
 import { People, NO_PARENT } from './people.js';
-import { pickStarts, found, eat, deaths, births, regrow } from './life.js';
+import { pickStarts, found, eat, deaths, births, regrow, BirthScratch } from './life.js';
+
+/** Age bands of the population pyramid: 5 years each, the last one PYRAMID_TOP and over. */
+export const PYRAMID_BAND = 5;
+export const PYRAMID_TOP = 80;
+export const PYRAMID_BANDS = PYRAMID_TOP / PYRAMID_BAND + 1;
 import { buildStepReach, landPieces, migrate, migrationRules, setReach } from './migration.js';
 import { Contact, CONTACT } from './contact.js';
 import { TRUCE } from './diplomacy.js';
@@ -123,10 +128,14 @@ export class Simulation {
     this.civPop = new Int32Array(civs);
     this.civHexes = new Int32Array(civs);
     this.civOldest = new Int32Array(civs);
+    /** Women per civ, and people per civ by sex and age band: pyramid[(civ × 2 + female) × PYRAMID_BANDS + band], at the end of the last year. */
+    this.civWomen = new Int32Array(civs);
+    this.pyramid = new Int32Array(civs * 2 * PYRAMID_BANDS);
     /** Years in a row each civ has held at least the dominance share of the land. */
     this.dominanceStreak = new Int32Array(civs);
     this.landHexes = n - this.terrainCounts[DEEP_WATER];
     this.allocPersonScratch();
+    this.birthScratch = new BirthScratch(n, civs, this.people.capacity);
 
     this.civStats = new CivStats(civs);
     const people = this.people;
@@ -134,7 +143,10 @@ export class Simulation {
     this.records = new Records(civs, founders, map.cols);
     this.records.founders(people);
     const rec = this.records;
-    this.onDeath = (i, cause) => { st.death(people.civ[i], cause, people.age[i]); rec.death(i, people, cause, this.tickCount); };
+    this.onDeath = (i, cause) => {
+      st.death(people.civ[i], cause, people.age[i], people.female[i], people.kids[i]);
+      rec.death(i, people, cause, this.tickCount);
+    };
     this.onBirth = (i) => { st.birth(people.civ[i]); rec.birth(i, people, this.tickCount); };
     this.onFight = (h, attacker, defender, holder, winner, deaths, byWinner, byLoser) => {
       st.fight(attacker, defender, winner);
@@ -179,7 +191,8 @@ export class Simulation {
     for (let i = 0; i < people.high; i++) if (alive[i] && age[i] < 65535) age[i]++;
     eat(people, this.map, this.rng.eat, this.hexPop, this.seen, this.picked, this.needSum, this.eaten, lv.shelter, lv.hungerMul);
     deaths(people, this.rng.death, this.onDeath, lv.oldAgeDelay);
-    births(people, this.map, this.rng.birth, this.hexPop, this.parents, this.onBirth, this.rng.traits, this.mutation, lv.birthBonus);
+    births(people, this.map, this.rng.birth, this.hexPop, this.parents, this.onBirth, this.rng.traits, this.mutation, lv.birthBonus,
+      this.birthScratch, this.onDeath);
     if (this.dest.length < people.capacity) this.allocPersonScratch();
     this.expansionPriorities();
   }
@@ -306,7 +319,10 @@ export class Simulation {
     ct.fill(0);
     // Locals, not traits[t][i]: this loop runs over everyone every year.
     const [t0, t1, t2, t3, t4, t5, t6, t7] = p.traits;
-    const { civPop, civHexes, civOldest, hexCivPop } = this;
+    const { civPop, civHexes, civOldest, hexCivPop, civWomen, pyramid } = this;
+    civWomen.fill(0);
+    pyramid.fill(0);
+    const female = p.female;
     civPop.fill(0);
     civHexes.fill(0);
     civOldest.fill(0);
@@ -333,6 +349,9 @@ export class Simulation {
       if (hunger[i] > 0) { hungry[c]++; hungryHex[hex[i]]++; }
       if (age[i] >= adultAge) effort[k] += personBase + coop[i];
       if (age[i] > civOldest[c]) civOldest[c] = age[i];
+      if (female[i]) civWomen[c]++;
+      const band = age[i] < PYRAMID_TOP ? Math.floor(age[i] / PYRAMID_BAND) : PYRAMID_BANDS - 1;
+      pyramid[(c * 2 + female[i]) * PYRAMID_BANDS + band]++;
       const b = c * TRAIT_COUNT;
       ct[b] += t0[i]; ct[b + 1] += t1[i]; ct[b + 2] += t2[i]; ct[b + 3] += t3[i];
       ct[b + 4] += t4[i]; ct[b + 5] += t5[i]; ct[b + 6] += t6[i]; ct[b + 7] += t7[i];
@@ -427,6 +446,7 @@ export class Simulation {
         ...c, name: this.civNames[k], people: this.params.civs[k].people, colour: this.params.civs[k].colour,
         type: this.civTypes[k], typeName: CIV_TYPE_NAMES[this.civTypes[k]], ...this.levels.summary(k),
         trade: diplomacy.trade[k],
+        women: this.civWomen[k], men: this.civPop[k] - this.civWomen[k],
       })),
       /** Every pair of civs that has fought: war, truce or peace, and whether they trade. */
       relations: diplomacy.pairs,

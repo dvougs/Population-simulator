@@ -26,17 +26,36 @@ export const LIFE = Object.freeze({
   /** Health gained in a year with food; lost in a year without, × hunger burden × climate (see hungryLoss). At 0 a person dies of starvation. */
   healthFedGain: 25,
   healthHungryLoss: 35,
-  /** Fertile age window, inclusive. */
-  fertileMin: 16,
-  fertileMax: 40,
-  /** Yearly birth chance with fertility and metabolism 0.5 (see birthChance in traits.js). */
-  baseBirthChance: 0.05,
+  /** Ages at which a woman can have a child, inclusive. */
+  fertileMin: 15,
+  fertileMax: 49,
+  /** A woman's birth chance at each age, by 5-year group from fertileMin, as a share of her best years' (the natural-fertility curve). */
+  fertileCurve: Object.freeze([0.45, 0.95, 1, 0.93, 0.8, 0.45, 0.08]),
+  /** A woman's yearly chance at her best ages = this × her birthChance (traits.js) plus her civ's bonus: 30% with every trait at 0.5. */
+  birthScale: 6,
+  /** Years after a birth before a woman can have another child. */
+  birthRest: 1,
+  /** A father is a man of the mother's civ at least this old, in her hex or a hex next to it. */
+  fatherMin: 16,
+  /** Share of babies that are girls (105 boys to 100 girls). */
+  girlShare: 0.488,
+  /** Share of births that are twins. */
+  twinChance: 0.015,
+  /** Share of births the mother dies of. */
+  childbirthDeath: 0.01,
+  /** Yearly chance a child dies, at age 1 (the first year of life), at 2 to 5 and at 6 to 15. */
+  infantDeath: 0.2,
+  smallChildDeath: 0.03,
+  childDeath: 0.005,
+  /** Yearly birth chance of a woman at her best ages, every trait 0.5, level 1 (see womanBirthChance). */
+  baseBirthChance: 0.3,
   /** Old-age start with life expectancy 0.5 (see oldAgeStart in traits.js); from it a person may die of old age each year … */
   baseOldAgeStart: 45,
   /** … with chance (age − start) ÷ span, so nobody lives past start + span. */
   oldAgeSpan: 40,
-  /** Founders' ages are spread evenly over 0 to this − 1. */
-  founderAgeMax: 40,
+  /** Founders' ages are spread evenly over founderAgeMin to founderAgeMax, inclusive. */
+  founderAgeMin: 14,
+  founderAgeMax: 31,
   /** Civs start at least this many steps apart when the land allows it. */
   startMinDistance: 3,
   /** Random positions: at most this many rounds of moving each civ to a hex farther from the others (spreadStarts). */
@@ -49,6 +68,26 @@ export const DEATH_OLD_AGE = 0;
 export const DEATH_STARVATION = 1;
 /** Killed in a fight (contact.js). */
 export const DEATH_WAR = 2;
+/** A child who died before 16. */
+export const DEATH_CHILDHOOD = 3;
+/** A mother who died giving birth. */
+export const DEATH_CHILDBIRTH = 4;
+export const DEATH_CAUSES = 5;
+
+/** A woman's birth chance at an age, as a share of her best years' (0 outside the fertile years). */
+export function fertileFactor(age) {
+  if (age < LIFE.fertileMin || age > LIFE.fertileMax) return 0;
+  return LIFE.fertileCurve[Math.floor((age - LIFE.fertileMin) / 5)];
+}
+
+/** A woman's yearly birth chance at an age, from her fertility and metabolism plus her civ's bonus (levels and buildings). */
+export const womanBirthChance = (age, f, m, bonus = 0) => LIFE.birthScale * fertileFactor(age) * (birthChance(f, m) + bonus);
+
+/** Yearly chance a child of this age dies (0 from 16). */
+export function childDeathChance(age) {
+  if (age < 1 || age > 15) return 0;
+  return age === 1 ? LIFE.infantDeath : age <= 5 ? LIFE.smallChildDeath : LIFE.childDeath;
+}
 
 /**
  * Starting hex for each civ. fixed[c] (optional) is a hex chosen on the setup
@@ -239,7 +278,9 @@ export function deaths(people, rng, onDeath, delay = null) {
     if (!alive[i]) continue;
     let cause = -1;
     if (health[i] === 0) cause = DEATH_STARVATION;
-    else {
+    else if (age[i] <= 15) {
+      if (rng.next() < childDeathChance(age[i])) cause = DEATH_CHILDHOOD;
+    } else {
       const d = delay ? delay[civ[i]] : 0;
       if (age[i] >= oldAgeStart(life[i]) + d && rng.next() < oldAgeChance(age[i], life[i], d)) cause = DEATH_OLD_AGE;
     }
@@ -252,45 +293,133 @@ export function deaths(people, rng, onDeath, delay = null) {
 const childTraits = new Float64Array(TRAIT_COUNT);
 
 /**
- * Births: each fed person in the fertile window, in a hex with fewer people
- * than its food capacity, has a child with their birth chance. Decided
- * for everyone against the head count before any child is added. The child
- * starts at age 0, full health, in the parent's hex and civ, with the
- * parent's traits each moved by uniform(−mutation, +mutation) from traitRng,
- * clamped to 0 … 1 (copied exactly without traitRng or with mutation 0).
- * mutation is one number, or one per civ (the civ the child is born into).
- * parents: scratch Int32Array at least people.high long. bonus: optional
- * per-civ addition to the birth chance (levels). Returns births added.
+ * Scratch for births, kept on the Simulation so two games never share it: men of
+ * each civ in each hex (men[hex × civs + civ]) and their slots bucketed by that key.
  */
-export function births(people, map, rng, pop, parents, onBirth, traitRng = null, mutation = 0, bonus = null) {
-  const { alive, age, hunger, hex, civ } = people;
+export class BirthScratch {
+  constructor(hexes, civs, capacity) {
+    this.civs = civs;
+    this.men = new Int32Array(hexes * civs);
+    this.start = new Int32Array(hexes * civs + 1);
+    this.fill = new Int32Array(hexes * civs);
+    this.list = new Int32Array(capacity);
+    this.fathers = new Int32Array(capacity);
+  }
+
+  /** Grows the per-person arrays to the pool's capacity. */
+  fit(capacity) {
+    if (this.list.length < capacity) { this.list = new Int32Array(capacity); this.fathers = new Int32Array(capacity); }
+  }
+}
+
+/** A random man of civ c in hex h, or in the hexes next to it when h has none (weighted by their men); −1 if none. */
+function pickFather(s, map, h, c, rng) {
+  const { men, start, list, civs } = s;
+  let k = h * civs + c;
+  if (men[k] > 0) return list[start[k] + rng.int(men[k])];
+  let total = 0;
+  for (let d = 0; d < 6; d++) {
+    const t = map.neighbours[h * 6 + d];
+    if (t >= 0) total += men[t * civs + c];
+  }
+  if (total === 0) return -1;
+  let r = rng.int(total);
+  for (let d = 0; d < 6; d++) {
+    const t = map.neighbours[h * 6 + d];
+    if (t < 0) continue;
+    k = t * civs + c;
+    if (r < men[k]) return list[start[k] + r];
+    r -= men[k];
+  }
+  return -1;
+}
+
+/**
+ * Births: each fed woman in her fertile years, rested since her last child, in a hex
+ * with fewer people than its room and with a man of her civ (16 or older) in her hex
+ * or a hex next to it, has a child with her womanBirthChance. Decided for everyone
+ * against the counts before any child is added. The father is a random such man
+ * (from her own hex when it has one). A birth is twins with twinChance; each child is
+ * a girl with girlShare, starts at age 0 with full health in the mother's hex and
+ * civ, and gets the average of the two parents' traits, each moved by
+ * uniform(−mutation, +mutation) from traitRng and clamped to 0 … 1. mutation is one
+ * number, or one per civ (the civ the child is born into). The mother dies with
+ * childbirthDeath after the children are added (onDeath). parents: scratch Int32Array
+ * at least people.high long. scratch: a BirthScratch. bonus: optional per-civ addition
+ * to the birth chance (levels, buildings). Returns births added (twins count 2).
+ */
+export function births(people, map, rng, pop, parents, onBirth, traitRng = null, mutation = 0, bonus = null, scratch = null, onDeath = null) {
+  const { alive, age, hunger, hex, civ, female, rest } = people;
   const fert = people.traits[FERTILITY];
   const meta = people.traits[METABOLISM];
+  let civs = 1;
+  for (let i = 0; i < people.high; i++) if (alive[i] && civ[i] >= civs) civs = civ[i] + 1;
+  if (!scratch || scratch.civs < civs || scratch.men.length < map.count * scratch.civs) scratch = new BirthScratch(map.count, civs, people.capacity);
+  scratch.fit(people.capacity);
+  const s = scratch;
+  const C = s.civs;
+  const keys = map.count * C;
+  s.men.fill(0, 0, keys);
   pop.fill(0);
-  for (let i = 0; i < people.high; i++) if (alive[i]) pop[hex[i]]++;
+  for (let i = 0; i < people.high; i++) {
+    if (!alive[i]) continue;
+    pop[hex[i]]++;
+    if (rest[i] > 0) rest[i]--;
+    if (!female[i] && age[i] >= LIFE.fatherMin) s.men[hex[i] * C + civ[i]]++;
+  }
+  s.start[0] = 0;
+  for (let k = 0; k < keys; k++) s.start[k + 1] = s.start[k] + s.men[k];
+  s.fill.fill(0, 0, keys);
+  for (let i = 0; i < people.high; i++) {
+    if (!alive[i] || female[i] || age[i] < LIFE.fatherMin) continue;
+    const k = hex[i] * C + civ[i];
+    s.list[s.start[k] + s.fill[k]++] = i;
+  }
   let n = 0;
   for (let i = 0; i < people.high; i++) {
-    if (!alive[i] || hunger[i] !== 0) continue;
+    if (!alive[i] || !female[i] || hunger[i] !== 0 || rest[i] > 0) continue;
     if (age[i] < LIFE.fertileMin || age[i] > LIFE.fertileMax) continue;
-    if (pop[hex[i]] >= room(map, hex[i])) continue;
-    const chance = birthChance(fert[i], meta[i]) + (bonus ? bonus[civ[i]] : 0);
-    if (rng.next() < chance) parents[n++] = i;
+    const h = hex[i];
+    if (pop[h] >= room(map, h)) continue;
+    const chance = womanBirthChance(age[i], fert[i], meta[i], bonus ? bonus[civ[i]] : 0);
+    if (rng.next() >= chance) continue;
+    const f = pickFather(s, map, h, civ[i], rng);
+    if (f < 0) continue;
+    s.fathers[n] = f;
+    parents[n++] = i;
   }
+  let born = 0;
   for (let k = 0; k < n; k++) {
     const p = parents[k];
-    const gen = Math.min(65535, people.gen[p] + 1);
-    const child = people.add(people.hex[p], people.civ[p], 0, LIFE.healthMax, people.id[p], gen, people.founder[p]);
-    // people.add may have grown the arrays, so read them afresh.
-    const tr = people.traits;
-    const mu = typeof mutation === 'number' ? mutation : mutation[people.civ[p]];
-    for (let t = 0; t < TRAIT_COUNT; t++) {
-      const v = tr[t][p];
-      childTraits[t] = traitRng && mu > 0 ? clamp01(v + traitRng.range(-mu, mu)) : v;
+    const f = s.fathers[k];
+    const twins = rng.next() < LIFE.twinChance ? 2 : 1;
+    const gen = Math.min(65535, Math.max(people.gen[p], people.gen[f]) + 1);
+    const c = people.civ[p];
+    const mu = typeof mutation === 'number' ? mutation : mutation[c];
+    for (let b = 0; b < twins; b++) {
+      const girl = rng.next() < LIFE.girlShare ? 1 : 0;
+      const child = people.add(people.hex[p], c, 0, LIFE.healthMax, people.id[p], gen, people.founder[p], girl, people.id[f]);
+      // people.add may have grown the arrays, so read them afresh.
+      const tr = people.traits;
+      for (let t = 0; t < TRAIT_COUNT; t++) {
+        const v = (tr[t][p] + tr[t][f]) / 2;
+        childTraits[t] = traitRng && mu > 0 ? clamp01(v + traitRng.range(-mu, mu)) : v;
+      }
+      people.setTraits(child, childTraits);
+      onBirth(child);
+      born++;
     }
-    people.setTraits(child, childTraits);
-    onBirth(child);
+    people.rest[p] = LIFE.birthRest + 1;
+    people.kids[p] = Math.min(255, people.kids[p] + twins);
   }
-  return n;
+  // Mothers who died giving birth, after every child is in (no slot is reused mid-step).
+  for (let k = 0; k < n; k++) {
+    if (rng.next() >= LIFE.childbirthDeath) continue;
+    const p = parents[k];
+    if (onDeath) onDeath(p, DEATH_CHILDBIRTH);
+    people.remove(p);
+  }
+  return born;
 }
 
 /**
@@ -342,8 +471,10 @@ export function found(people, starts, pops, rng, traitRng = null, traits = null)
   for (let c = 0; c < starts.length; c++) {
     const base = traitValues(traits?.[c]);
     const n = typeof pops === 'number' ? pops : pops[c];
+    // Half women (the odd one out a woman), all of an age to start families.
     for (let k = 0; k < n; k++) {
-      const i = people.add(starts[c], c, rng.int(LIFE.founderAgeMax), LIFE.healthMax, NO_PARENT, 1, id++);
+      const a = LIFE.founderAgeMin + rng.int(LIFE.founderAgeMax - LIFE.founderAgeMin + 1);
+      const i = people.add(starts[c], c, a, LIFE.healthMax, NO_PARENT, 1, id++, k % 2 === 0 ? 1 : 0);
       for (let t = 0; t < TRAIT_COUNT; t++) childTraits[t] = traitRng ? clamp01(base[t] + traitRng.range(-spread, spread)) : base[t];
       people.setTraits(i, childTraits);
     }
