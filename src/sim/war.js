@@ -164,7 +164,8 @@ export class War {
     const a = new Int32Array(capacity); a.set(this.inBattle); this.inBattle = a;
     const b = new Uint32Array(capacity); b.set(this.inBattleId); this.inBattleId = b;
     this.list = new Int32Array(capacity);
-    this.next = new Int32Array(capacity);
+    // The chains built at the end of last year stay valid when the pool grows mid-year.
+    const c = new Int32Array(capacity); c.set(this.next); this.next = c;
     this.tag = new Int32Array(capacity);
   }
 
@@ -579,8 +580,11 @@ export class War {
       // Who is where, as the month's decisions read it: the loser has gone next door.
       this.pres[h] &= ~(1 << l);
       this.pres[to] |= 1 << l;
-      this.cnt[to * civs + l] += this.cnt[h * civs + l];
+      const moved = this.cnt[h * civs + l];
+      this.cnt[to * civs + l] += moved;
       this.cnt[h * civs + l] = 0;
+      this.pop[to] += moved;
+      this.pop[h] -= moved;
     }
     // The winning attackers move in.
     if (win === 0 && bt.fit[0] > 0) {
@@ -588,6 +592,7 @@ export class War {
       here = true;
       this.pres[h] |= 1 << w;
       this.cnt[h * civs + w] += bt.fit[0];
+      this.pop[h] += bt.fit[0];
     }
     if (here && this.settle && this.settle.holder[h] !== w) this.settle.capture(h, w, this.level, year, onSettle);
     this.lostTo[l * civs + w] = year;
