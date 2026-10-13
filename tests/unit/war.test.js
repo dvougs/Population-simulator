@@ -40,7 +40,7 @@ const aggOf = AGGRESSION;
  * types: civ types. groups: [hex, civ, n, { age, health, str, agg, hunger }]. Everything else plain.
  * The War is wired as the Simulation wires it, minus the Settlements unless settle is true.
  */
-function world(types, groups, { terrain = PLAINS, terrainAt = null, cap = 1e6, settle = false, level = 1, seed = 'w' } = {}) {
+function world(types, groups, { terrain = PLAINS, terrainAt = null, cap = 1e6, settle = false, level = 1, seed = 'w', flat = true } = {}) {
   const map = makeMap(SIZE, SIZE, (i) => (terrainAt && terrainAt[i] !== undefined ? terrainAt[i] : terrain));
   map.foodCap.fill(cap); map.food.fill(cap);
   const people = new People(2048);
@@ -57,6 +57,8 @@ function world(types, groups, { terrain = PLAINS, terrainAt = null, cap = 1e6, s
   const dip = new Diplomacy(map, types);
   const w = { map, people, war, dip, types, civs, ev: { deaths: [], battles: [], declared: [], settled: [] } };
   war.diplomacy = dip;
+  // Most scenes count in round 25% levies whatever the types; flat: false keeps the per-type shares of WAR.levy.
+  if (flat) war.levy.fill(0.25);
   war.level = Uint8Array.from(types, () => level);
   war.eff = { strength: new Float64Array(civs), defence: new Float64Array(civs), warLoss: new Float64Array(civs) };
   war.civTraits = new Float64Array(civs * TRAIT_COUNT);
@@ -130,7 +132,7 @@ test('RULES.md "War": the numbers', () => {
   assert.equal(WAR.fitAge, 16);
   assert.equal(WAR.maxAge, 45);
   assert.equal(WAR.fitHealth, 50);
-  assert.deepEqual({ ...WAR.levy }, { expansionist: 0.25, aggressive: 0.25, cooperative: 0.25, isolationist: 0.25, nomadic: 0.25 });
+  assert.deepEqual({ ...WAR.levy }, { expansionist: 0.25, aggressive: 0.4, cooperative: 0.2, isolationist: 0.25, nomadic: 0.3 });
   assert.equal(WAR.duelPct, 10);
   assert.equal(WAR.maxGang, 3);
   assert.equal(WAR.killPct, 50);
@@ -170,7 +172,9 @@ test('RULES.md "War": the numbers', () => {
     'in the last 20 years (this year minus that year is 20 or less)',
     'higher by 0.15 plus 0.05 for every whole 20 years the two have traded (at most 0.15 more, so +0.3 in all)',
     'aged 16 to 45 with health 50 or more',
-    'calls up 25% (rounded, at least 1 when it has any)',
+    'its **levy share** (rounded, at least 1 when it has any)',
+    'Aggressive 40%, Nomadic 30%, Expansionist and Isolationist 25%, Cooperative 20%',
+    '**Walking in.**',
     '× 1 at levels 1 and 2 (stone), × 1.25 at level 3 (bronze), × 1.5 at levels 4 and 5 (iron)',
     'forest +25%, hills +50%, mountain +100%',
     'Palisade +25%, Stone walls +75%, Palace +50%',
@@ -209,21 +213,25 @@ test('RULES.md "War" Aggressive: declares on every civ it borders at once, whate
   assert.deepEqual(declares(w, roll(0)), [], 'already at war: nothing new');
 });
 
-test('RULES.md "War" Aggressive at peace: needs people aged 15 to 45 × levy share at least 1.5 × the other\'s (9 v 6 yes, 8 v 6 no); never in a truce', () => {
+test('RULES.md "War" Aggressive at peace: needs people aged 15 to 45 × levy share at least 1.5 × the other\'s (6 v 6 yes, 5 v 6 no); never in a truce', () => {
+  // Aggressive calls up 40%, Expansionist 25%: 0.4 a >= 1.5 x 0.25 x b, so 6 v 6 (2.4 >= 2.25) yes and 5 v 6 (2 < 2.25) no.
   const at = (a, b, rel) => {
-    const w = world(['aggressive', 'expansionist'], [[NB[0], 0, a], [T, 1, b]]);
+    const w = world(['aggressive', 'expansionist'], [[NB[0], 0, a], [T, 1, b]], { flat: false });
     relate(w, 0, 1, rel);
     return declares(w);
   };
-  assert.deepEqual(at(9, 6, PEACE), [['declared', 0, 1, 100, PEACE]]);
-  assert.deepEqual(at(8, 6, PEACE), []);
-  assert.deepEqual(at(6, 6, PEACE), []);
+  assert.deepEqual(at(6, 6, PEACE), [['declared', 0, 1, 100, PEACE]]);
+  assert.deepEqual(at(5, 6, PEACE), []);
+  assert.deepEqual(at(4, 6, PEACE), []);
   assert.deepEqual(at(60, 6, TRUCE), []);
+  // The same civs with a flat 25% each need 9 v 6.
+  const flat = (a) => { const w = world(['aggressive', 'expansionist'], [[NB[0], 0, a], [T, 1, 6]]); relate(w, 0, 1, PEACE); return declares(w).length; };
+  assert.deepEqual([flat(9), flat(8)], [1, 0]);
   // Children and the old do not count.
-  const w = world(['aggressive', 'expansionist'], [[NB[0], 0, 8], [NB[0], 0, 5, { age: 10 }], [NB[0], 0, 5, { age: 46 }], [T, 1, 6]]);
+  const w = world(['aggressive', 'expansionist'], [[NB[0], 0, 5], [NB[0], 0, 5, { age: 10 }], [NB[0], 0, 5, { age: 46 }], [T, 1, 6]], { flat: false });
   relate(w, 0, 1, PEACE);
   assert.deepEqual(declares(w), []);
-  const x = world(['aggressive', 'expansionist'], [[NB[0], 0, 9, { age: 15 }], [T, 1, 6, { age: 45 }]]);
+  const x = world(['aggressive', 'expansionist'], [[NB[0], 0, 6, { age: 15 }], [T, 1, 6, { age: 45 }]], { flat: false });
   relate(x, 0, 1, PEACE);
   assert.equal(declares(x).length, 1, 'ages 15 and 45 count');
 });
@@ -1191,6 +1199,101 @@ test('RULES.md "War" Breaking the siege: a battle fought after the defenders cam
   assert.equal(w.ev.battles.length, 1);
   assert.equal(w.ev.battles[0][4], 0);
   assert.equal(w.ev.deaths.filter((d) => d.civ === 1).length, 0, 'no sack, and the warriors were only wounded');
+});
+
+// ---- levy by civ type and walking in --------------------------------------------------------------------------------
+
+test('RULES.md "War" Levy: Aggressive 40%, Nomadic 30%, Expansionist and Isolationist 25%, Cooperative 20% (rounded, at least 1)', () => {
+  const want = { aggressive: 0.4, nomadic: 0.3, expansionist: 0.25, isolationist: 0.25, cooperative: 0.2 };
+  for (const [type, share] of Object.entries(want)) {
+    assert.equal(WAR.levy[type], share, type);
+    for (const n of [1, 10, 20, 40, 100]) {
+      const w = world([type, 'expansionist'], [[NB[0], 0, n], [T, 1, 200]], { flat: false });
+      assert.equal(w.war.levyOf(0, n), Math.max(1, Math.round(share * n)), `${type} ${n}`);
+      const bt = begin(w, T, 0, 1);
+      assert.equal(bt.fit[0], Math.max(1, Math.round(share * n)), `${type} ${n} called up`);
+      assert.equal(bt.fit[1], 50, 'the Expansionist defender calls up 25% of 200');
+    }
+  }
+  // Exact counts at 40 adults: Aggressive 16, Nomadic 12, Expansionist and Isolationist 10, Cooperative 8.
+  const at40 = (t) => begin(world([t, 'expansionist'], [[NB[0], 0, 40], [T, 1, 40]], { flat: false }), T, 0, 1).fit[0];
+  assert.deepEqual(['aggressive', 'nomadic', 'expansionist', 'isolationist', 'cooperative'].map(at40), [16, 12, 10, 10, 8]);
+  // Rounding boundary: 5 adults at 30% is 1.5, which rounds to 2; 4 at 30% is 1.2, which is 1.
+  const nomad = (n) => world(['nomadic', 'expansionist'], [[NB[0], 0, n], [T, 1, 4]], { flat: false }).war.levyOf(0, n);
+  assert.deepEqual([nomad(4), nomad(5), nomad(0)], [1, 2, 0]);
+});
+
+test('RULES.md "War" Levy: the fresh levy to break a siege uses the civ\'s type share', () => {
+  const fresh = (type) => {
+    const w = world(['aggressive', type], [[NB[0], 0, 10, { str: 1 }], [T, 1, 100]], { settle: true, flat: false });
+    relate(w, 0, 1, AT_WAR);
+    walls(w, T, 1, ['palisade']);
+    const bt = begin(w, T, 0, 1);
+    const inside = bt.fit[1];
+    w.war.atk[0] = w.war.attack(0); w.war.atk[1] = w.war.attack(1);
+    w.war.relieve(w.people, w.map, 100, 60, w.rng);
+    return [inside, bt.fit[1] - inside];
+  };
+  assert.deepEqual(fresh('cooperative'), [20, 20]);
+  assert.deepEqual(fresh('expansionist'), [25, 25]);
+  assert.deepEqual(fresh('nomadic'), [30, 30]);
+  assert.deepEqual(fresh('aggressive'), [40, 40]);
+});
+
+/** Civ 0 attacks T; civ 1 has only children there (nobody to call up) unless `adults` is given. */
+function walkIn({ adults = 0, ring = [], settle = true } = {}) {
+  const groups = [[NB[0], 0, 40, { str: 1 }], [T, 1, 6, { age: 5 }]];
+  if (adults) groups.push([T, 1, adults]);
+  const w = world(['aggressive', 'expansionist'], groups, { settle });
+  if (settle) {
+    w.st.holder[T] = 1; w.st.holder[NB[0]] = 0;
+    w.st.capital[0] = NB[0]; w.st.capital[1] = T;
+    w.st.storeCap.fill(1000);
+  }
+  relate(w, 0, 1, AT_WAR);
+  if (ring.length) walls(w, T, 1, ring);
+  return w;
+}
+
+test('RULES.md "War" Walking in: nobody called up and no siege means the attacker takes the hex without a battle', () => {
+  const w = walkIn();
+  w.st.store[T * M + WOOD] = 100;
+  const bt = begin(w, T, 0, 1);
+  assert.equal(bt.start[1], 0, 'nobody to defend');
+  assert.equal(bt.siegeDays, 0);
+  assert.equal(w.war.totals.battles, 1, 'counted when it begins');
+  play(w, 31, 59);
+  assert.equal(w.war.battles.length, 0, 'over');
+  assert.equal(w.ev.battles.length, 0, 'onBattle is not called: no fight in stats, records or diplomacy');
+  assert.ok(w.war.lostTo.every((v) => v < 0), 'lostTo is not set: no revenge for the loser');
+  assert.equal(w.war.totals.battles, 0, 'not a battle');
+  assert.equal(w.war.totals.occupied, 1, 'a hex occupied');
+  assert.equal(w.war.totals.sieges, 0);
+  assert.equal(w.st.holder[T], 0, 'the hex is taken');
+  assert.equal(w.st.store[T * M + WOOD], 50, 'and looted as usual');
+  assert.ok(aliveOf(w, 0, T) > 0, 'the attacker moved in');
+  assert.equal(aliveOf(w, 1, T), 0, 'the children fled');
+});
+
+test('RULES.md "War" Walking in: a defender that called up anyone is a battle; a besieged hex with no defenders is not a walk-in', () => {
+  const fought = walkIn({ adults: 8 });
+  begin(fought, T, 0, 1);
+  play(fought, 31, 59);
+  assert.equal(fought.ev.battles.length, 1);
+  assert.equal(fought.war.totals.battles, 1);
+  assert.equal(fought.war.totals.occupied, 0);
+  assert.equal(fought.war.lostTo[1 * 2 + 0] === 100 || fought.war.lostTo[0 * 2 + 1] === 100, true, 'revenge is set');
+
+  const besieged = walkIn({ ring: ['palisade'] });
+  const bt = begin(besieged, T, 0, 1);
+  assert.equal(bt.start[1], 0);
+  assert.ok(bt.siegeDays > 0, 'the walls mean a siege');
+  play(besieged, 31, 100);
+  assert.equal(besieged.ev.battles.length, 1, 'the siege ends in a battle that is reported');
+  assert.equal(besieged.war.totals.occupied, 0);
+  assert.equal(besieged.war.totals.battles, 1);
+  assert.equal(besieged.war.totals.sieges, 1);
+  assert.equal(besieged.war.lostTo[1 * 2 + 0], 100);
 });
 
 // ---- events, summary, integration ------------------------------------------------------------------------------------

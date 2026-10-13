@@ -28,7 +28,7 @@ export const WAR = Object.freeze({
   maxAge: 45,
   fitHealth: 50,
   /** Share of a civ's fit adults (in the hex and the hexes next to it) called up for a battle, by type. */
-  levy: Object.freeze({ expansionist: 0.25, aggressive: 0.25, cooperative: 0.25, isolationist: 0.25, nomadic: 0.25 }),
+  levy: Object.freeze({ expansionist: 0.25, aggressive: 0.4, cooperative: 0.2, isolationist: 0.25, nomadic: 0.3 }),
   /** Each day, this % of the smaller side's fit warriors (rounded up, at least 1) fight a duel. */
   duelPct: 10,
   /** The larger side sends ⌊its warriors ÷ the other's⌋ fighters to each duel, at most this many. */
@@ -146,7 +146,7 @@ export class War {
     this.ended = [];
     this.endAt = new Int32Array(n).fill(-1);
     /** Battles and sieges this run, and how they ended (for the end screen). */
-    this.totals = { battles: 0, sieges: 0, siegesLifted: 0, pulledBack: 0 };
+    this.totals = { battles: 0, sieges: 0, siegesLifted: 0, pulledBack: 0, occupied: 0 };
     /** Set by the Simulation. */
     this.settle = null;
     this.level = null;
@@ -595,8 +595,15 @@ export class War {
       this.pop[h] += bt.fit[0];
     }
     if (here && this.settle && this.settle.holder[h] !== w) this.settle.capture(h, w, this.level, year, onSettle);
-    this.lostTo[l * civs + w] = year;
-    onBattle(h, bt.civ[0], bt.civ[1], bt.holder, w, bt.dead[1 - win] + sacked, bt.dead[win]);
+    // Nobody came to defend an open hex: the attacker walked in. No fight, so it keeps no war going
+    // (quiet years, revenge, Aggressive wins) and stays out of the battle counts.
+    if (bt.start[1] === 0 && bt.siegeDays === 0) {
+      this.totals.battles--;
+      this.totals.occupied++;
+    } else {
+      this.lostTo[l * civs + w] = year;
+      onBattle(h, bt.civ[0], bt.civ[1], bt.holder, w, bt.dead[1 - win] + sacked, bt.dead[win]);
+    }
     this.finish(bt);
   }
 

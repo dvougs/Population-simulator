@@ -216,7 +216,6 @@ export function howText() {
   const oldestAge = L.baseOldAgeStart + L.oldAgeSpan;
   const switchAverage = C.switchPerCooperation * TRAIT_RULES.base;
   const W = WAR;
-  const levy = W.levy.expansionist;
   const wallDays = (id) => SETTLEMENT_BUILDINGS[SB_INDEX[id]].effects.defence * W.siegeDaysPerDefence;
 
   return {
@@ -367,10 +366,12 @@ export function howText() {
           'Each month (not in winter), a civ at war may attack one enemy hex next to its people. It weighs the odds, its likely warriors and weapons against the defender\'s, '
             + `and attacks only if they are good enough for its aggression: at least ${num(1 - TRAIT_RULES.base)} at aggression ${TRAIT_RULES.base}, bolder civs at worse odds. `
             + 'A Cooperative civ only attacks to drive enemies out of hexes it holds.',
-          `Real people fight. Each side calls up ${pct(levy)} of its fit adults (${W.fitAge} to ${W.maxAge}, health ${W.fitHealth} or more) from the hex and the hexes next to it. `
+          `Real people fight. Each side calls up a share of its fit adults (${W.fitAge} to ${W.maxAge}, health ${W.fitHealth} or more) from the hex and the hexes next to it: `
+            + `Aggressive ${pct(W.levy.aggressive)}, Nomadic ${pct(W.levy.nomadic)}, Expansionist and Isolationist ${pct(W.levy.expansionist)}, Cooperative ${pct(W.levy.cooperative)}. `
             + `Every day some of them duel: one on one, or up to ${W.maxGang} on 1 when a side outnumbers the other. `
             + `The loser of a duel is killed or wounded, ${W.killPct === 50 ? '50/50' : `${W.killPct}% killed`}. A side breaks when ${W.breakPct}% of its warriors are out.`,
-          'The winner takes the hex at once and loots its store; the loser\'s people there flee to the best hex next door.',
+          'The winner takes the hex at once and loots its store; the loser\'s people there flee to the best hex next door. '
+            + 'When nobody comes to defend a hex, the attacker just walks in: that is not a battle and does not keep a war going.',
           `Strength, weapons and ground decide the duels. Bronze comes at level 3 (× ${num(W.weapons[3])}) and iron at level 4 (× ${num(W.weapons[4])}); `
             + `the side holding the hex gets the terrain's defence bonus and its walls; a Kingdom has +${pct(W.kingdomMorale)} morale against civs that are not Kingdoms.`,
           `Walls mean a siege first: ${W.siegeDaysPerDefence} days for each +100% of walls (a Palisade ${num(wallDays('palisade'))} days, Stone walls ${num(wallDays('stoneWalls'))}). `
