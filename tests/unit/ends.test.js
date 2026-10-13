@@ -203,7 +203,9 @@ test('host: endNow, keepWatching and report go through the host', () => {
   assert.equal(host.report().winnerName, null);
 });
 
+
 test('pinned state hash (re-pinned when traits, civ types, contact and levels shipped, for Kingdom borders and land-based minimums, and for one-hex moves and expansion priorities, when buildings and wonders shipped, for the 500-year balancing pass, when settlements shipped (the hash includes each hex store, building and tier), for rafts, boats and the +20% progress cap, when one tick became one day, for the 1000-year playtest fixes, for peace and trade, and for historical peoples; same run twice gives the same hash)', () => {
+
   const run = () => {
     const s = new Simulation({ seed: 'hashcheck', size: 15, civCount: 4 });
     s.tick(300);

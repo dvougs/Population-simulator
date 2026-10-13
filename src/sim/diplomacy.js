@@ -1,10 +1,10 @@
 // War, truce and peace between civs, and trade between civs at peace. Every
 // number here is listed in RULES.md ("Peace and trade").
 //
-// Every pair of civs that has fought is at war, in a truce, or at peace. A war
-// ends in a truce after quiet years or when one side is exhausted; a truce
-// forbids fighting for its years, then the pair is at peace until a fight
-// breaks it. Civs in a truce or at peace trade: once a year their capitals
+// A civ declares war (war.js); every pair that has been at war is at war, in a
+// truce, or at peace. A war ends in a truce after quiet years or when one side
+// is exhausted; a truce forbids fighting for its years, then the pair is at
+// peace until a declaration breaks it. Civs in a truce or at peace trade: once a year their capitals
 // swap what each has spare for what the other's next spend lacks, at fixed
 // values, along a road over either civ's land. Nothing here is random, and
 // pairs are always visited in civ order.
@@ -19,8 +19,8 @@ export const PEACE = 3;
 export const RELATION_NAMES = Object.freeze(['none', 'war', 'truce', 'peace']);
 
 export const DIPLOMACY = Object.freeze({
-  /** A war ends in a truce after this many years in a row without a fight between the two. */
-  quietYears: 20,
+  /** A war ends in a truce after this many years in a row without a battle between the two. */
+  quietYears: 2,
   /** Exhaustion: war deaths against the other side over the last `span` years reach this % of a civ's people. */
   span: 20,
   exhaustPct: 10,
@@ -114,6 +114,22 @@ export class Diplomacy {
     const D = DIPLOMACY;
     const t = this.tradeYears[this.key(a, b)];
     return D.peaceAggression + Math.min(D.tradeCalmMax, D.tradeCalm * Math.floor(t / D.tradeCalmYears));
+  }
+
+  /**
+   * Civ a declares war on b (war.js): a peace is broken, or two civs that never fought go to war.
+   * The quiet years count from the declaration. onEvent reports 'declared' (a declared on b; value:
+   * the relation it broke).
+   */
+  declare(a, b, year, onEvent) {
+    const k = this.key(a, b);
+    const was = this.rel[k];
+    this.rel[k] = WAR;
+    this.since[k] = year;
+    this.lastFight[k] = year;
+    this.open[k] = 0;
+    this.tradeYears[k] = 0;
+    onEvent?.('declared', a, b, year, was);
   }
 
   /** A fight between winner and loser this year; byWinner: the loser's people killed, byLoser: the winner's. Returns true when it broke a peace. */

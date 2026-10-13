@@ -128,15 +128,15 @@ test('RULES.md "Where civs expand": threats and who beats them, as the Simulatio
   assert.equal(r.beats[2], 1 << 1, 'more people: stronger');
   sim.levels.civPop[2] = 10;
   // The Aggressive civ beats every threat; a lost fight makes civ 2 one.
-  sim.contact.lostTo[1 * 3 + 2] = sim.tickCount;
+  sim.war.lostTo[1 * 3 + 2] = sim.tickCount;
   sim.expansionPriorities();
   assert.equal(r.hostile[1], 1 << 2);
   assert.equal(r.beats[1], 1 << 2, 'Aggressive: beats it');
   // A fight lost longer ago than revengeYears no longer counts.
-  sim.contact.lostTo[2 * 3 + 0] = sim.tickCount - 21;
+  sim.war.lostTo[2 * 3 + 0] = sim.tickCount - 21;
   sim.expansionPriorities();
   assert.equal(r.hostile[2], 1 << 1);
-  sim.contact.lostTo[2 * 3 + 0] = sim.tickCount - 20;
+  sim.war.lostTo[2 * 3 + 0] = sim.tickCount - 20;
   sim.expansionPriorities();
   assert.equal(r.hostile[2], (1 << 1) | 1);
   // A Kingdom threatens civs that are not Kingdoms and beats them.

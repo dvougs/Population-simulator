@@ -12,6 +12,7 @@ export { traitFacts };
 import { PEOPLES, TRAIT_COSTS, BUDGET_SLACK, traitBudget } from '../sim/peoples.js';
 import { CIV_TYPES, CIV_TYPE_NAMES, TYPE_RULES, civTypeText } from '../sim/civTypes.js';
 import { CONTACT } from '../sim/contact.js';
+import { WAR } from '../sim/war.js';
 import { DIPLOMACY, TRADE } from '../sim/diplomacy.js';
 import {
   LEVEL_NAMES, REQUIREMENTS, GATHER, LEVEL_EFFECTS, TYPE_LEVEL_RULES,
@@ -19,7 +20,7 @@ import {
 import { MATERIAL_NAMES, MATERIAL_TIER, DEPOSIT_CHANCE, RIVER_DEPOSIT_CHANCE } from '../sim/materials.js';
 import { BUILDINGS, BUILDING_COST, WONDERS, WONDER_RULES, ERAS, effectText, materialText } from '../sim/buildings.js';
 import { DEFAULT_PARAMS, LIMITS, YEAR_LIMIT_CHOICES } from '../sim/params.js';
-import { TIERS, TIER_NAMES, HAND, SETTLE, MAX_PROGRESS_BONUS } from '../sim/settlements.js';
+import { TIERS, TIER_NAMES, HAND, SETTLE, MAX_PROGRESS_BONUS, SETTLEMENT_BUILDINGS, SB_INDEX } from '../sim/settlements.js';
 import { BASE_TPS, SPEEDS, STEP_DAYS } from '../loop.js';
 import { DAYS_PER_YEAR } from '../sim/calendar.js';
 import { CIV_STYLES } from '../render/civStyle.js';
@@ -76,8 +77,8 @@ export function levelFacts() {
     `Farming: plains and river hexes feed ${pct(e.farmBonus)} more. Rafts: people can cross ${e.raftRange === 1 ? 'one sea or lake hex' : `${e.raftRange} sea or lake hexes`} when they move.`,
     `Shelter: hunger hurts ${e.shelterFactor === 0.5 ? 'half as much' : `× ${e.shelterFactor}`} in desert, tundra and mountain.`,
     `Boats: people can sail across up to ${e.boatRange} sea or lake hexes in a row when they move.`,
-    `Every hex feeds ${pct(e.kingdomBonus)} more, old age comes ${e.oldAgeDelay} years later, and the Kingdom fights at × ${e.kingdomStrength} strength `
-      + 'against civs that are not Kingdoms. Land it surrounds joins it, people and all, and no other civ can move in.',
+    `Every hex feeds ${pct(e.kingdomBonus)} more, old age comes ${e.oldAgeDelay} years later, and the Kingdom has +${pct(WAR.kingdomMorale)} morale `
+      + 'in battles against civs that are not Kingdoms. Land it surrounds joins it, people and all, and no other civ can move in.',
   ];
   return LEVEL_NAMES.map((name, k) => {
     const r = REQUIREMENTS[k - 1];
@@ -141,7 +142,7 @@ export function buildingsSection() {
     after: [
       'Each level also has one wonder for the whole world. Any civ at that level or higher may try, but only the first to finish gets it; '
         + `the others stop and get ${W.refund === 0.5 ? 'half' : pct(W.refund)} of their materials back. A wonder is not needed to level up, but its bonus is huge.`,
-      'Wonders can be taken. A wonder belongs to whoever holds its hex: win the hex, by numbers or in a fight, and the wonder is yours, bonus and all. '
+      'Wonders can be taken. A wonder belongs to whoever holds its hex: win the hex, by numbers or in a battle, and the wonder is yours, bonus and all. '
         + 'An empty wonder stands abandoned, its bonus silent, until someone settles it. A wonder near a border is a prize worth a war.',
       `Who tries? A civ thinks about the unfinished wonders of its level and earlier ones, one at a time and the oldest first, every ${W.checkYears} years. `
         + `It weighs its type's lean (${andList(lean)}), how safe it is (the share of its hexes away from threats it cannot beat) `
@@ -151,6 +152,7 @@ export function buildingsSection() {
     ],
   };
 }
+
 
 const TRAIT_WORDS = {
   fertility: 'fertility', lifeExpectancy: 'life expectancy', strength: 'strength', aggression: 'aggression',
@@ -213,6 +215,9 @@ export function howText() {
   const cooperative = TYPE_RULES.cooperative;
   const oldestAge = L.baseOldAgeStart + L.oldAgeSpan;
   const switchAverage = C.switchPerCooperation * TRAIT_RULES.base;
+  const W = WAR;
+  const levy = W.levy.expansionist;
+  const wallDays = (id) => SETTLEMENT_BUILDINGS[SB_INDEX[id]].effects.defence * W.siegeDaysPerDefence;
 
   return {
     intro: 'A whole world in your pocket. You shape the land and choose who lives on it; then you watch. '
@@ -268,11 +273,12 @@ export function howText() {
           ['First day: births', 'Fed adults may have a child.'],
           ['Every month: migrate', 'A twelfth of the people may set out each month: the hungry and the crowded head for better land, so new land fills up over the year. In winter nobody moves into or out of tundra and mountains.'],
           ['Every season: food regrows', `Hexes regrow ${pct(L.foodRegrowth)} of their capacity over a year, most in spring and summer, least in winter, and nothing on tundra and mountains in winter.`],
-          ['Last day: contact', 'Civs sharing a hex may fight, or people may change sides.'],
+          ['Last day: contact', 'People of civs sharing a hex may change sides.'],
           ['Last day: records', 'The year goes into the statistics, the war tallies and the history.'],
           ['Last day: the end?', 'The end conditions you picked are checked.'],
         ],
-        after: 'Within each step everyone decides first and then it all happens at once, so nobody gains from being first in line.',
+        after: 'Within each step everyone decides first and then it all happens at once, so nobody gains from being first in line. '
+          + 'War runs alongside, day by day: declarations and attacks on the first day of each month, and every battle fights each day.',
       },
       {
         id: 'migration',
@@ -286,7 +292,7 @@ export function howText() {
           'They head for a hex with more spare food than home, picked at random but weighted by that spare food, '
             + `counted ${M.ownCivWeight === 2 ? 'twice' : `× ${M.ownCivWeight}`} where their own civ already lives. So civs spread like ink: along rivers and coasts first, into the hills last.`,
           `Civs also choose with a plan: a hex with a material their next level needs counts × ${M.materialWeight}; `
-            + `next to a hostile civ they cannot beat, × ${M.avoidWeight}; next to hostile civs they can beat, × ${M.pushWeight} (if they ever start fights); `
+            + `next to a hostile civ they cannot beat, × ${M.avoidWeight}; next to hostile civs they can beat, × ${M.pushWeight} (if they can declare war); `
             + `and +${pct(M.contiguityPerHex)} for each neighbouring hex they already hold, so their land stays in one piece.`,
         ],
       },
@@ -346,22 +352,29 @@ export function howText() {
         kicker: 'Contact',
         title: 'War, peace and changing sides',
         paras: [
-          'When people of two civs share a hex, a fight may break out there once a year. A civ attacks when:',
+          'Civs fight by going to war. On the first day of each month a civ may declare war on a civ it borders (their people live in the same hex or next door). '
+            + `An Aggressive civ declares war on every civ it borders. ${cooperative.neverStartsFights ? 'A Cooperative civ never declares war, though war can be declared on it. ' : ''}`
+            + `Any other civ needs a reason, and then declares with a chance of its people's average aggression ÷ ${W.declareMonths} each month:`,
         ],
         points: [
-          'it is Aggressive: then it always does;',
-          `someone in the hex went hungry this year and its people's average aggression is above ${C.hungerAggression};`,
-          `the hex is crowded and their aggression is above ${C.crowdAggression};`,
-          `it outnumbers the other civ ${C.numbersRatio} to 1 there and their aggression is above ${C.numbersAggression};`,
-          `the other civ beat it in the last ${C.revengeYears} years: revenge.`,
+          `hunger: someone went hungry last year where the two meet, and its aggression is above ${W.hungerAggression};`,
+          `crowding: a hex where they meet is crowded, and its aggression is above ${W.crowdAggression};`,
+          `numbers: it outnumbers the other ${W.numbersRatio} to 1, and its aggression is above ${W.numbersAggression};`,
+          `materials: the other sits on a deposit it needs next door, and its aggression is above ${W.wantAggression};`,
+          `revenge: the other beat it in a battle in the last ${W.revengeYears} years.`,
         ],
         after: [
-          'Except for the Aggressive rule, it then attacks with a chance equal to its average aggression. '
-            + `${cooperative.neverStartsFights ? 'Cooperative civs never start a fight, though they can be attacked. ' : ''}`
-            + 'Each hex sees at most one fight a year.',
-          'Each side adds up its people\'s strength, and the civ that held the hex adds the terrain\'s defence bonus. '
-            + `A Kingdom counts × ${E.kingdomStrength} against a civ that is not one. The stronger side wins. The loser loses ${C.loserDeathPct}% of its people there and the rest flee to the best hex next door the winner is not in; `
-            + `the winner loses ${C.winnerDeathPct}%, rounded down.`,
+          'Each month (not in winter), a civ at war may attack one enemy hex next to its people. It weighs the odds, its likely warriors and weapons against the defender\'s, '
+            + `and attacks only if they are good enough for its aggression: at least ${num(1 - TRAIT_RULES.base)} at aggression ${TRAIT_RULES.base}, bolder civs at worse odds. `
+            + 'A Cooperative civ only attacks to drive enemies out of hexes it holds.',
+          `Real people fight. Each side calls up ${pct(levy)} of its fit adults (${W.fitAge} to ${W.maxAge}, health ${W.fitHealth} or more) from the hex and the hexes next to it. `
+            + `Every day some of them duel: one on one, or up to ${W.maxGang} on 1 when a side outnumbers the other. `
+            + `The loser of a duel is killed or wounded, ${W.killPct === 50 ? '50/50' : `${W.killPct}% killed`}. A side breaks when ${W.breakPct}% of its warriors are out.`,
+          'The winner takes the hex at once and loots its store; the loser\'s people there flee to the best hex next door.',
+          `Strength, weapons and ground decide the duels. Bronze comes at level 3 (× ${num(W.weapons[3])}) and iron at level 4 (× ${num(W.weapons[4])}); `
+            + `the side holding the hex gets the terrain's defence bonus and its walls; a Kingdom has +${pct(W.kingdomMorale)} morale against civs that are not Kingdoms.`,
+          `Walls mean a siege first: ${W.siegeDaysPerDefence} days for each +100% of walls (a Palisade ${num(wallDays('palisade'))} days, Stone walls ${num(wallDays('stoneWalls'))}). `
+            + 'Nothing grows in a besieged hex, the defenders may come out to break the siege, and winter lifts it.',
           `Where nobody fights, people may simply change sides: about ${pct(switchAverage)} a year at average cooperation `
             + `(${pct(C.switchPerCooperation)} × cooperation), and half as often away from a Cooperative civ.`,
         ],
@@ -371,12 +384,12 @@ export function howText() {
         kicker: 'Peace and trade',
         title: 'Truces, tribute and caravans',
         paras: [
-          `Wars end. Two civs that have not fought for ${P.quietYears} years make a truce. Sooner, a civ that has lost ${P.exhaustPct}% of its people `
+          `Wars end. Two civs that have not fought a battle for ${P.quietYears} years make a truce. Sooner, a civ that has lost ${P.exhaustPct}% of its people `
             + `to the other in ${P.span} years asks for one, and pays ${pct(P.tribute)} of its capital's store as tribute; `
-            + `an Aggressive civ that has won ${P.refuseWinThirds} of every 3 fights refuses.`,
-          `A truce lasts ${P.truceYears} years (${P.truceYearsAggressive} with an Aggressive civ): no fights at all. Then comes peace. `
-            + `At peace there is no revenge, fights need more aggression (+${P.peaceAggression}, and more the longer they trade), `
-            + `and an Aggressive civ only attacks where it is ${P.aggressivePeaceRatio} times stronger. One fight and it is war again.`,
+            + `an Aggressive civ that has won ${P.refuseWinThirds} of every 3 battles refuses.`,
+          `A truce lasts ${P.truceYears} years (${P.truceYearsAggressive} with an Aggressive civ): no war at all. Then comes peace. `
+            + `At peace there is no revenge, declaring war needs more aggression (+${P.peaceAggression}, and more the longer they trade), `
+            + `and an Aggressive civ only declares when it has ${P.aggressivePeaceRatio} times the other's warriors. One declaration and it is war again.`,
           'Civs in a truce or at peace trade, when a road over their own land (or a sea crossing their boats can make) joins their capitals. '
             + `Each buys what its next spend lacks from what the other has spare: common goods are worth ${T.value.common}, uncommon ${T.value.uncommon}, exotic ${T.value.exotic}, `
             + `and the buyer pays ${T.price} × in its own spare goods. Up to ${T.volume} worth a year, more with a Market, a Cooperative partner or an old road of ${T.oldRouteYears} years; `

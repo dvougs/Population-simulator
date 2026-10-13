@@ -20,7 +20,7 @@ export const MILESTONES = Object.freeze([100, 500, 1000]);
  * `famines` deadliest such famines are kept.
  */
 export const CHRONICLE = Object.freeze({ lines: 12, famineShare: 0.1, famines: 3 });
-export const EVENT_TYPES = ['famine', 'extinction', 'contact', 'milestone', 'level', 'wonder', 'captured', 'city', 'cityTaken', 'truce', 'warAgain', 'trade', 'oldRoute'];
+export const EVENT_TYPES = ['famine', 'extinction', 'contact', 'milestone', 'level', 'wonder', 'captured', 'city', 'cityTaken', 'truce', 'warAgain', 'trade', 'oldRoute', 'declared'];
 /** Wonder captures logged at most (the rest are only counted). */
 export const CAPTURES_LOGGED = 16;
 const EV_FAMINE = 0;
@@ -36,16 +36,19 @@ const EV_TRUCE = 9;
 const EV_WAR_AGAIN = 10;
 const EV_TRADE = 11;
 const EV_OLD_ROUTE = 12;
+const EV_DECLARED = 13;
 const DIPLOMACY_EVENTS = { truce: EV_TRUCE, war: EV_WAR_AGAIN, trade: EV_TRADE, oldRoute: EV_OLD_ROUTE };
 /** Diplomacy events (truces, wars resumed, trade opened, old trade routes) logged at most. */
 export const DIPLOMACY_LOGGED = 24;
+/** Declarations of war logged at most (civ: who declared, other: on whom). */
+export const DECLARED_LOGGED = 16;
 /** Settlement tiers whose first reaching is logged once per civ (city, metropolis, megapolis), and city captures logged at most. */
 export const CITY_TIERS_LOGGED = Object.freeze([3, 4, 5]);
 export const CITY_TAKEN_LOGGED = 16;
 /** Order of events in the same year: famines, level-ups (start of the year), first contacts, milestones, extinctions (end of it). */
-const EVENT_ORDER = { famine: 0, level: 1, wonder: 1, captured: 1, city: 1, cityTaken: 1, trade: 1, oldRoute: 1, contact: 2, warAgain: 2, truce: 2, milestone: 3, extinction: 4 };
+const EVENT_ORDER = { famine: 0, level: 1, wonder: 1, captured: 1, city: 1, cityTaken: 1, trade: 1, oldRoute: 1, contact: 2, declared: 2, warAgain: 2, truce: 2, milestone: 3, extinction: 4 };
 /** Which events the chronicle keeps first when there are too many. */
-const IMPORTANCE = { extinction: 0, wonder: 1, level: 1, captured: 2, city: 2, cityTaken: 2, contact: 2, truce: 2, warAgain: 2, trade: 3, oldRoute: 3, milestone: 3, famine: 4 };
+const IMPORTANCE = { extinction: 0, wonder: 1, level: 1, captured: 2, city: 2, cityTaken: 2, contact: 2, declared: 2, truce: 2, warAgain: 2, trade: 3, oldRoute: 3, milestone: 3, famine: 4 };
 const byYear = (a, b) => a.year - b.year || EVENT_ORDER[a.type] - EVENT_ORDER[b.type] || a.civ - b.civ
   || (a.other ?? 0) - (b.other ?? 0) || (a.level ?? 0) - (b.level ?? 0) || (a.people ?? 0) - (b.people ?? 0);
 /** Within a kind: higher levels and milestones, then deadlier famines, then the earlier event. */
@@ -124,12 +127,13 @@ export class Records {
     this.cityLogged = new Uint8Array(civs);
     this.cityTaken = 0;
     this.diplomacyLogged = 0;
+    this.declaredLogged = 0;
   }
 
   /** Every event the log can hold: a first contact per pair; per civ 3 milestones, 4 level-ups (levels 2 to 5) and an extinction. */
   room() {
     return (this.civs * (this.civs - 1)) / 2 + (MILESTONES.length + 4 + 1 + CITY_TIERS_LOGGED.length) * this.civs + 4 + CAPTURES_LOGGED
-      + CITY_TAKEN_LOGGED + DIPLOMACY_LOGGED;
+      + CITY_TAKEN_LOGGED + DIPLOMACY_LOGGED + DECLARED_LOGGED;
   }
 
   /**
@@ -170,6 +174,13 @@ export class Records {
    * tribute, 0 for none), 'war' (a truce or peace broken), 'trade' (first goods) or 'oldRoute'.
    */
   diplomacy(kind, a, b, year, value) {
+    if (kind === 'declared') {
+      if (this.declaredLogged >= DECLARED_LOGGED) return;
+      this.declaredLogged++;
+      const e = this.push(EV_DECLARED, a, year);
+      if (e >= 0) { this.evOther[e] = b; this.evValue[e] = 0; }
+      return;
+    }
     const type = DIPLOMACY_EVENTS[kind];
     if (type === undefined || this.diplomacyLogged >= DIPLOMACY_LOGGED) return;
     this.diplomacyLogged++;
@@ -384,7 +395,7 @@ export class Records {
       else if (t === EV_WONDER) e.era = this.evValue[k];
       else if (t === EV_CAPTURED) Object.assign(e, { era: this.evValue[k], other: this.evOther[k] === 255 ? null : this.evOther[k] });
       else if (t === EV_TRUCE) Object.assign(e, { other: this.evOther[k], tribute: this.evValue[k] > 0 ? this.evValue[k] - 1 : null });
-      else if (t >= EV_WAR_AGAIN && t <= EV_OLD_ROUTE) e.other = this.evOther[k];
+      else if ((t >= EV_WAR_AGAIN && t <= EV_OLD_ROUTE) || t === EV_DECLARED) e.other = this.evOther[k];
       else if (t === EV_CITY || t === EV_CITY_TAKEN) {
         const h = this.evHex[k];
         Object.assign(e, { hex: h, col: h % this.cols, row: Math.floor(h / this.cols) });

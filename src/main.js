@@ -310,6 +310,7 @@ function reloadRenderer() {
   seasonDay = -1;
   renderer.setPopulation(host.population(), performance.now());
   renderer.setBuildings(host.buildings());
+  renderer.setBattles?.(host.battles());
   renderer.setSettlements(host.settlements(), performance.now(), true);
   person = null;
   renderer.selectPerson(-1);
@@ -447,6 +448,7 @@ function updatePanels() {
   renderLevels(ui.civLevels, stats);
   renderHudCivs(ui.hudCivs, stats);
   if (renderer.setBuildings(host.buildings())) dirty = true;
+  if (renderer.setBattles?.(host.battles())) dirty = true;
   if (renderer.setLevels?.(stats.civs.map((c) => c.level))) dirty = true;
   // Running, the renderer takes new settlements with its next redraw; paused (a step), at once.
   if (renderer.setSettlements(host.settlements(), performance.now(), loop.paused)) dirty = true;
@@ -466,6 +468,7 @@ function showHexCard() {
   const row = Math.floor(selected / map.cols);
   const listOpen = ui.inspector.dataset.list === 'open';
   renderInspector(ui.inspector, host.inspect(col, row), () => select(-1), {
+    battle: host.battles().find((b) => b.hex === selected) ?? null,
     people: listOpen ? host.hexPeople(col, row, 100) : null,
     onEnter: renderer === renderer3d ? () => enterHex(selected) : null,
     onToggleList: () => { showHexCard(); placeInspector(true); },

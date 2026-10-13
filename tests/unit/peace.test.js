@@ -1,4 +1,4 @@
-// RULES.md "Peace and trade" (Terms, Trade, Empire), "Contact" truce and peace, "Settlements" holder, "Supply routes"
+// RULES.md "Peace and trade" (Terms, Trade, Empire), "Settlements" holder, "Supply routes"
 // through partners' land, and the diplomacy events in the History log, on hand-built worlds.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -25,7 +25,7 @@ const WOOD = 0, STONE = 1, GOLD = 6;
 // ---- the numbers ---------------------------------------------------------------------------------------------------
 
 test('RULES.md "Peace and trade": the numbers', () => {
-  assert.equal(DIPLOMACY.quietYears, 20);
+  assert.equal(DIPLOMACY.quietYears, 2);
   assert.equal(DIPLOMACY.span, 20);
   assert.equal(DIPLOMACY.exhaustPct, 10);
   assert.equal(DIPLOMACY.refuseWinThirds, 2);
@@ -47,6 +47,7 @@ test('RULES.md "Peace and trade": the numbers', () => {
   assert.equal(TRADE.oldRouteYears, 50);
   assert.equal(TRADE.lossPerStep, 0.02);
   assert.equal(TRADE.minLoad, 0.01);
+  assert.ok(RULES.includes('have not fought a battle in the last 2 years'));
   assert.ok(RULES.includes('Goods lose 2% of what was sent for every step'));
   assert.ok(RULES.includes('A pair may trade 60 value a year'));
 });
@@ -68,68 +69,76 @@ function dip(types = ['expansionist', 'expansionist']) {
   return d;
 }
 
-test('RULES.md "Peace and trade": civs that never fought have no relation; a fight makes war and logs nothing; war stays war', () => {
+test('RULES.md "Peace and trade": civs that never fought have no relation; declare() makes war and logs a declaration; war stays war', () => {
   const d = dip();
   assert.equal(d.relation(0, 1), NO_RELATION);
   assert.equal(d.relation(0, 0), NO_RELATION);
-  assert.equal(d.fightY(5, 0, 1, 1, 0), false);
+  d.declare(0, 1, 5, d.on);
   assert.equal(d.relation(0, 1), WAR);
   assert.equal(d.relation(1, 0), WAR);
-  assert.deepEqual(d.ev, []);
+  assert.deepEqual(d.ev, [['declared', 0, 1, 5, NO_RELATION]]);
   assert.equal(d.fightY(6, 1, 0, 1, 0), false);
   assert.equal(d.relation(0, 1), WAR);
 });
 
-test('RULES.md "Terms" truce by quiet: 19 quiet years is not enough, 20 makes a truce; nobody pays; revenge is forgiven', () => {
+test('RULES.md "Terms" truce by quiet: 1 quiet year is not enough, 2 make a truce; nobody pays; revenge is forgiven', () => {
   const d = dip();
   d.fightY(10, 0, 1, 1, 0);
-  for (let y = 10; y < 30; y++) { d.end(y); assert.equal(d.relation(0, 1), WAR, `year ${y}`); }
-  d.end(30);
+  d.end(10); assert.equal(d.relation(0, 1), WAR, 'year of the battle');
+  d.end(11); assert.equal(d.relation(0, 1), WAR, '1 year');
+  d.end(12);
   assert.equal(d.relation(0, 1), TRUCE);
-  assert.deepEqual(d.ev, [['truce', 0, 1, 30, 0]]);
+  assert.deepEqual(d.ev, [['truce', 0, 1, 12, 0]]);
   assert.deepEqual(d.forgiven, [[0, 1]]);
   assert.equal(d.truces, 1);
-  assert.equal(d.truceEnd[0 * 2 + 1], 80);
+  assert.equal(d.truceEnd[0 * 2 + 1], 62);
 });
 
-test('RULES.md "Terms" truce by quiet: a fight in year 11 restarts the count', () => {
+test('RULES.md "Terms" truce by quiet: the count runs from the declaration if later, and a battle in year 11 restarts it', () => {
   const d = dip();
-  d.fightY(10, 0, 1, 1, 0);
-  d.fightY(11, 0, 1, 1, 0);
-  d.end(30);
+  d.declare(0, 1, 10, d.on);
+  d.end(11);
   assert.equal(d.relation(0, 1), WAR);
-  d.end(31);
-  assert.equal(d.relation(0, 1), TRUCE);
+  d.end(12);
+  assert.equal(d.relation(0, 1), TRUCE, 'two years after the declaration with no battle');
+  const e = dip();
+  e.fightY(10, 0, 1, 1, 0);
+  e.fightY(11, 0, 1, 1, 0);
+  e.end(12);
+  assert.equal(e.relation(0, 1), WAR);
+  e.end(13);
+  assert.equal(e.relation(0, 1), TRUCE);
 });
 
-test('RULES.md "Terms" a truce lasts 50 years (30 with an Aggressive civ), then peace; a fight in either breaks it with a war event', () => {
+test('RULES.md "Terms" a truce lasts 50 years (30 with an Aggressive civ), then peace; a declaration breaks peace and the 2-year count starts again', () => {
   for (const [types, len] of [[['expansionist', 'cooperative'], 50], [['expansionist', 'aggressive'], 30]]) {
     const d = dip(types);
     d.fightY(1, 0, 1, 1, 0);
-    d.end(21);
+    d.end(3);
     assert.equal(d.relation(0, 1), TRUCE);
-    d.end(21 + len - 1);
+    d.end(3 + len - 1);
     assert.equal(d.relation(0, 1), TRUCE, `${len}: still a truce one year before`);
-    d.end(21 + len);
+    d.end(3 + len);
     assert.equal(d.relation(0, 1), PEACE, `${len}: peace after`);
-    d.end(21 + len + 500);
+    d.end(3 + len + 500);
     assert.equal(d.relation(0, 1), PEACE, 'peace lasts');
   }
-  for (const stage of [TRUCE, PEACE]) {
-    const d = dip();
-    d.fightY(1, 0, 1, 1, 0);
-    d.end(21);
-    if (stage === PEACE) d.end(71);
-    assert.equal(d.relation(0, 1), stage);
-    d.ev.length = 0;
-    assert.equal(d.fightY(100, 1, 0, 1, 0), true, 'returns true when it broke a truce or peace');
-    assert.equal(d.relation(0, 1), WAR);
-    assert.deepEqual(d.ev, [['war', 0, 1, 100, 0]]);
-    d.end(119);
-    assert.equal(d.relation(0, 1), WAR, 'the 20-year count starts again');
-    d.end(120);
-    assert.equal(d.relation(0, 1), TRUCE);
-  }
+  const d = dip();
+  d.fightY(1, 0, 1, 1, 0);
+  d.end(3);
+  d.end(53);
+  assert.equal(d.relation(0, 1), PEACE);
+  d.tradeYears[1] = 45; d.open[1] = 1;
+  d.ev.length = 0;
+  d.declare(1, 0, 100, d.on);
+  assert.equal(d.relation(0, 1), WAR);
+  assert.deepEqual(d.ev, [['declared', 1, 0, 100, PEACE]], 'the declaration reports the peace it broke');
+  assert.equal(d.tradeYears[1], 0, 'the years of open trade start again');
+  assert.equal(d.open[1], 0);
+  d.end(101);
+  assert.equal(d.relation(0, 1), WAR, 'the 2-year count starts again');
+  d.end(102);
+  assert.equal(d.relation(0, 1), TRUCE);
 });
 
 test('RULES.md "Terms" a fight resets the years of open trade', () => {
@@ -212,10 +221,10 @@ test('RULES.md "Terms" Aggressive refuses a truce when it won at least 2 of 3 fi
   const q = dip(['expansionist', 'aggressive']);
   q.fightY(10, 1, 0, 10, 0);
   q.fightY(11, 1, 0, 0, 0);
-  q.end(12);
+  q.end(11);
   assert.equal(q.relation(0, 1), WAR, 'exhausted civ 0 asked the Aggressive winner (2 of 2), refused');
-  q.end(31);
-  assert.equal(q.relation(0, 1), TRUCE, 'quiet 20 years: truce anyway');
+  q.end(13);
+  assert.equal(q.relation(0, 1), TRUCE, 'quiet 2 years: truce anyway');
 });
 
 test('RULES.md "Terms" civs that died out keep their last relation', () => {
@@ -248,70 +257,6 @@ test('RULES.md "Contact" calm: +0.15 at peace, +0.05 for every whole 20 years of
   near(calm(40), 0.25, 1e-12);
   near(calm(60), 0.3, 1e-12);
   near(calm(1000), 0.3, 1e-12);
-});
-
-// ---- contact -------------------------------------------------------------------------------------------------------
-
-const SIZE = 5;
-const HEX = 12;
-function scene(types, groups, rel, tradeYears = 0) {
-  const map = makeMap(SIZE, SIZE, () => PLAINS);
-  map.foodCap.fill(1e6); map.food.fill(1e6);
-  const people = new People(512);
-  for (const [hex, civ, n, t = {}] of groups) {
-    for (let k = 0; k < n; k++) {
-      const i = people.add(hex, civ, 25, 100, 0);
-      people.hunger[i] = t.hunger ?? 0;
-      people.traits[AGGRESSION][i] = t.agg ?? 0.5;
-      people.traits[STRENGTH][i] = 0.5;
-      people.traits[COOPERATION][i] = 0.5;
-    }
-  }
-  const contact = new Contact(map, types);
-  const d = new Diplomacy(map, types);
-  d.rel[1] = rel;
-  d.tradeYears[1] = tradeYears;
-  contact.diplomacy = d;
-  return { map, people, contact, civs: types.length };
-}
-function fights(w, seed = 'p', year = 100) {
-  const cnt = new Int32Array(w.map.count * w.civs);
-  for (let i = 0; i < w.people.high; i++) if (w.people.alive[i]) cnt[w.people.hex[i] * w.civs + w.people.civ[i]]++;
-  return w.contact.year(w.people, w.map, cnt, year, new Rng(`${seed}w`), new Rng(`${seed}s`), () => {}, () => {}, () => {});
-}
-const total = (make, trials = 60) => { let n = 0; for (let t = 0; t < trials; t++) n += fights(make(), `t${t}`); return n; };
-
-test('RULES.md "Contact" truce: no fights at all, even Aggressive and with revenge; the same scene at war fights', () => {
-  const make = (rel) => () => { const w = scene(['aggressive', 'expansionist'], [[HEX, 0, 6], [HEX, 1, 6]], rel); w.contact.lostTo[1 * 2 + 0] = 95; return w; };
-  assert.equal(total(make(TRUCE), 20), 0);
-  assert.equal(total(make(WAR), 20), 20);
-  assert.equal(total(make(NO_RELATION), 20), 20);
-});
-
-test('RULES.md "Contact" peace: an Aggressive civ attacks only at 1.5 x the other\'s strength (9 v 6 yes, 8 v 6 no)', () => {
-  const make = (a, b) => () => scene(['aggressive', 'expansionist'], [[HEX, 0, a], [HEX, 1, b]], PEACE);
-  assert.equal(total(make(9, 6), 10), 10);
-  assert.equal(total(make(8, 6), 10), 0);
-  assert.equal(total(make(6, 6), 10), 0);
-});
-
-test('RULES.md "Contact" peace: no revenge', () => {
-  const make = (rel) => () => { const w = scene(['expansionist', 'expansionist'], [[HEX, 0, 5, { agg: 1 }], [HEX, 1, 5, { agg: 1 }]], rel); w.contact.lostTo[0 * 2 + 1] = 95; w.contact.lostTo[1 * 2 + 0] = 95; return w; };
-  assert.ok(total(make(WAR), 10) >= 10);
-  assert.equal(total(make(PEACE), 10), 0);
-});
-
-test('RULES.md "Contact" peace: hunger needs aggression above 0.5 + 0.15 + trade calm', () => {
-  const make = (agg, years, rel = PEACE) => () => scene(['expansionist', 'expansionist'], [[HEX, 0, 5, { agg, hunger: 1 }], [HEX, 1, 5, { agg, hunger: 1 }]], rel, years);
-  assert.ok(total(make(0.6, 0, WAR)) > 0, 'at war 0.6 > 0.5 fights');
-  assert.equal(total(make(0.6, 0)), 0, '0.6 is not above 0.65');
-  assert.ok(total(make(0.68, 0)) > 0, '0.68 is above 0.65');
-  assert.equal(total(make(0.68, 20)), 0, '20 years of trade: needs above 0.7');
-  assert.ok(total(make(0.72, 20)) > 0);
-  assert.equal(total(make(0.78, 60)), 0, '60 years: needs above 0.8');
-  assert.ok(total(make(0.83, 60)) > 0);
-  assert.equal(total(make(0.78, 600)), 0, 'the calm stops at +0.15');
-  assert.ok(total(make(0.83, 600)) > 0);
 });
 
 // ---- trade ---------------------------------------------------------------------------------------------------------
@@ -620,24 +565,23 @@ test('RULES.md "End screen" History lines for diplomacy events', () => {
 
 // ---- seeded runs ---------------------------------------------------------------------------------------------------
 
-test('seeded run: relations and trade show up in stats, nobody fights inside a truce, and the same params give the same hash', () => {
+test('seeded run: relations and trade show up in stats, nobody fights battles inside a truce or at peace, and the same params give the same hash', () => {
   const run = () => {
     const s = new Simulation({ seed: 'peace1', size: 12, civCount: 4, startPop: 40, civTypes: ['aggressive', 'expansionist', 'cooperative', 'aggressive'] });
     const fought = [];
-    const onFight = s.onFight;
-    s.onFight = (h, a, d, ...rest) => {
+    const onBattle = s.onBattle;
+    s.onBattle = (h, a, d, ...rest) => {
       const r = s.diplomacy.relation(a, d);
-      if (r === TRUCE) fought.push([s.tickCount, a, d]);
-      return onFight(h, a, d, ...rest);
+      if (r === TRUCE || r === PEACE) fought.push([s.tickCount, a, d]);
+      return onBattle(h, a, d, ...rest);
     };
-    s.contact.diplomacy = s.diplomacy;
     s.tick(400);
     return { s, fought };
   };
   const a = run();
   const b = run();
   assert.equal(a.s.hash(), b.s.hash());
-  assert.deepEqual(a.fought, [], 'a fight reported in a truce');
+  assert.deepEqual(a.fought, [], 'a battle fought in a truce or at peace');
   const st = a.s.stats();
   assert.ok(st.truces > 0, 'truces were made');
   assert.ok(st.relations.some((r) => r.relation === 'peace' && r.tradeOpen), 'a pair at peace trades');
