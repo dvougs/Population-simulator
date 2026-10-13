@@ -50,11 +50,11 @@ test('How to play text: has the sections in the RULES.md order and every number 
   for (const must of [
     'from 10 × 10 up to 50 × 50', 'regrows 50%', '+30 food',
     'costs 1 movement point', 'desert or tundra 1.5', 'forest or hills 2', 'mountain 3', '+25% in forest, +50% in hills and +100% in mountain',
-    'health from 0 to 100', 'they gain 25 health', 'they lose about 35', 'Between 16 and 40', 'about a 5% chance', 'From about 45', 'past about 85',
+    'health from 0 to 100', 'they gain 25 health', 'they lose about 35', 'Women have the children, from 15 to 49', 'up to a 30% chance a year at her best ages', 'rests a year after each child', '51.2% boys, 1.5% are twins', "average of its parents' traits", '20% of babies die in their first year', 'about 1 in 3 children never reach 16', 'kills the mother 1% of the time', 'From about 45', 'past about 85',
     '2 days every second', 'a season in 45 seconds and a year in 3 minutes', '50×, 100×, 500× or Max', 'step a month (30 days)', 'years of 360 days',
     'hungry sets out with a 50% chance', 'more people than 50% of its food', 'sets out with a 20% chance',
     'People move one hex a year', 'with 5 movement points a year', 'needs counts × 3', 'cannot beat, × 0.25', 'can beat, × 2', '+20% for each neighbouring hex', 'counted twice',
-    '1 to 8 civilisations', '2 to 200 people (20 by default)', 'at least 3 steps',
+    '1 to 8 civilisations', '4 to 200 people (20 by default)', 'at least 3 steps',
     'up to ±3%', '0% to 10%',
     'above 0.5', 'above 0.4', '3 to 1', 'above 0.45', 'last 20 years', 'calls up 25% of its fit adults (16 to 45, health 50 or more)', 'up to 3 on 1', 'killed or wounded, 50/50', 'breaks when 40% of its warriors are out', '(× 1.25)', '(× 1.5)', '+25% morale', 'a Palisade 30 days, Stone walls 90', 'have not fought a battle for 2 years', 'One declaration and it is war again', '÷ 12 each month', 'outnumbers the other 3 to 1', 'about 1% a year',
     'There are 9 materials', 'at most 20% of the people there went hungry last year', "20% of a hex's adults gather its deposits",

@@ -954,21 +954,23 @@ test('"Births": a civ\'s birth bonus is its level\'s 0.5 pt per level above 1 pl
   w.lv.level[0] = 3; w.lv.level[1] = 2; w.lv.setEffects();
   near(w.lv.birthBonus[0], 0.01 + 0.005, 1e-12);
   near(w.lv.birthBonus[1], 0.005 + 0.01, 1e-12);
-  // In births(): chance + bonus, per civ. A bonus covering the whole chance makes every fertile fed adult a parent.
+  // In births(): 6 × age factor × (chance + bonus), per civ. A bonus covering the whole chance makes every fed woman of 25 a mother.
   const map = makeMap(10, 10, () => PLAINS);
   const run = (bonus) => {
     const p = new People(4096);
-    for (let k = 0; k < 2000; k++) p.add(11 + (k % 50), k % 2, 25, 100, 0);
+    // Each hex holds one civ (even offsets civ 0, odd civ 1), half of them women, so every hex has fathers.
+    for (let k = 0; k < 2000; k++) p.add(11 + (k % 50), k % 2, 25, 100, 0, 1, 0, Math.floor(k / 50) % 2);
     const s = scratch(map, p);
     return births(p, map, new Rng('birth'), s.pop, s.parents, () => {}, null, 0, bonus);
   };
-  assert.equal(run(Float64Array.of(1, 1)), 2000);
+  const all = run(Float64Array.of(1, 1));
+  assert.ok(all >= 1000 && all <= 1040, `1000 women all give birth (twins add a few): ${all}`);
   const none = run(null);
   assert.equal(run(Float64Array.of(0, 0)), none);
-  const sun = run(Float64Array.of(0.01, 0.01));
-  assert.ok(sun > none, `${sun} births with +1 pt against ${none}`);
+  const sun = run(Float64Array.of(0.05, 0.05));
+  assert.ok(sun > none + 100, `${sun} births with +5 pt against ${none}: the bonus is multiplied by 6`);
   const one = run(Float64Array.of(0, 1));
-  assert.ok(one >= 1000 && one < 1300, `only civ 1 gets the bonus: ${one}`);
+  assert.ok(one >= 600 && one < 720, `only civ 1 gets the bonus: ${one}`);
 });
 
 test('RULES.md "What levels do": food capacity adds the biggest food bonus among the civs living in the hex, hills/mountain/desert/tundra with Terraces', () => {

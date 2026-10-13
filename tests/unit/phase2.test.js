@@ -15,11 +15,11 @@ function lcg(seed) {
   return () => ((s = (s * 16807) % 2147483647) / 2147483647);
 }
 
-test('RULES.md "Game settings": civ count 3 (1 to 8) and starting population 20 (2 to 200)', () => {
+test('RULES.md "Game settings": civ count 3 (1 to 8) and starting population 20 (4 to 200)', () => {
   assert.equal(DEFAULT_PARAMS.civCount, 3);
   assert.equal(DEFAULT_PARAMS.startPop, 20);
   assert.deepEqual(LIMITS.civCount, { min: 1, max: 8 });
-  assert.deepEqual(LIMITS.startPop, { min: 2, max: 200 });
+  assert.deepEqual(LIMITS.startPop, { min: 4, max: 200 });
 });
 
 test('civCount: clamped to 1-8 on both sides, rounded, bad values fall back to 3', () => {
@@ -37,15 +37,16 @@ test('civCount: clamped to 1-8 on both sides, rounded, bad values fall back to 3
   for (const bad of ['abc', null, undefined, NaN, '', Infinity - Infinity, {}]) assert.equal(c(bad), 3, String(bad));
 });
 
-test('startPop: clamped to 2-200 on both sides, rounded, bad values fall back to 20', () => {
+test('startPop: clamped to 4-200 on both sides, rounded, bad values fall back to 20', () => {
   const s = (v) => normalizeParams({ startPop: v }).startPop;
-  assert.equal(s(1), 2);
-  assert.equal(s(2), 2);
-  assert.equal(s(3), 3);
+  assert.equal(s(1), 4);
+  assert.equal(s(3), 4);
+  assert.equal(s(4), 4);
+  assert.equal(s(5), 5);
   assert.equal(s(199), 199);
   assert.equal(s(200), 200);
   assert.equal(s(201), 200);
-  assert.equal(s(-1), 2);
+  assert.equal(s(-1), 4);
   assert.equal(s(1e9), 200);
   assert.equal(s(30.5), 31);
   assert.equal(s('45'), 45);
@@ -80,7 +81,7 @@ test('RULES.md "Game settings": randomise picks 2 to 6 civs and 10 to 50 people 
 });
 
 test('a new game has civCount civs of startPop people on land, year 0 history row has pop = startPop', () => {
-  for (const [civs, pop] of [[3, 20], [1, 2], [8, 200], [5, 7]]) {
+  for (const [civs, pop] of [[3, 20], [1, 4], [8, 200], [5, 7]]) {
     const sim = new Simulation({ seed: 'start', size: 20, civCount: civs, startPop: pop });
     assert.equal(sim.people.count, civs * pop);
     assert.equal(sim.stats().totalPop, civs * pop);
@@ -90,7 +91,7 @@ test('a new game has civCount civs of startPop people on land, year 0 history ro
     assert.equal(h.years[0], 0);
     for (let k = 0; k < civs; k++) {
       assert.equal(h.pop[k], pop);
-      assert.equal(h.births[k] + h.deathsOldAge[k] + h.deathsStarvation[k], 0);
+      assert.equal(h.births[k] + h.deathsOldAge[k] + h.deathsStarvation[k] + h.deathsChildhood[k] + h.deathsChildbirth[k], 0);
       assert.equal(h.hexes[k], 1, 'founders share one start hex');
     }
     for (const s of sim.starts) assert.notEqual(sim.map.terrain[s], DEEP_WATER);
@@ -135,18 +136,21 @@ test('totals: per civ, start pop + births - deaths = alive; history sums equal t
     const stats = sim.stats();
     let alive = 0;
     stats.civs.forEach((c, k) => {
-      const deaths = c.deaths.oldAge + c.deaths.starvation + c.deaths.war;
-      // Start + births - deaths (old age, starvation, war) + switches in - switches out = alive.
+      const deaths = c.deaths.oldAge + c.deaths.starvation + c.deaths.war + c.deaths.childhood + c.deaths.childbirth;
+      // Start + births - deaths (old age, starvation, war, childhood, childbirth) + switches in - switches out = alive.
       assert.equal(startPop + c.births - deaths + c.switchesIn - c.switchesOut, c.pop, `${seed} civ ${k}`);
-      let births = 0; let old = 0; let starve = 0; let war = 0; let life = 0;
+      let births = 0; let old = 0; let starve = 0; let war = 0; let child = 0; let cbirth = 0; let life = 0;
       for (let r = 0; r < h.rows; r++) {
         births += h.births[r * h.civs + k];
         old += h.deathsOldAge[r * h.civs + k];
         starve += h.deathsStarvation[r * h.civs + k];
         war += h.deathsWar[r * h.civs + k];
+        child += h.deathsChildhood[r * h.civs + k];
+        cbirth += h.deathsChildbirth[r * h.civs + k];
         life += h.lifespanSum[r * h.civs + k];
       }
-      assert.deepEqual([births, old, starve, war], [c.births, c.deaths.oldAge, c.deaths.starvation, c.deaths.war]);
+      assert.deepEqual([births, old, starve, war, child, cbirth],
+        [c.births, c.deaths.oldAge, c.deaths.starvation, c.deaths.war, c.deaths.childhood, c.deaths.childbirth]);
       assert.equal(h.pop[400 * h.civs + k], c.pop);
       assert.equal(h.hexes[400 * h.civs + k], c.hexes);
       if (deaths > 0) assert.equal(c.avgLifespan, Math.round((life / deaths) * 10) / 10);
@@ -261,12 +265,12 @@ test('inspect lists people per civ on a hex (RULES.md "Statistics")', () => {
 });
 
 test('headless --json parses with civs, extinctions, samples and a 401-entry history for 400 ticks', () => {
-  const out = execFileSync(process.execPath, ['tools/headless.js', '--seed', 'd', '--ticks', '400', '--civs', '8', '--start-pop', '2', '--every', '100', '--json'],
+  const out = execFileSync(process.execPath, ['tools/headless.js', '--seed', 'd', '--ticks', '400', '--civs', '8', '--start-pop', '4', '--every', '100', '--json'],
     { encoding: 'utf8', cwd: new URL('../..', import.meta.url) });
   const r = JSON.parse(out);
   assert.equal(r.civs.length, 8);
   assert.equal(r.civCount, 8);
-  assert.equal(r.startPop, 2);
+  assert.equal(r.startPop, 4);
   assert.ok(Array.isArray(r.extinctions));
   assert.equal(r.extinctions.length, r.civs.filter((c) => c.pop === 0).length);
   assert.equal(r.samples.length, 5, 'years 0, 100, 200, 300, 400');
@@ -276,9 +280,9 @@ test('headless --json parses with civs, extinctions, samples and a 401-entry his
   assert.equal(r.history.years.length, 401);
   for (const c of r.history.civs) {
     assert.equal(c.pop.length, 401);
-    assert.equal(c.pop[0], 2);
+    assert.equal(c.pop[0], 4);
   }
-  const ref = new Simulation({ seed: 'd', size: 10, civCount: 8, startPop: 2 });
+  const ref = new Simulation({ seed: 'd', size: 10, civCount: 8, startPop: 4 });
   ref.tick(400);
   assert.equal(r.hash, ref.hash());
 });

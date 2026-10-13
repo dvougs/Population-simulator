@@ -1040,7 +1040,7 @@ function foodWorld(pop, hungry, starvedPerYear = []) {
   const lv = new Levels(makeMap(10, 10, () => PLAINS), ['expansionist']);
   lv.civPop[0] = pop;
   lv.hungry[0] = hungry;
-  for (const d of starvedPerYear) { const y = new Int32Array(3); y[1] = d; lv.noteStarved(y); }
+  for (const d of starvedPerYear) { const y = new Int32Array(5); y[1] = d; lv.noteStarved(y); }
   return lv;
 }
 
@@ -1063,22 +1063,22 @@ test('RULES.md "Secure food": starvation is summed over the last 10 years only',
   // 10 years of 2 deaths = 20 = 2%: short; the 11th year pushes the first out.
   const lv = foodWorld(1000, 0, Array(10).fill(2));
   assert.equal(lv.foodState(0), 1);
-  const y = new Int32Array(3);
+  const y = new Int32Array(5);
   lv.noteStarved(y); // an 11th year with no deaths: 18 over the last 10
   assert.equal(lv.foodState(0), 0);
   // One big year ages out after 10 more years.
   const big = foodWorld(1000, 0, [150]);
   assert.equal(big.foodState(0), 2);
-  for (let k = 0; k < 9; k++) big.noteStarved(new Int32Array(3));
+  for (let k = 0; k < 9; k++) big.noteStarved(new Int32Array(5));
   assert.equal(big.foodState(0), 2, 'still within the 10 years');
-  big.noteStarved(new Int32Array(3));
+  big.noteStarved(new Int32Array(5));
   assert.equal(big.foodState(0), 0, 'the 11th year since');
   // Only starvation (cause 1) counts, and only the civ\'s own.
   const two = new Levels(makeMap(10, 10, () => PLAINS), ['expansionist', 'aggressive']);
   two.civPop[0] = 1000; two.civPop[1] = 1000;
-  const d = new Int32Array(6);
-  d[0] = 500; d[2] = 500; // civ 0 killed by other causes
-  d[3 + 1] = 100; // civ 1 starved
+  const d = new Int32Array(10);
+  d[0] = 500; d[2] = 500; d[3] = 500; d[4] = 500; // civ 0 killed by other causes (old age, war, childhood, childbirth)
+  d[5 + 1] = 100; // civ 1 starved (five causes a civ)
   two.noteStarved(d);
   assert.deepEqual([two.foodState(0), two.foodState(1)], [0, 2]);
 });

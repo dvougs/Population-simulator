@@ -1256,7 +1256,7 @@ test('RULES.md "War" seeded run: an Aggressive civ declares on a bordering one o
   assert.ok(t.stats().relations.every((r) => r.relation !== 'none'));
   // Every war death is a real person and the identity holds.
   for (const c of a.stats().civs) {
-    assert.equal(40 + c.births - (c.deaths.oldAge + c.deaths.starvation + c.deaths.war) + c.switchesIn - c.switchesOut, c.pop);
+    assert.equal(40 + c.births - (c.deaths.oldAge + c.deaths.starvation + c.deaths.war + c.deaths.childhood + c.deaths.childbirth) + c.switchesIn - c.switchesOut, c.pop);
   }
 });
 

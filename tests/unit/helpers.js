@@ -50,3 +50,11 @@ export function standBuilding(levels, c, era, hex) {
   bd.totals();
   levels.setEffects();
 }
+
+/** nWomen women then nMen men of one civ in hex h, all fed and healthy (the fathers births() needs). Returns the first slot. */
+export function addAdults(people, h, civ, nWomen, nMen, age = 25) {
+  const first = people.high;
+  for (let k = 0; k < nWomen; k++) people.add(h, civ, age, 100, 0, 1, 0, 1);
+  for (let k = 0; k < nMen; k++) people.add(h, civ, age, 100, 0, 1, 0, 0);
+  return first;
+}

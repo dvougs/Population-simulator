@@ -18,7 +18,7 @@ import { Simulation } from '../../src/sim/simulation.js';
 import { MATERIAL_COUNT, MATERIAL_IDS, WOOD, STONE, CLAY, COPPER, IRON, SALT, GOLD, GEMSTONES, SPICES } from '../../src/sim/materials.js';
 import { PLAINS, FOREST, COAST, DEEP_WATER } from '../../src/sim/terrain.js';
 import { COOPERATION, STRENGTH, AGGRESSION } from '../../src/sim/traits.js';
-import { makeMap, scratch } from './helpers.js';
+import { makeMap, scratch, addAdults } from './helpers.js';
 
 const RULES = readFileSync(new URL('../../RULES.md', import.meta.url), 'utf8');
 const near = (got, want, eps = 1e-9, msg = '') => assert.ok(Math.abs(got - want) <= eps, `${msg} ${got} vs ${want}`);
@@ -1292,7 +1292,7 @@ test('RULES.md "A year" Births: no births in a hex with people (all civs) at or 
       map.housing = new Float32Array(map.count).fill(housing);
       map.imported = new Float32Array(map.count).fill(imported);
       const people = new People(16);
-      for (let k = 0; k < pop; k++) people.add(5, k % 2, 25, 100, 0);
+      addAdults(people, 5, 0, Math.floor(pop / 2), Math.ceil(pop / 2));
       const s = scratch(map, people);
       total += births(people, map, new Rng(`room${pop}-${t}`), s.pop, s.parents, () => {});
     }
