@@ -366,8 +366,7 @@ export function howText() {
           'Each month (not in winter), a civ at war may attack one enemy hex next to its people. It weighs the odds, its likely warriors and weapons against the defender\'s, '
             + `and attacks only if they are good enough for its aggression: at least ${num(1 - TRAIT_RULES.base)} at aggression ${TRAIT_RULES.base}, bolder civs at worse odds. `
             + 'A Cooperative civ only attacks to drive enemies out of hexes it holds.',
-          `Real people fight. Each side calls up a share of its fit adults (${W.fitAge} to ${W.maxAge}, health ${W.fitHealth} or more) from the hex and the hexes next to it: `
-            + `Aggressive ${pct(W.levy.aggressive)}, Nomadic ${pct(W.levy.nomadic)}, Expansionist and Isolationist ${pct(W.levy.expansionist)}, Cooperative ${pct(W.levy.cooperative)}. `
+          `Real people fight. Each side calls up ${pct(W.levy.expansionist)} of its fit adults (${W.fitAge} to ${W.maxAge}, health ${W.fitHealth} or more) from the hex and the hexes next to it. `
             + `Every day some of them duel: one on one, or up to ${W.maxGang} on 1 when a side outnumbers the other. `
             + `The loser of a duel is killed or wounded, ${W.killPct === 50 ? '50/50' : `${W.killPct}% killed`}. A side breaks when ${W.breakPct}% of its warriors are out.`,
           'The winner takes the hex at once and loots its store; the loser\'s people there flee to the best hex next door. '

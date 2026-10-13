@@ -28,7 +28,7 @@ export const WAR = Object.freeze({
   maxAge: 45,
   fitHealth: 50,
   /** Share of a civ's fit adults (in the hex and the hexes next to it) called up for a battle, by type. */
-  levy: Object.freeze({ expansionist: 0.25, aggressive: 0.4, cooperative: 0.2, isolationist: 0.25, nomadic: 0.3 }),
+  levy: Object.freeze({ expansionist: 0.25, aggressive: 0.25, cooperative: 0.25, isolationist: 0.25, nomadic: 0.25 }),
   /** Each day, this % of the smaller side's fit warriors (rounded up, at least 1) fight a duel. */
   duelPct: 10,
   /** The larger side sends ⌊its warriors ÷ the other's⌋ fighters to each duel, at most this many. */

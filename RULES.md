@@ -175,10 +175,10 @@ Each civ has one of 5 types, picked per civ on the setup screen. A type biases t
 | Type | What it does differently |
 |---|---|
 | Expansionist | Moves on early: a fed person sets out (20% a year) once their hex holds more people than 30% of its food capacity, instead of 50%. |
-| Aggressive | Declares war on any civ it borders (see "War"). Calls up 40% of its warriors for a battle. |
-| Cooperative | Never declares war, and at war only attacks hexes it holds (see "War"). Calls up 20% of its warriors for a battle. Its people switch away to another civ half as often (× 0.5). |
+| Aggressive | Declares war on any civ it borders (see "War"). |
+| Cooperative | Never declares war, and at war only attacks hexes it holds (see "War"). Its people switch away to another civ half as often (× 0.5). |
 | Isolationist | Keeps to itself: a fed person in a crowded hex sets out (20% a year) only towards land with no other civ's people in it or next to it. |
-| Nomadic | Wanders far: 5 movement points a year instead of 3, and sets out at twice the usual chance (100% when hungry, 40% when fed in a crowded hex). Calls up 30% of its warriors for a battle. |
+| Nomadic | Wanders far: 5 movement points a year instead of 3, and sets out at twice the usual chance (100% when hungry, 40% when fed in a crowded hex). |
 
 
 - The setup screen's Edit sidebar shows, under each civ's type picker, the type's explanation:
@@ -297,7 +297,7 @@ Civs fight by going to war: a civ **declares war** on a civ it borders, then eac
 ### Warriors
 
 - A civ's **warriors** are its people aged 16 to 45 with health 50 or more who are not already in a battle.
-- **Levy.** For a battle, each side calls up its **levy share** (rounded, at least 1 when it has any) of its **warriors near the hex**, picked at random: the people who were in the battle hex or the 6 hexes next to it at the end of last year aged 15 to 45 (they turn 16 to 46 at the next birthday), and who are now still alive, of the same civ, in the battle hex or next to it, aged 16 to 45, with health 50 or more and not in a battle. The share is counted from all of them (its people aged 15 to 45 in those 7 hexes at the end of last year). The levy share depends on the civ's type: Aggressive 40%, Nomadic 30%, Expansionist and Isolationist 25%, Cooperative 20%. Nobody farther away comes, and nobody else (children, the old, the sick, the rest of the adults) ever fights or dies in a battle.
+- **Levy.** For a battle, each side calls up its **levy share** (rounded, at least 1 when it has any) of its **warriors near the hex**, picked at random: the people who were in the battle hex or the 6 hexes next to it at the end of last year aged 15 to 45 (they turn 16 to 46 at the next birthday), and who are now still alive, of the same civ, in the battle hex or next to it, aged 16 to 45, with health 50 or more and not in a battle. The share is counted from all of them (its people aged 15 to 45 in those 7 hexes at the end of last year). The levy share is 25% for every type. Nobody farther away comes, and nobody else (children, the old, the sick, the rest of the adults) ever fights or dies in a battle.
 - **Attack** of a civ = its weapons × (1 + its strength bonus from buildings and wonders; see "Buildings and wonders"). Weapons by level: × 1 at levels 1 and 2 (stone), × 1.25 at level 3 (bronze), × 1.5 at levels 4 and 5 (iron).
 - **Defence.** The side holding the hex (see "Settlements") fights with its attack × (1 + the terrain's defence bonus (forest +25%, hills +50%, mountain +100%, otherwise 0) + its defence bonus from buildings and wonders + the settlement's walls (Palisade +25%, Stone walls +75%, Palace +50%), the walls only when it holds the settlement). A side that does not hold the hex gets no defence.
 - **Morale** starts at 100%, +25% for a Kingdom fighting a civ that is not one, −25% when at least a quarter of the warriors it called up went hungry this year. It falls by the share of its warriors killed or wounded so far.
