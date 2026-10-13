@@ -69,7 +69,7 @@ function buttons(r, a) {
     h('button', { type: 'button', class: 'btn', id: 'btn-end-setup', onclick: a.onSetup }, 'Back to setup'));
 }
 
-/** One compact block per civ: a head row and a line or two of facts (fights are in the War card). */
+/** One compact block per civ: a head row and a line or two of facts (battles are in the War card). */
 function civsCard(r) {
   const order = r.civs.slice().sort((x, y) => y.pop - x.pop || y.peakPop - x.peakPop || x.id - y.id);
   const facts = (c) => [
@@ -92,7 +92,7 @@ function civsCard(r) {
 /** One war row as text (also used on How to play). */
 export function warText(w) {
   const [a, b] = w.civs;
-  return `${civName(a)} and ${civName(b)}, ${years(w.firstYear, w.lastYear)}: ${formatNumber(w.fights)} ${w.fights === 1 ? 'fight' : 'fights'}; `
+  return `${civName(a)} and ${civName(b)}, ${years(w.firstYear, w.lastYear)}: ${formatNumber(w.fights)} ${w.fights === 1 ? 'battle' : 'battles'}; `
     + `${civName(a)} won ${formatNumber(w.won[0])} and killed ${formatNumber(w.killed[0])}, `
     + `${civName(b)} won ${formatNumber(w.won[1])} and killed ${formatNumber(w.killed[1])}`;
 }
@@ -104,10 +104,10 @@ export function warCard(r) {
   const two = (x, y) => h('td', {}, h('span', {}, formatNumber(x)), h('span', {}, formatNumber(y)));
   const now = new Map((r.relations ?? []).map((p) => [p.civs.join(' '), p]));
   return card('end-war', 'War',
-    h('p', { class: 'muted' }, 'Every pair of civs that fought, deadliest first: fights won, and the other side\'s people killed.'),
+    h('p', { class: 'muted' }, 'Every pair of civs that fought, deadliest first: battles won, and the other side\'s people killed.'),
     h('div', { class: 'table-wrap' },
       h('table', { class: 'end-war' },
-        h('thead', {}, h('tr', {}, ['Sides', 'Years', 'Fights', 'Won', 'Killed', 'Now'].map((t) => h('th', { scope: 'col' }, t)))),
+        h('thead', {}, h('tr', {}, ['Sides', 'Years', 'Battles', 'Won', 'Killed', 'Now'].map((t) => h('th', { scope: 'col' }, t)))),
         h('tbody', {}, wars.map((w) => h('tr', { 'data-civs': w.civs.join(' '), title: warText(w) },
           h('th', { scope: 'row' }, civLabel(w.civs[0]), civLabel(w.civs[1])),
           h('td', {}, w.firstYear === w.lastYear ? String(w.firstYear) : `${w.firstYear}–${w.lastYear}`),
@@ -352,7 +352,7 @@ export function eventText(e) {
   return `Famine in ${civName(e.civ)}${e.ongoing ? ' (still going)' : ''}: ${formatNumber(e.deaths)} starved${share}${e.endYear > e.year ? ` by year ${e.endYear}` : ''}`;
 }
 
-/** The turning points only (RULES.md "End screen", History); fights are summed up in the War card. */
+/** The turning points only (RULES.md "End screen", History); battles are summed up in the War card. */
 function historyCard(r) {
   const lines = r.records.chronicle ?? [];
   return fold('end-history', 'History', false,

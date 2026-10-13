@@ -11,6 +11,7 @@ import {
   LEVEL_NAMES, REQUIREMENTS, GATHER, LEVEL_EFFECTS, TYPE_LEVEL_RULES, levelMinimums,
 } from '../sim/levels.js';
 import { DEEP_WATER } from '../sim/terrain.js';
+import { WAR } from '../sim/war.js';
 import { BUILDING_COST, WONDERS, WONDER_RULES, ERAS, materialText, effectText } from '../sim/buildings.js';
 import {
   TIERS, TIER_NAMES, HAND, SETTLE, SETTLEMENT_BUILDINGS, MAX_PROGRESS_BONUS, settlementEffectText,
@@ -124,7 +125,7 @@ const LEVEL_TEXT = [
   `Shelter: hunger hurts half as much in desert, tundra and mountain.`,
   `Boats: people can migrate across up to ${LEVEL_EFFECTS.boatRange} sea or lake hexes in a row (each costs ${LEVEL_EFFECTS.boatCost} movement point for Nomads).`,
   `Every hex feeds ${pct(LEVEL_EFFECTS.kingdomBonus)} more (plains and rivers ${pct(LEVEL_EFFECTS.farmBonus + LEVEL_EFFECTS.kingdomBonus)} in all), old age starts `
-    + `${LEVEL_EFFECTS.oldAgeDelay} years later, and it fights at × ${LEVEL_EFFECTS.kingdomStrength} strength against civs that are not Kingdoms. `
+    + `${LEVEL_EFFECTS.oldAgeDelay} years later, and +${pct(WAR.kingdomMorale)} morale in battles against civs that are not Kingdoms. `
     + 'A hex whose land neighbours all hold its people is enclosed: everyone else there joins the Kingdom, and no other civ can move in.',
 ];
 

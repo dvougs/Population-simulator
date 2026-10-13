@@ -243,7 +243,7 @@ const oneDecimal = (v) => (Math.floor(v * 10 + 1e-9) / 10).toFixed(1);
 
 /** One civ's gathering in the hex: materials worked, gatherers and this year's take. */
 function gatherPart(g) {
-  const what = g.materials.length ? `${g.materials.map(materialName).join(', ').toLowerCase()}, ${oneDecimal(g.gatherers)} gatherers` : 'won the yield in a fight';
+  const what = g.materials.length ? `${g.materials.map(materialName).join(', ').toLowerCase()}, ${oneDecimal(g.gatherers)} gatherers` : 'won the yield in a battle';
   return `Civ ${g.civ + 1}: ${what}; got ${oneDecimal(g.amount)}`;
 }
 
