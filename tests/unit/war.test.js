@@ -170,7 +170,9 @@ test('RULES.md "War": the numbers', () => {
     'in the last 20 years (this year minus that year is 20 or less)',
     'higher by 0.15 plus 0.05 for every whole 20 years the two have traded (at most 0.15 more, so +0.3 in all)',
     'aged 16 to 45 with health 50 or more',
-    'calls up 25% (rounded, at least 1 when it has any)',
+    'its **levy share** (rounded, at least 1 when it has any)',
+    'The levy share is 25% for every type.',
+    '**Walking in.**',
     '× 1 at levels 1 and 2 (stone), × 1.25 at level 3 (bronze), × 1.5 at levels 4 and 5 (iron)',
     'forest +25%, hills +50%, mountain +100%',
     'Palisade +25%, Stone walls +75%, Palace +50%',
@@ -1191,6 +1193,75 @@ test('RULES.md "War" Breaking the siege: a battle fought after the defenders cam
   assert.equal(w.ev.battles.length, 1);
   assert.equal(w.ev.battles[0][4], 0);
   assert.equal(w.ev.deaths.filter((d) => d.civ === 1).length, 0, 'no sack, and the warriors were only wounded');
+});
+
+// ---- levy by civ type and walking in --------------------------------------------------------------------------------
+
+test('RULES.md "War" Levy: 25% for every type (rounded, at least 1)', () => {
+  for (const type of ['aggressive', 'nomadic', 'expansionist', 'isolationist', 'cooperative']) {
+    assert.equal(WAR.levy[type], 0.25, type);
+    const w = world([type, 'expansionist'], [[NB[0], 0, 40], [T, 1, 40]]);
+    assert.equal(w.war.levyOf(0, 40), 10, type);
+    assert.equal(w.war.levyOf(0, 1), 1);
+    assert.equal(w.war.levyOf(0, 0), 0);
+    assert.equal(begin(w, T, 0, 1).fit[0], 10, type);
+  }
+});
+
+/** Civ 0 attacks T; civ 1 has only children there (nobody to call up) unless `adults` is given. */
+function walkIn({ adults = 0, ring = [], settle = true } = {}) {
+  const groups = [[NB[0], 0, 40, { str: 1 }], [T, 1, 6, { age: 5 }]];
+  if (adults) groups.push([T, 1, adults]);
+  const w = world(['aggressive', 'expansionist'], groups, { settle });
+  if (settle) {
+    w.st.holder[T] = 1; w.st.holder[NB[0]] = 0;
+    w.st.capital[0] = NB[0]; w.st.capital[1] = T;
+    w.st.storeCap.fill(1000);
+  }
+  relate(w, 0, 1, AT_WAR);
+  if (ring.length) walls(w, T, 1, ring);
+  return w;
+}
+
+test('RULES.md "War" Walking in: nobody called up and no siege means the attacker takes the hex without a battle', () => {
+  const w = walkIn();
+  w.st.store[T * M + WOOD] = 100;
+  const bt = begin(w, T, 0, 1);
+  assert.equal(bt.start[1], 0, 'nobody to defend');
+  assert.equal(bt.siegeDays, 0);
+  assert.equal(w.war.totals.battles, 1, 'counted when it begins');
+  play(w, 31, 59);
+  assert.equal(w.war.battles.length, 0, 'over');
+  assert.equal(w.ev.battles.length, 0, 'onBattle is not called: no fight in stats, records or diplomacy');
+  assert.ok(w.war.lostTo.every((v) => v < 0), 'lostTo is not set: no revenge for the loser');
+  assert.equal(w.war.totals.battles, 0, 'not a battle');
+  assert.equal(w.war.totals.occupied, 1, 'a hex occupied');
+  assert.equal(w.war.totals.sieges, 0);
+  assert.equal(w.st.holder[T], 0, 'the hex is taken');
+  assert.equal(w.st.store[T * M + WOOD], 50, 'and looted as usual');
+  assert.ok(aliveOf(w, 0, T) > 0, 'the attacker moved in');
+  assert.equal(aliveOf(w, 1, T), 0, 'the children fled');
+});
+
+test('RULES.md "War" Walking in: a defender that called up anyone is a battle; a besieged hex with no defenders is not a walk-in', () => {
+  const fought = walkIn({ adults: 8 });
+  begin(fought, T, 0, 1);
+  play(fought, 31, 59);
+  assert.equal(fought.ev.battles.length, 1);
+  assert.equal(fought.war.totals.battles, 1);
+  assert.equal(fought.war.totals.occupied, 0);
+  assert.equal(fought.war.lostTo[1 * 2 + 0] === 100 || fought.war.lostTo[0 * 2 + 1] === 100, true, 'revenge is set');
+
+  const besieged = walkIn({ ring: ['palisade'] });
+  const bt = begin(besieged, T, 0, 1);
+  assert.equal(bt.start[1], 0);
+  assert.ok(bt.siegeDays > 0, 'the walls mean a siege');
+  play(besieged, 31, 100);
+  assert.equal(besieged.ev.battles.length, 1, 'the siege ends in a battle that is reported');
+  assert.equal(besieged.war.totals.occupied, 0);
+  assert.equal(besieged.war.totals.battles, 1);
+  assert.equal(besieged.war.totals.sieges, 1);
+  assert.equal(besieged.war.lostTo[1 * 2 + 0], 100);
 });
 
 // ---- events, summary, integration ------------------------------------------------------------------------------------

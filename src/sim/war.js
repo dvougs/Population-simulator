@@ -146,7 +146,7 @@ export class War {
     this.ended = [];
     this.endAt = new Int32Array(n).fill(-1);
     /** Battles and sieges this run, and how they ended (for the end screen). */
-    this.totals = { battles: 0, sieges: 0, siegesLifted: 0, pulledBack: 0 };
+    this.totals = { battles: 0, sieges: 0, siegesLifted: 0, pulledBack: 0, occupied: 0 };
     /** Set by the Simulation. */
     this.settle = null;
     this.level = null;
@@ -595,8 +595,15 @@ export class War {
       this.pop[h] += bt.fit[0];
     }
     if (here && this.settle && this.settle.holder[h] !== w) this.settle.capture(h, w, this.level, year, onSettle);
-    this.lostTo[l * civs + w] = year;
-    onBattle(h, bt.civ[0], bt.civ[1], bt.holder, w, bt.dead[1 - win] + sacked, bt.dead[win]);
+    // Nobody came to defend an open hex: the attacker walked in. No fight, so it keeps no war going
+    // (quiet years, revenge, Aggressive wins) and stays out of the battle counts.
+    if (bt.start[1] === 0 && bt.siegeDays === 0) {
+      this.totals.battles--;
+      this.totals.occupied++;
+    } else {
+      this.lostTo[l * civs + w] = year;
+      onBattle(h, bt.civ[0], bt.civ[1], bt.holder, w, bt.dead[1 - win] + sacked, bt.dead[win]);
+    }
     this.finish(bt);
   }
 
