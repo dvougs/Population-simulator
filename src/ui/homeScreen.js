@@ -48,8 +48,8 @@ export class HomeScreen {
     const point = (civ, title, text) => h('li', {},
       h('span', { class: 'point-icon' }, emblem(civ, 18)), h('strong', {}, title), h('span', {}, text));
     points.replaceChildren(
-      point(0, 'Every person', 'lives a life of their own'),
-      point(1, `${TRAITS.length} traits`, 'passed from parent to child'),
+      point(0, 'Men and women', 'each living a life of their own'),
+      point(1, `${TRAITS.length} traits`, 'passed from parents to children'),
       point(2, `${CIV_TYPES.length} civ types`, `up to ${LIMITS.civCount.max} civs a world`),
       point(3, `${LEVEL_NAMES[0]} to ${LEVEL_NAMES[LEVEL_NAMES.length - 1]}`, `in ${LEVEL_NAMES.length} levels`),
     );
