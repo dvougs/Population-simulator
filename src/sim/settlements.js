@@ -66,8 +66,13 @@ export const SETTLE = Object.freeze({
   askHungry: 0.1,
   /** A hex sends food only when it has at least this much to spare (a cart load). */
   minLoad: 5,
-  /** Food loses this share of what was sent for every step it is carried. */
-  spoilPerStep: 0.1,
+  /** Food loses this share of what was sent for every step it is carried … */
+  spoilPerStep: 0.04,
+  /** … and goes at most this many steps, to any hungry settlement of its civ's empire. */
+  foodSteps: 12,
+  /** A hex cut off from its civ's capital (an enclave) gathers this share, and gets this share of its civ's gathering and food bonuses. */
+  enclaveGather: 0.5,
+  enclaveBonus: 0.5,
   /** A hex keeps this many years' food for its own people before it gives any away, and a settlement asks for this much. */
   foodKeep: 1.1,
   /** Food carried in counts towards a hex's support smoothed: this share of this year's, the rest last year's average. */
@@ -239,6 +244,12 @@ export class Settlements {
     this.planAge = new Int16Array(n);
     this.blockedTo = new Int32Array(n);
     this.capital = new Int32Array(civs).fill(-1);
+    /** 1 where the holder's hex is cut off from its capital (an enclave; see connect). */
+    this.cut = new Uint8Array(n);
+    /** Set by levels.js: per pair of civs [lower × civs + higher], 1 where trade is open (diplomacy.js), or null. */
+    this.open = null;
+    /** Set by levels.js: per pair of civs, their relation (diplomacy.js; 2 truce and 3 peace keep borders), or null. */
+    this.rel = null;
     /** Materials each civ carried off this year from hexes it took ([civ × MATERIAL_COUNT + m]), and in all. */
     this.loot = new Float64Array(civs * MATERIAL_COUNT);
     this.looted = new Float64Array(civs);
@@ -367,7 +378,7 @@ export class Settlements {
       let next = best;
       const w = fightWinner[h];
       if (w >= 0 && cnt[b0 + w] > 0) next = w;
-      else if (old >= 0 && cnt[b0 + old] > 0 && cnt[b0 + best] < SETTLE.takeOver * cnt[b0 + old]) next = old;
+      else if (old >= 0 && cnt[b0 + old] > 0 && (cnt[b0 + best] < SETTLE.takeOver * cnt[b0 + old] || this.calm(old, best))) next = old;
       holder[h] = next;
       if (next >= 0) {
         const cb = capBest[next];
@@ -542,13 +553,62 @@ export class Settlements {
     }
   }
 
-  /** Into out[c × MATERIAL_COUNT + m]: what each civ holds of each material, all its stores together. */
+  /** Civs a and b are in a truce or at peace: neither takes the other's hexes by numbers. */
+  calm(a, b) {
+    if (a === b || !this.rel) return false;
+    return this.rel[a < b ? a * this.civs + b : b * this.civs + a] >= 2;
+  }
+
+  /** Civ o's land is open to civ c's goods: its own, or a partner's it trades with. */
+  ally(c, o) {
+    if (o === c) return true;
+    if (o < 0 || !this.open) return false;
+    return this.open[c < o ? c * this.civs + o : o * this.civs + c] === 1;
+  }
+
+  /**
+   * The empire: each civ's hexes joined to its capital over its own land, land nobody holds, the
+   * land of civs it trades with, and water within its boat range. Its other hexes are enclaves (cut).
+   */
+  connect(map) {
+    const { n, civs, holder, cut, dist, queue, sea } = this;
+    const { neighbours, terrain } = map;
+    for (let h = 0; h < n; h++) cut[h] = holder[h] >= 0 ? 1 : 0;
+    for (let c = 0; c < civs; c++) {
+      const from = this.capital[c];
+      if (from < 0) continue;
+      const range = this.boats ? this.boats[c] : 0;
+      let head = 0;
+      let tail = 0;
+      dist[from] = 0;
+      queue[tail++] = from;
+      while (head < tail) {
+        const h = queue[head++];
+        if (holder[h] === c) cut[h] = 0;
+        const wet = terrain[h] === DEEP_WATER;
+        for (let d = 0; d < 6; d++) {
+          const t = neighbours[h * 6 + d];
+          if (t < 0 || dist[t] >= 0) continue;
+          if (terrain[t] === DEEP_WATER) {
+            const run = wet ? sea[h] + 1 : 1;
+            if (run > range) continue;
+            sea[t] = run;
+          } else if (holder[t] >= 0 && !this.ally(c, holder[t])) continue;
+          dist[t] = 0;
+          queue[tail++] = t;
+        }
+      }
+      for (let k = 0; k < tail; k++) dist[queue[k]] = -1;
+    }
+  }
+
+  /** Into out[c × MATERIAL_COUNT + m]: what each civ holds of each material, in the stores of its hexes joined to its capital. */
   totals(out) {
     out.fill(0);
     const { n, holder, store } = this;
     for (let h = 0; h < n; h++) {
       const c = holder[h];
-      if (c < 0) continue;
+      if (c < 0 || this.cut[h]) continue;
       for (let m = 0; m < MATERIAL_COUNT; m++) out[c * MATERIAL_COUNT + m] += store[h * MATERIAL_COUNT + m];
     }
   }
@@ -682,12 +742,12 @@ export class Settlements {
 
   /**
    * Supply routes for the year. Every settlement that wants something searches the hexes its civ
-   * holds, over land it holds, nearest first (a ring in hex order), biggest settlement first
+   * holds, over land it holds or a trade partner's (see ally), nearest first (a ring in hex order), biggest settlement first
    * (tier, then people, then a hash of hex and year). It wants: food, when it holds less than
    * foodKeep years' food for its people; materials its planned building still needs; and, for a
    * capital, what its civ's next spend still needs (target[c × MATERIAL_COUNT + m]) beyond its
-   * store. Food and plan materials come from hexes no farther than the larger of the two ends'
-   * reach; a capital's civ materials from any hex it reaches over held land. Suppliers give food
+   * store. Plan materials come from hexes no farther than the larger of the two ends'
+   * reach; a capital's civ materials from any hex it reaches; food (carryFood) from up to foodSteps away. Suppliers give food
    * they grow beyond what their people eat (and keep foodKeep years' food), materials beyond
    * their own plan (a capital never gives its own), within their carrying capacity. Food loses
    * spoilPerStep of what was sent per step.
@@ -775,7 +835,7 @@ export class Settlements {
         if (head === ringStart) { sortRange(queue, ringStart, tail); ringStart = tail; }
         const sp = queue[head++];
         const d = dist[sp];
-        if (sp !== h && left[sp] > 0) {
+        if (sp !== h && left[sp] > 0 && holder[sp] === c) {
           const local = d <= myReach || (tier[sp] >= 0 && d <= TIERS[tier[sp]].reach);
           this.pull(map, h, sp, c, d, local, wantPlan, wantCiv, 0);
           if (wantPlan) wantPlan = anyLeft(need);
@@ -792,7 +852,7 @@ export class Settlements {
             const run = wet ? this.sea[sp] + 1 : 1;
             if (run > range) continue;
             this.sea[t] = run;
-          } else if (holder[t] !== c) continue;
+          } else if (!this.ally(c, holder[t])) continue;
           dist[t] = d + 1;
           queue[tail++] = t;
         }
@@ -811,18 +871,18 @@ export class Settlements {
 
   /**
    * Food routes, after materials. Few hexes have food to spare, so the search starts from them:
-   * each finds the hungry settlements of its civ within reach over held land, then the pairs are
+   * each finds the hungry settlements of its civ up to foodSteps away over its own and its trade
+   * partners' land, then the pairs are
    * served biggest settlement first (the order in `ord`), nearest supplier first, then by hex.
    */
   carryFood(map, ord) {
-    const { n, holder, tier, dist, queue, spareFood, wantF, rank } = this;
+    const { n, holder, dist, queue, spareFood, wantF, rank } = this;
     const { neighbours, terrain } = map;
     let pairs = 0;
     for (let s = 0; s < n; s++) {
       if (spareFood[s] <= 0) continue;
       const c = holder[s];
-      const top = this.topReach[c];
-      const rs = tier[s] >= 0 ? TIERS[tier[s]].reach : 0;
+      const top = SETTLE.foodSteps;
       let head = 0;
       let tail = 0;
       dist[s] = 0;
@@ -830,7 +890,7 @@ export class Settlements {
       while (head < tail) {
         const t = queue[head++];
         const d = dist[t];
-        if (t !== s && wantF[t] > 0 && (d <= rs || d <= TIERS[tier[t]].reach)) {
+        if (t !== s && wantF[t] > 0 && holder[t] === c) {
           if (pairs === this.pairKey.length) this.growPairs();
           // One sortable number: demander's rank, then distance, then supplier.
           this.pairKey[pairs++] = (rank[t] * 64 + d) * n + s;
@@ -838,7 +898,7 @@ export class Settlements {
         if (d >= top) continue;
         for (let k = 0; k < 6; k++) {
           const u = neighbours[t * 6 + k];
-          if (u < 0 || dist[u] >= 0 || terrain[u] === DEEP_WATER || holder[u] !== c) continue;
+          if (u < 0 || dist[u] >= 0 || terrain[u] === DEEP_WATER || !this.ally(c, holder[u])) continue;
           dist[u] = d + 1;
           queue[tail++] = u;
         }

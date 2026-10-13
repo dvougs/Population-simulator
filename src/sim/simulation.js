@@ -14,6 +14,7 @@ import { People, NO_PARENT } from './people.js';
 import { pickStarts, found, eat, deaths, births, regrow } from './life.js';
 import { buildStepReach, landPieces, migrate, migrationRules, setReach } from './migration.js';
 import { Contact, CONTACT } from './contact.js';
+import { TRUCE } from './diplomacy.js';
 import { Levels, LEVEL_EFFECTS, GATHER, boatRange } from './levels.js';
 import { CIV_TYPE_NAMES } from './civTypes.js';
 import { CivStats } from './civStats.js';
@@ -87,6 +88,11 @@ export class Simulation {
     this.contact.inside = this.levels.inside;
     this.contact.level = this.levels.level;
     this.contact.eff = this.levels.buildings.eff;
+    // War, truce and peace (diplomacy.js): truces stop fights, peace makes them rarer.
+    this.diplomacy = this.levels.diplomacy;
+    this.contact.diplomacy = this.diplomacy;
+    this.migrationRules.holder = settle.holder;
+    this.migrationRules.rel = this.diplomacy.rel;
     // Land each civ can reach from its start, by boat range (see setReachableLand).
     this.landPieces = new Map();
     for (let c = 0; c < civs; c++) this.setReachableLand(c);
@@ -126,7 +132,12 @@ export class Simulation {
     this.onFight = (h, attacker, defender, holder, winner, deaths, byWinner, byLoser) => {
       st.fight(attacker, defender, winner);
       rec.fight(this.tickCount, attacker, defender, winner, byWinner, byLoser);
+      this.diplomacy.fight(this.tickCount, winner, winner === attacker ? defender : attacker, byWinner, byLoser, this.onDiplomacy);
     };
+    this.onDiplomacy = (kind, a, b, year, value) => rec.diplomacy(kind, a, b, year, value);
+    this.levels.onDiplomacy = this.onDiplomacy;
+    const ct = this.contact;
+    this.forgive = (a, b) => { ct.lostTo[a * civs + b] = -1000000000; ct.lostTo[b * civs + a] = -1000000000; };
     this.onSwitch = (from, to) => st.switched(from, to);
     this.onBuild = (kind, c, era, year, other) => rec.building(kind, c, era, year, other);
     this.levels.onSettle = (kind, c, h, year, other) => rec.settlement(kind, c, h, year, other);
@@ -181,6 +192,8 @@ export class Simulation {
     this.contact.year(this.people, this.map, this.hexCivPop, this.tickCount, this.rng.war, this.rng.switch,
       this.onDeath, this.onFight, this.onSwitch);
     this.recordYear();
+    // Wars end in truces and truces turn to peace, from this year's fights and people.
+    this.diplomacy.endYear(this.tickCount, this.civPop, this.levels.settlements, this.forgive, this.onDiplomacy);
     this.checkEnd();
   }
 
@@ -260,6 +273,8 @@ export class Simulation {
       for (let o = 0; o < civs; o++) {
         if (o === c || lv.civPop[o] === 0) continue;
         const ko = lv.level[o] === K;
+        // A civ in a truce with it is no threat while the truce lasts.
+        if (this.diplomacy.relation(c, o) === TRUCE) continue;
         const threat = ct.always[o] === 1 || this.tickCount - ct.lostTo[c * civs + o] <= CONTACT.revengeYears || (ko && !kc);
         if (!threat) continue;
         hostile |= 1 << o;
@@ -393,6 +408,7 @@ export class Simulation {
 
   stats() {
     const doy = this.dayOfYear;
+    const diplomacy = this.diplomacy.summary(this.tickCount);
     return {
       tick: this.tickCount,
       /** Day of the year (0 … 359) and its season, of the last day run (−1 and null before the first). */
@@ -402,7 +418,11 @@ export class Simulation {
       totalPop: this.people.count,
       civs: this.civStats.summary().map((c, k) => ({
         ...c, type: this.civTypes[k], typeName: CIV_TYPE_NAMES[this.civTypes[k]], ...this.levels.summary(k),
+        trade: diplomacy.trade[k],
       })),
+      /** Every pair of civs that has fought: war, truce or peace, and whether they trade. */
+      relations: diplomacy.pairs,
+      truces: diplomacy.truces,
       /** First civ to reach Kingdom and the year, or null. */
       firstKingdom: this.levels.kingdomCiv >= 0 ? { civ: this.levels.kingdomCiv, year: this.levels.kingdomYear } : null,
       terrainCounts: this.terrainCounts.slice(),

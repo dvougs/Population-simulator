@@ -9,7 +9,8 @@
 // wonder and level are paid from its capital's store, each civ levels up or
 // falls back, Kingdoms absorb every other civ's people in the hexes they
 // enclose, food capacities follow levels, tiers and buildings, and last the
-// supply routes carry food and materials to where they are wanted.
+// supply routes carry food and materials to where they are wanted, and
+// civs at peace trade (diplomacy.js).
 //
 // The per-hex people per civ and each civ's hungry people come from the
 // Simulation's end-of-year count; the people are scanned again (for the
@@ -23,7 +24,8 @@ import { MATERIAL_COUNT, MATERIAL_TIER, MATERIAL_IDS, COST_EPS } from './materia
 import { PLAINS, DEEP_WATER, TERRAIN_COUNT } from './terrain.js';
 import { COOPERATION } from './traits.js';
 import { Buildings, ERAS, WONDERS, reduce } from './buildings.js';
-import { Settlements, TIERS, SETTLE } from './settlements.js';
+import { Settlements, TIERS, SETTLE, SB_INDEX } from './settlements.js';
+import { Diplomacy } from './diplomacy.js';
 
 // Tundra and mountains are closed in winter, so they gather for three seasons of four.
 const WINTER_SHUT = winterClosedMask(TERRAIN_COUNT);
@@ -238,6 +240,12 @@ export class Levels {
     /** Every lived-in hex's settlement, store, buildings and supply routes (settlements.js). */
     this.settlements = new Settlements(map, types, seed);
     this.settlements.boats = this.boats;
+    /** War, truce, peace and trade between civs (diplomacy.js); trade opens their land to each other's goods. */
+    this.diplomacy = new Diplomacy(map, types);
+    this.settlements.open = this.diplomacy.open;
+    this.settlements.rel = this.diplomacy.rel;
+    /** Set by the Simulation: onDiplomacy(kind, a, b, year, value) for trade events. */
+    this.onDiplomacy = null;
     /** Filled at the end of each year by the Simulation: people who went hungry in each hex that year. */
     this.hungryHex = new Int32Array(n);
     this.onSettle = null;
@@ -399,6 +407,7 @@ export class Levels {
       }
     }
     st.update(cnt, fightWinner, this.level, year, this.onSettle);
+    st.connect(map);
     st.totals(this.held);
     for (let c = 0; c < civs; c++) {
       this.secure[c] = this.foodState(c);
@@ -458,6 +467,8 @@ export class Levels {
     this.capacities(map);
     this.capitalNeeds();
     st.carry(map, this.capWant, year);
+    // Capitals trade what they have spare for what they are saving for now.
+    this.diplomacy.trade(st, this.capWant, this.boats, (h) => h >= 0 && st.has(h, SB_INDEX.market), year, this.onDiplomacy);
     st.totals(this.held);
     return kingdom;
   }
@@ -578,9 +589,12 @@ export class Levels {
       let mask = dep & (this.nextMask[c] | this.planWant[c]);
       if (!mask) mask = dep & this.laterMask[c];
       if (!mask || effort[b0 + c] === 0) continue;
-      const g = (GATHER.gatherShare * effort[b0 + c] * this.gatherPct[c] * (1 + this.buildings.eff.gather[c])
-        * (1 - SETTLE_CARRY_COST * st.used[h]) * (WINTER_SHUT[map.terrain[h]] ? WINTER_YIELD : 1)) / 100;
-      const rare = 1 + this.buildings.eff.gatherRare[c];
+      // An enclave, cut off from the capital, gathers less and gets less of its civ's bonuses.
+      const cut = st.cut[h] === 1;
+      const bonus = cut ? SETTLE.enclaveBonus : 1;
+      const g = (GATHER.gatherShare * effort[b0 + c] * this.gatherPct[c] * (1 + bonus * this.buildings.eff.gather[c])
+        * (1 - SETTLE_CARRY_COST * st.used[h]) * (WINTER_SHUT[map.terrain[h]] ? WINTER_YIELD : 1) * (cut ? SETTLE.enclaveGather : 1)) / 100;
+      const rare = 1 + bonus * this.buildings.eff.gatherRare[c];
       let k = 0;
       for (let m = 0; m < MATERIAL_COUNT; m++) if (mask & (1 << m)) k++;
       let got = 0;
@@ -672,7 +686,11 @@ export class Levels {
           if (this.cnt[b0 + c] === 0) continue;
           if (this.level[c] > L) L = this.level[c];
           // Building and wonder food bonuses: the best of the civs living here.
-          if (fed) { const x = bd.foodShare(c, terrain[h]); if (x > extra) extra = x; }
+          if (fed) {
+            let x = bd.foodShare(c, terrain[h]);
+            if (st.cut[h] === 1 && st.holder[h] === c) x *= SETTLE.enclaveBonus;
+            if (x > extra) extra = x;
+          }
         }
       }
       this.hexLevel[h] = L;

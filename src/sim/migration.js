@@ -234,6 +234,9 @@ export function migrationRules(types, map, reach) {
     gen: 0,
     /** Per hex, the Kingdom enclosing it or −1 (set by the Simulation): no other civ may move in. */
     inside: null,
+    /** Set by the Simulation: each hex's holder (settlements.js) and each pair's relation (diplomacy.js): nobody moves into a hex held by a civ it is in a truce or at peace with. */
+    holder: null,
+    rel: null,
     /** Set by the Simulation each year (null: no expansion priorities): per civ, the materials its next level still needs (bitmask). */
     want: null,
     /** Per civ, bitmasks over civs: hostile[c] the civs threatening c, beats[c] the hostile civs c pushes towards. */
@@ -345,7 +348,8 @@ let sharedHeld = new Uint8Array(0);
  * whose spare food is positive and above its own hex's, at random with weight
  * equal to that spare food, times ownCivWeight where its own civ already has
  * people (before anyone moves). A hex a Kingdom encloses (rules.inside) is
- * closed to every other civ. With no such hex it stays.
+ * closed to every other civ, and a hex held by a civ in a truce or at peace with
+ * the mover's civ (rules.holder, rules.rel) to it. With no such hex it stays.
  * dest: scratch Int32Array at least people.high long. held: scratch
  * Uint8Array of (civ count × map.count); without it a shared one sized for any civ id is used.
  * round (optional, see calendar.js): { month, months, closed } — only people whose id
@@ -367,6 +371,8 @@ export function migrate(people, map, reach, rng, pop, spare, dest, held = null, 
   const shut = (t) => closed !== null && closed[map.terrain[t]] === 1;
   if (rules) rules.gen++;
   const inside = rules?.inside ?? null;
+  const holder = rules?.holder ?? null;
+  const rel = rules?.rel ?? null;
   const want = rules?.want ?? null;
   const threat = rules?.threat ?? null;
   const near = rules?.near ?? null;
@@ -402,7 +408,8 @@ export function migrate(people, map, reach, rng, pop, spare, dest, held = null, 
         for (let k = offsets[h]; k < offsets[h + 1]; k++) {
           const t = targets[k];
           const s = spare[t];
-          if (s > 0 && s > own && !(inside && inside[t] >= 0 && inside[t] !== c) && !shut(t) && !(apart && (near[t] & others) !== 0)) {
+          if (s > 0 && s > own && !(inside && inside[t] >= 0 && inside[t] !== c) && !shut(t) && !(apart && (near[t] & others) !== 0)
+            && !(rel && holder[t] >= 0 && holder[t] !== c && rel[holder[t] < c ? holder[t] * civs + c : c * civs + holder[t]] >= 2)) {
             total += want ? s * priority(map, held, base, t, c, n, want[c], threat[t * civs + c]) : (held[base + t] ? s * MIGRATION.ownCivWeight : s);
           }
           cum[k] = total;

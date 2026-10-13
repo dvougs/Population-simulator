@@ -121,6 +121,8 @@ const result = {
     return { ...c, start: h === undefined ? null : { col: h % sim.map.cols, row: Math.floor(h / sim.map.cols) } };
   }),
   firstKingdom: stats.firstKingdom,
+  relations: stats.relations,
+  truces: stats.truces,
   extinctions: stats.civs.filter((c) => c.extinctYear !== null).map((c) => ({ civ: c.name, year: c.extinctYear, cause: c.extinctCause })),
   fights: stats.civs.reduce((s, c) => s + c.fights, 0) / 2,
   samples,
@@ -252,6 +254,16 @@ if (args.json) {
     const [a, b] = w.civs;
     console.log(`  war Civ ${a + 1} v Civ ${b + 1}: years ${w.firstYear}-${w.lastYear}, ${w.fights} fights; `
       + `won ${w.won[0]}/${w.won[1]}, killed ${w.killed[0]}/${w.killed[1]}`);
+  }
+  for (const r of stats.relations) {
+    const [a, b] = r.civs;
+    const trade = r.tradeOpen ? `, trading ${r.tradeYears} years (road ${r.roadSteps} steps)` : '';
+    console.log(`  Civ ${a + 1} and Civ ${b + 1}: ${r.relation} since year ${r.since}${r.truceEnds !== null ? ` until ${r.truceEnds}` : ''}${trade}`);
+  }
+  const traders = stats.civs.filter((c) => c.trade.bought + c.trade.sold > 0);
+  if (traders.length) {
+    console.log(`  trade (value): ${traders.map((c) => `${c.name} bought ${Math.round(c.trade.bought)}, sold ${Math.round(c.trade.sold)}`
+      + `${c.trade.partner >= 0 ? `, mostly with Civ ${c.trade.partner + 1}` : ''}`).join('; ')}`);
   }
   console.log(`  end conditions: ${p.endConditions.length ? p.endConditions.join(', ') : 'sandbox'}`);
   if (stats.finished) console.log(`  ended: ${stats.endReason}; winner: ${result.winner ?? 'none'}`);

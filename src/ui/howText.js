@@ -8,6 +8,7 @@ import { MIGRATION } from '../sim/migration.js';
 import { TRAITS, TRAIT_NAMES, TRAIT_RULES, CIV_TYPE_TRAITS } from '../sim/traits.js';
 import { CIV_TYPES, CIV_TYPE_NAMES, TYPE_RULES, civTypeText } from '../sim/civTypes.js';
 import { CONTACT } from '../sim/contact.js';
+import { DIPLOMACY, TRADE } from '../sim/diplomacy.js';
 import {
   LEVEL_NAMES, REQUIREMENTS, GATHER, LEVEL_EFFECTS, TYPE_LEVEL_RULES,
 } from '../sim/levels.js';
@@ -191,6 +192,8 @@ export function howText() {
   const L = LIFE;
   const M = MIGRATION;
   const C = CONTACT;
+  const P = DIPLOMACY;
+  const T = TRADE;
   const G = GATHER;
   const E = LEVEL_EFFECTS;
   const D = DEFAULT_PARAMS;
@@ -339,6 +342,25 @@ export function howText() {
             + `the winner loses ${C.winnerDeathPct}%, rounded down.`,
           `Where nobody fights, people may simply change sides: about ${pct(switchAverage)} a year at average cooperation `
             + `(${pct(C.switchPerCooperation)} × cooperation), and half as often away from a Cooperative civ.`,
+        ],
+      },
+      {
+        id: 'peace',
+        kicker: 'Peace and trade',
+        title: 'Truces, tribute and caravans',
+        paras: [
+          `Wars end. Two civs that have not fought for ${P.quietYears} years make a truce. Sooner, a civ that has lost ${P.exhaustPct}% of its people `
+            + `to the other in ${P.span} years asks for one, and pays ${pct(P.tribute)} of its capital's store as tribute; `
+            + `an Aggressive civ that has won ${P.refuseWinThirds} of every 3 fights refuses.`,
+          `A truce lasts ${P.truceYears} years (${P.truceYearsAggressive} with an Aggressive civ): no fights at all. Then comes peace. `
+            + `At peace there is no revenge, fights need more aggression (+${P.peaceAggression}, and more the longer they trade), `
+            + `and an Aggressive civ only attacks where it is ${P.aggressivePeaceRatio} times stronger. One fight and it is war again.`,
+          'Civs in a truce or at peace trade, when a road over their own land (or a sea crossing their boats can make) joins their capitals. '
+            + `Each buys what its next spend lacks from what the other has spare: common goods are worth ${T.value.common}, uncommon ${T.value.uncommon}, exotic ${T.value.exotic}, `
+            + `and the buyer pays ${T.price} × in its own spare goods. Up to ${T.volume} worth a year, more with a Market, a Cooperative partner or an old road of ${T.oldRouteYears} years; `
+            + `caravans lose ${pct(T.lossPerStep)} a step.`,
+          'Trade partners also let each other\'s goods and food pass through their land. A civ\'s hexes cut off from its capital by civs it does not trade with are enclaves: '
+            + `they gather ${pct(SETTLE.enclaveGather)} as much, get half its bonuses, and their stores do not count towards its next spend.`,
         ],
       },
       {

@@ -125,7 +125,10 @@ test('RULES.md "Settlements" numbers: hysteresis, looting, ruins, shrinking, dec
   assert.equal(SETTLE.carryGatherCost, 0.25);
   assert.equal(SETTLE.askHungry, 0.1);
   assert.equal(SETTLE.minLoad, 5);
-  assert.equal(SETTLE.spoilPerStep, 0.1);
+  assert.equal(SETTLE.spoilPerStep, 0.04);
+  assert.equal(SETTLE.foodSteps, 12);
+  assert.equal(SETTLE.enclaveGather, 0.5);
+  assert.equal(SETTLE.enclaveBonus, 0.5);
   assert.equal(SETTLE.foodKeep, 1.1);
   assert.equal(SETTLE.importSmooth, 0.2);
   assert.equal(SETTLE.planEvery, 5);
@@ -1158,24 +1161,24 @@ function foodWorld(suppliers = [[42, 20]], { hungry = 2, supplierFood = 60 } = {
   return w;
 }
 
-test('RULES.md "Supply routes": a settlement with at least 10% of its people hungry asks for 1.1 x its people - its food; 10% spoils per step', () => {
+test('RULES.md "Supply routes": a settlement with at least 10% of its people hungry asks for 1.1 x its people - its food; 4% spoils per step', () => {
   const w = foodWorld();
   w.carry();
-  // B (20 people, food 60 of 60): spare = min(60 - 22, 30 - 20) = 10, and 10 goods can be carried: 10 sent, 9 arrive.
-  near(w.map.food[41], 9, 1e-6);
+  // B (20 people, food 60 of 60): spare = min(60 - 22, 30 - 20) = 10, and 10 goods can be carried: 10 sent, 9.6 arrive.
+  near(w.map.food[41], 9.6, 1e-5);
   near(w.map.food[42], 50, 1e-6);
-  near(w.st.carried[41], 9, 1e-6);
+  near(w.st.carried[41], 9.6, 1e-5);
   near(w.st.sent[42], 10, 1e-6);
-  near(w.st.received[41], 9, 1e-6);
+  near(w.st.received[41], 9.6, 1e-5);
   assert.equal(w.st.routes, 1);
-  near(w.st.rFood[0], 9, 1e-6);
-  // Two steps: 20% spoils.
+  near(w.st.rFood[0], 9.6, 1e-5);
+  // Two steps: 8% spoils.
   const v = foodWorld([[43, 20]]);
   v.put(42, 0, 1).upd();
   v.map.food[41] = 0; v.map.food[42] = 0; v.map.food[43] = 60;
   v.st.hungry = w.st.hungry; v.st.hungry[41] = 2;
   v.carry();
-  near(v.map.food[41], 8, 1e-6);
+  near(v.map.food[41], 9.2, 1e-5);
   near(v.map.food[43], 50, 1e-6);
 });
 
@@ -1204,12 +1207,12 @@ test('RULES.md "Supply routes": a supplier gives food only when its spare, min(f
   assert.equal(low.map.food[42], 26);
   const ok = foodWorld([[42, 20]], { supplierFood: 28 });
   ok.carry();
-  near(ok.map.food[41], 6 * 0.9, 1e-6);
+  near(ok.map.food[41], 6 * 0.96, 1e-5);
   near(ok.map.food[42], 22, 1e-6);
   // The capacity limit: a hex with 25 people keeps half its capacity in food and people together: spare = min(60 - 27.5, 30 - 25) = 5.
   const crowd = foodWorld([[42, 25]]);
   crowd.carry();
-  near(crowd.map.food[41], 5 * 0.9, 1e-5);
+  near(crowd.map.food[41], 5 * 0.96, 1e-5);
   // 26 people: 30 - 26 = 4 < 5: nothing.
   const over = foodWorld([[42, 26]]);
   over.carry();
@@ -1219,10 +1222,10 @@ test('RULES.md "Supply routes": a supplier gives food only when its spare, min(f
 test('RULES.md "Supply routes": a hungry settlement takes from the nearest supplier first, then the next', () => {
   const w = foodWorld([[42, 20], [43, 20]]);
   w.carry();
-  // Wants 22: 10 from B at one step (9 arrive), the other 13 from C at two steps (10 sent, 8 arrive).
+  // Wants 22: 10 from B at one step (9.6 arrive), the other 12.4 from C at two steps (10 sent, 9.2 arrive).
   near(w.map.food[42], 50, 1e-6);
   near(w.map.food[43], 50, 1e-6);
-  near(w.map.food[41], 9 + 8, 1e-6);
+  near(w.map.food[41], 9.6 + 9.2, 1e-5);
   assert.equal(w.st.routes, 2);
   // A single big supplier two steps away covers more of it per trip: only carrying capacity limits it.
   const v = foodWorld([[43, 40]]);
@@ -1230,23 +1233,23 @@ test('RULES.md "Supply routes": a hungry settlement takes from the nearest suppl
   v.map.food[41] = 0; v.map.food[42] = 0; v.map.food[43] = 100; v.map.foodCap[43] = 100;
   v.st.hungry[41] = 2;
   v.carry();
-  // spare = min(100 - 44, 50 - 40) = 10; carries up to 20: sends 10, 8 arrive.
-  near(v.map.food[41], 8, 1e-6);
+  // spare = min(100 - 44, 50 - 40) = 10; carries up to 20: sends 10, 9.2 arrive.
+  near(v.map.food[41], 9.2, 1e-5);
 });
 
 test('RULES.md "Supply routes": food carried in is added at once and to the hex\'s imports, smoothed 0.8 x last year + 0.2 x this year', () => {
   const w = foodWorld();
   assert.equal(w.st.imported[41], 0);
   w.carry();
-  near(w.st.imported[41], 0.2 * 9, 1e-5);
+  near(w.st.imported[41], 0.2 * 9.6, 1e-5);
   // Next year the same again (refill the supplier and empty the settlement).
   w.map.food[41] = 0; w.map.food[42] = 60;
   w.carry();
-  near(w.st.imported[41], 0.8 * 1.8 + 0.2 * 9, 1e-5);
+  near(w.st.imported[41], 0.8 * 1.92 + 0.2 * 9.6, 1e-5);
   // A year with nothing carried in: 0.8 x the average.
   w.map.food[41] = 0; w.map.food[42] = 0;
   w.carry();
-  near(w.st.imported[41], 0.8 * (0.8 * 1.8 + 0.2 * 9), 1e-5);
+  near(w.st.imported[41], 0.8 * (0.8 * 1.92 + 0.2 * 9.6), 1e-5);
   // A hex nobody holds has no imports.
   w.put(41, 0, 0); w.put(42, 0, 0);
   w.upd();

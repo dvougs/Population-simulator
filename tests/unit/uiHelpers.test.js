@@ -45,7 +45,7 @@ test('How to play text: formatting helpers', () => {
 
 test('How to play text: has the sections in the RULES.md order and every number is the one in RULES.md', () => {
   const t = howText();
-  assert.deepEqual(t.sections.map((s) => s.id), ['map', 'people', 'year', 'migration', 'civs', 'traits', 'types', 'contact', 'levels', 'end', 'controls']);
+  assert.deepEqual(t.sections.map((s) => s.id), ['map', 'people', 'year', 'migration', 'civs', 'traits', 'types', 'contact', 'peace', 'levels', 'end', 'controls']);
   const text = all();
   for (const must of [
     'from 10 × 10 up to 50 × 50', 'regrows 50%', '+30 food',

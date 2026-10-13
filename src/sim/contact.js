@@ -12,6 +12,7 @@ import { TYPE_RULES } from './civTypes.js';
 import { DEATH_WAR } from './life.js';
 import { LEVEL_EFFECTS, MAX_LEVEL } from './levels.js';
 import { MIGRATION } from './migration.js';
+import { TRUCE, PEACE, DIPLOMACY } from './diplomacy.js';
 
 export const CONTACT = Object.freeze({
   /**
@@ -74,6 +75,8 @@ export class Contact {
     this.inside = null;
     /** Set by the Simulation: each civ's building and wonder bonuses (buildings.js eff), or null. */
     this.eff = null;
+    /** Set by the Simulation: war, truce and peace between civs (diplomacy.js), or null (always at war). */
+    this.diplomacy = null;
     this.switchFactor = new Float64Array(civs);
     for (let c = 0; c < civs; c++) {
       const t = TYPE_RULES[types[c]] ?? {};
@@ -147,12 +150,17 @@ export class Contact {
         for (let b = 0; b < civs; b++) {
           const nb = cnt[b0 + b];
           if (b === a || nb === 0) continue;
-          let go = this.always[a] === 1;
-          if (!go) {
-            const qualifies = (short && avg > CONTACT.hungerAggression)
-              || (crowded && avg > CONTACT.crowdAggression)
-              || (na >= CONTACT.numbersRatio * nb && avg > CONTACT.numbersAggression)
-              || year - this.lostTo[a * civs + b] <= CONTACT.revengeYears;
+          // A truce forbids fighting; at peace the triggers need more aggression and there is no revenge.
+          const rel = this.diplomacy ? this.diplomacy.relation(a, b) : 0;
+          if (rel === TRUCE) continue;
+          const peace = rel === PEACE;
+          let go = this.always[a] === 1 && (!peace || str[b0 + a] >= DIPLOMACY.aggressivePeaceRatio * str[b0 + b]);
+          if (!go && !(peace && this.always[a] === 1)) {
+            const calm = peace ? this.diplomacy.calm(a, b) : 0;
+            const qualifies = (short && avg > CONTACT.hungerAggression + calm)
+              || (crowded && avg > CONTACT.crowdAggression + calm)
+              || (na >= CONTACT.numbersRatio * nb && avg > CONTACT.numbersAggression + calm)
+              || (!peace && year - this.lostTo[a * civs + b] <= CONTACT.revengeYears);
             go = qualifies && warRng.next() < avg;
           }
           if (!go) continue;
