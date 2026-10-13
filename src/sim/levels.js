@@ -63,7 +63,7 @@ export const GATHER = Object.freeze({
   starveShortPct: 2,
   starveFamishPct: 10,
   /** Share of a secure civ's adults (in hexes with a deposit it wants) that gather. */
-  gatherShare: 0.2,
+  gatherShare: 0.3,
   /** Adults are people of this age or older. */
   adultAge: 16,
   /** A gatherer's yield is multiplied by (personBase + their cooperation): 1 at cooperation 0.5. */

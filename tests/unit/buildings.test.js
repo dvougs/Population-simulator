@@ -1026,13 +1026,13 @@ test('RULES.md "What levels do": a food bonus adds to the level\'s (plains at le
 test('RULES.md "Gathering": a gathering bonus multiplies the gatherers by 1 + the bonus (Council Fire +20% on top of Cooperative ×1.25)', () => {
   const run = (setup) => {
     const w = mk(['cooperative', 'expansionist']);
-    w.add(55, 0, 30);
+    w.add(55, 0, 20);
     w.map.deposits[55] |= 1 << WOOD;
     setup(w);
     w.step();
     return w.stock(0, 'wood');
   };
-  // 30 adults at cooperation 0.5: effort 30; gatherers 20% × 30 × 1.25 = 7.5; 0.5 wood each.
+  // 20 adults at cooperation 0.5: effort 20; gatherers 30% × 20 × 1.25 = 7.5; 0.5 wood each.
   near(run(() => {}), 0.5 * 7.5, 1e-6);
   near(run((w) => w.stand(0, 1, 55)), 0.5 * 7.5 * 1.2, 1e-6);
   // Grand Library: gathering ×2 (+100%), owned by the civ.
@@ -1048,8 +1048,8 @@ test('RULES.md "Gathering": Observatory +30% and Caravanserai +30% on uncommon a
   iso.map.deposits[55] |= 1 << WOOD;
   iso.stand(0, 4, 55);
   iso.step();
-  near(iso.stock(0, 'wood'), 0.5 * 6 * 1.3, 1e-6); // 20% × 30 = 6 gatherers
-  // Level 2 -> 3 wants wood (common) and copper (uncommon): each gets half the 10 gatherers; by hand 0.5 a gatherer of
+  near(iso.stock(0, 'wood'), 0.5 * 9 * 1.3, 1e-6); // 30% × 30 = 9 gatherers
+  // Level 2 -> 3 wants wood (common) and copper (uncommon): each gets half the 15 gatherers; by hand 0.5 a gatherer of
   // wood and 0.25 of copper; Caravanserai +30% on copper only.
   const run = (caravanserai) => {
     const w = mk(['nomadic']);
@@ -1062,10 +1062,10 @@ test('RULES.md "Gathering": Observatory +30% and Caravanserai +30% on uncommon a
     return [w.stock(0, 'wood'), w.stock(0, 'copper')];
   };
   const [wood, copper] = run(true);
-  near(wood, 0.5 * 10 / 2, 1e-6);
-  near(copper, 0.25 * 10 * 1.3 / 2, 1e-6);
+  near(wood, 0.5 * 15 / 2, 1e-6);
+  near(copper, 0.25 * 15 * 1.3 / 2, 1e-6);
   const [wood0, copper0] = run(false);
-  near(wood0, 2.5, 1e-6); near(copper0, 1.25, 1e-6);
+  near(wood0, 3.75, 1e-6); near(copper0, 1.875, 1e-6);
 });
 
 test('RULES.md "Gathering": the next spend is the wonder (only if committed and not started), then the level, then the era\'s building', () => {

@@ -564,7 +564,7 @@ test.describe('setup screen', () => {
     await expect(page.locator('#f-start-pop')).toHaveValue('20');
     await expect(page.locator('#f-civs')).toHaveAttribute('min', '1');
     await expect(page.locator('#f-civs')).toHaveAttribute('max', '8');
-    await expect(page.locator('#f-start-pop')).toHaveAttribute('min', '2');
+    await expect(page.locator('#f-start-pop')).toHaveAttribute('min', '4');
     await expect(page.locator('#f-start-pop')).toHaveAttribute('max', '200');
     // RULES.md "Game settings": End conditions default to none ticked (Sandbox); year limit 2500.
     // This screen was reached with the Highlands preset, whose end condition is Year limit 2500.
