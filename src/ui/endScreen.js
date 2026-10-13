@@ -339,6 +339,7 @@ export function eventText(e) {
     const paid = e.tribute === null || e.tribute === undefined ? '' : `; ${civName(e.tribute)} asked for it and paid tribute`;
     return `${civName(e.civ)} and ${civName(e.other)} made a truce${paid}`;
   }
+  if (e.type === 'declared') return `${civName(e.civ)} declared war on ${civName(e.other)}`;
   if (e.type === 'warAgain') return `${civName(e.civ)} and ${civName(e.other)} went back to war`;
   if (e.type === 'trade') return `${civName(e.civ)} and ${civName(e.other)} began to trade`;
   if (e.type === 'oldRoute') return `The trade road between ${civName(e.civ)} and ${civName(e.other)} became an old route`;

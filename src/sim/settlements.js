@@ -441,6 +441,42 @@ export class Settlements {
     this.capStores();
   }
 
+  /**
+   * Civ c wins a battle for hex h (war.js) and takes it at once, as a change of holder at step 1
+   * would: the planned building is dropped and half the store is looted to c's capital (as far as
+   * it has room). If h was the old holder's capital, its biggest hex left becomes its capital.
+   */
+  capture(h, c, level, year, onEvent = null) {
+    const old = this.holder[h];
+    if (old === c) return;
+    this.holder[h] = c;
+    if (old >= 0) {
+      if (this.tier[h] >= CITY) onEvent?.('taken', c, h, year, old);
+      const to = this.capital[c];
+      const s0 = h * MATERIAL_COUNT;
+      for (let m = 0; m < MATERIAL_COUNT; m++) {
+        const take = this.store[s0 + m] * SETTLE.looted;
+        this.store[s0 + m] -= take;
+        if (to < 0) continue;
+        const add = Math.min(take, Math.max(0, this.storeCap[to] - this.store[to * MATERIAL_COUNT + m]));
+        this.store[to * MATERIAL_COUNT + m] += add;
+        this.looted[c] += add;
+      }
+      if (this.plan[h] >= 0) { this.plan[h] = -1; this.started[h] = 0; this.work[h] = 0; }
+      if (this.capital[old] === h) {
+        // The old holder moves its capital to its biggest hex left (by last year's people; lowest index on ties).
+        this.storeCap[h] = this.baseCap[h];
+        let next = -1;
+        for (let x = 0; x < this.n; x++) if (this.holder[x] === old && (next < 0 || this.pop[x] > this.pop[next])) next = x;
+        this.capital[old] = next;
+      }
+    }
+    const top = TOP_TIER[level[c]];
+    if (this.tier[h] > top) this.tier[h] = top;
+    if (this.tier[h] < 0) this.tier[h] = 0;
+    this.effects();
+  }
+
   anyStore(h) {
     const b = h * MATERIAL_COUNT;
     for (let m = 0; m < MATERIAL_COUNT; m++) if (this.store[b + m] > 0) return true;

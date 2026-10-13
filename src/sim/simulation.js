@@ -13,7 +13,8 @@ import { Rng } from './rng.js';
 import { People, NO_PARENT } from './people.js';
 import { pickStarts, found, eat, deaths, births, regrow } from './life.js';
 import { buildStepReach, landPieces, migrate, migrationRules, setReach } from './migration.js';
-import { Contact, CONTACT } from './contact.js';
+import { Contact } from './contact.js';
+import { War, WAR } from './war.js';
 import { TRUCE } from './diplomacy.js';
 import { Levels, LEVEL_EFFECTS, GATHER, boatRange } from './levels.js';
 import { CIV_TYPE_NAMES } from './civTypes.js';
@@ -81,16 +82,19 @@ export class Simulation {
     const settle = this.levels.settlements;
     map.housing = settle.housing;
     map.imported = settle.imported;
-    this.contact.hexDefence = settle.defence;
-    this.contact.hexHolder = settle.holder;
-    // Kingdoms close their enclosed hexes to other civs and fight harder (see levels.js).
+    // Kingdoms close their enclosed hexes to other civs (see levels.js).
     this.migrationRules.inside = this.levels.inside;
-    this.contact.inside = this.levels.inside;
-    this.contact.level = this.levels.level;
     this.contact.eff = this.levels.buildings.eff;
-    // War, truce and peace (diplomacy.js): truces stop fights, peace makes them rarer.
+    // War, truce and peace (diplomacy.js): civs declare war and fight battles (war.js); truces stop them.
     this.diplomacy = this.levels.diplomacy;
-    this.contact.diplomacy = this.diplomacy;
+    const war = new War(map, this.civTypes, this.people.capacity);
+    this.war = war;
+    war.settle = settle;
+    war.level = this.levels.level;
+    war.eff = this.levels.buildings.eff;
+    war.diplomacy = this.diplomacy;
+    war.inside = this.levels.inside;
+    war.hungryHex = this.levels.hungryHex;
     this.migrationRules.holder = settle.holder;
     this.migrationRules.rel = this.diplomacy.rel;
     // Land each civ can reach from its start, by boat range (see setReachableLand).
@@ -109,10 +113,12 @@ export class Simulation {
     this.eaten = new Float64Array(n);
     /** Sum, then average, of each trait per civ: civTraits[civ × TRAIT_COUNT + trait]. */
     this.civTraits = new Float64Array(civs * TRAIT_COUNT);
+    war.civTraits = this.civTraits;
     this.spare = new Float64Array(n);
     this.civHeld = new Uint8Array(n * civs);
     /** People of each civ in each hex at the end of the last year: hexCivPop[hex × civs + civ]. */
     this.hexCivPop = new Int32Array(n * civs);
+    war.cnt = this.hexCivPop;
     this.civPop = new Int32Array(civs);
     this.civHexes = new Int32Array(civs);
     this.civOldest = new Int32Array(civs);
@@ -129,15 +135,14 @@ export class Simulation {
     const rec = this.records;
     this.onDeath = (i, cause) => { st.death(people.civ[i], cause, people.age[i]); rec.death(i, people, cause, this.tickCount); };
     this.onBirth = (i) => { st.birth(people.civ[i]); rec.birth(i, people, this.tickCount); };
-    this.onFight = (h, attacker, defender, holder, winner, deaths, byWinner, byLoser) => {
+    this.onBattle = (h, attacker, defender, holder, winner, byWinner, byLoser) => {
       st.fight(attacker, defender, winner);
       rec.fight(this.tickCount, attacker, defender, winner, byWinner, byLoser);
       this.diplomacy.fight(this.tickCount, winner, winner === attacker ? defender : attacker, byWinner, byLoser, this.onDiplomacy);
     };
     this.onDiplomacy = (kind, a, b, year, value) => rec.diplomacy(kind, a, b, year, value);
     this.levels.onDiplomacy = this.onDiplomacy;
-    const ct = this.contact;
-    this.forgive = (a, b) => { ct.lostTo[a * civs + b] = -1000000000; ct.lostTo[b * civs + a] = -1000000000; };
+    this.forgive = (a, b) => { war.lostTo[a * civs + b] = -1000000000; war.lostTo[b * civs + a] = -1000000000; };
     this.onSwitch = (from, to) => st.switched(from, to);
     this.onBuild = (kind, c, era, year, other) => rec.building(kind, c, era, year, other);
     this.levels.onSettle = (kind, c, h, year, other) => rec.settlement(kind, c, h, year, other);
@@ -166,6 +171,7 @@ export class Simulation {
     const lv = this.levels;
     // From the counts at the end of last year, so before anyone ages, eats or moves.
     const r = this.migrationRules;
+    this.war.newYear();
     lv.year(people, this.map, this.tickCount, this.hexCivPop, this.contact.fightWinner, this.onLevel, this.onSwitch,
       r.hostile, r.beats, this.onBuild);
     this.applyMove();
@@ -186,11 +192,9 @@ export class Simulation {
       this.migrationRules, round);
   }
 
-  /** The last day of the year: fights and switching civ, then the year's stats and the end conditions. */
+  /** The last day of the year: switching civ, then the year's stats and the end conditions. */
   yearEnd() {
-    // hexCivPop still holds last year's counts here: it decides each fight's defender.
-    this.contact.year(this.people, this.map, this.hexCivPop, this.tickCount, this.rng.war, this.rng.switch,
-      this.onDeath, this.onFight, this.onSwitch);
+    this.contact.year(this.people, this.map, this.war.fought, this.rng.switch, this.onSwitch);
     this.recordYear();
     // Wars end in truces and truces turn to peace, from this year's fights and people.
     this.diplomacy.endYear(this.tickCount, this.civPop, this.levels.settlements, this.forgive, this.onDiplomacy);
@@ -201,8 +205,20 @@ export class Simulation {
   runDay(doy) {
     if (doy === 0) { this.tickCount++; this.yearStart(); }
     const season = seasonOf(doy);
+    // Battles under way fight their day; on the first of the month civs declare war and attack.
+    const war = this.war;
+    war.day(this.people, this.map, this.tickCount, doy, this.rng.war, this.onDeath, this.onBattle, this.levels.onSettle);
+    if (doy % MONTH_DAYS === 0) {
+      war.want = this.migrationRules.want;
+      war.month(this.people, this.map, this.tickCount, doy, this.rng.war, this.onDiplomacy);
+    }
     if (doy % MONTH_DAYS === MOVE_DAY) this.moveRound(Math.floor(doy / MONTH_DAYS), season === WINTER);
-    if (doy % SEASON_DAYS === 0) regrow(this.map, SEASON_REGROWTH[season], season === WINTER ? this.winterClosed : null);
+    if (doy % SEASON_DAYS === 0) {
+      // Nothing grows back in a besieged hex: its fields are the enemy's.
+      war.holdFood(this.map);
+      regrow(this.map, SEASON_REGROWTH[season], season === WINTER ? this.winterClosed : null);
+      war.restoreFood(this.map);
+    }
     if (doy === DAYS_PER_YEAR - 1) this.yearEnd();
   }
 
@@ -260,7 +276,7 @@ export class Simulation {
    */
   expansionPriorities() {
     const lv = this.levels;
-    const ct = this.contact;
+    const ct = this.war;
     const r = this.migrationRules;
     const civs = this.civCount;
     if (!r.want) r.want = new Uint16Array(civs);
@@ -275,7 +291,7 @@ export class Simulation {
         const ko = lv.level[o] === K;
         // A civ in a truce with it is no threat while the truce lasts.
         if (this.diplomacy.relation(c, o) === TRUCE) continue;
-        const threat = ct.always[o] === 1 || this.tickCount - ct.lostTo[c * civs + o] <= CONTACT.revengeYears || (ko && !kc);
+        const threat = ct.always[o] === 1 || this.tickCount - ct.lostTo[c * civs + o] <= WAR.revengeYears || (ko && !kc);
         if (!threat) continue;
         hostile |= 1 << o;
         const stronger = ct.always[c] === 1 || (kc && !ko) || (!(ko && !kc) && lv.civPop[c] > lv.civPop[o]);
@@ -316,6 +332,14 @@ export class Simulation {
     effort.fill(0);
     const coop = p.traits[COOPERATION];
     const { adultAge, personBase } = GATHER;
+    // And who could fight next year (war.js): ages fitAge − 1 to maxAge now, as birthdays come next.
+    const war = this.war;
+    war.grow(p.capacity);
+    const { head: wHead, next: wNext, fitCnt: wFit } = war;
+    wHead.fill(-1);
+    wFit.fill(0);
+    const wLo = WAR.fitAge - 1;
+    const wHi = WAR.maxAge;
     for (let i = 0; i < p.high; i++) {
       if (!alive[i]) continue;
       const c = civ[i];
@@ -323,6 +347,7 @@ export class Simulation {
       const k = hex[i] * civs + c;
       // A civ's first person in a hex adds the hex to those it holds.
       if (hexCivPop[k]++ === 0) civHexes[c]++;
+      if (age[i] >= wLo && age[i] <= wHi) { wNext[i] = wHead[k]; wHead[k] = i; wFit[k]++; }
       if (hunger[i] > 0) { hungry[c]++; hungryHex[hex[i]]++; }
       if (age[i] >= adultAge) effort[k] += personBase + coop[i];
       if (age[i] > civOldest[c]) civOldest[c] = age[i];
@@ -333,6 +358,7 @@ export class Simulation {
     for (let c = 0; c < civs; c++) {
       for (let t = 0; t < TRAIT_COUNT; t++) ct[c * TRAIT_COUNT + t] = this.civPop[c] > 0 ? ct[c * TRAIT_COUNT + t] / this.civPop[c] : NaN;
     }
+    war.endYear(this.map);
     this.levels.noteStarved(this.civStats.yearDeaths);
     this.civStats.endYear(this.tickCount, this.civPop, this.civHexes, this.civOldest, ct, this.levels.level);
     this.records.endYear(this.tickCount, this.civPop, this.civHexes, this.hexCivPop);
@@ -420,7 +446,10 @@ export class Simulation {
         ...c, type: this.civTypes[k], typeName: CIV_TYPE_NAMES[this.civTypes[k]], ...this.levels.summary(k),
         trade: diplomacy.trade[k],
       })),
-      /** Every pair of civs that has fought: war, truce or peace, and whether they trade. */
+      /** Battles and sieges under way (see war.js summary), and how many there have been. */
+      battles: this.war.summary(this.map.cols),
+      warTotals: { ...this.war.totals },
+      /** Every pair of civs that has been at war: war, truce or peace, and whether they trade. */
       relations: diplomacy.pairs,
       truces: diplomacy.truces,
       /** First civ to reach Kingdom and the year, or null. */
