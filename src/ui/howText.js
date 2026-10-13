@@ -336,7 +336,7 @@ export function howText() {
         points: [
           `hunger: someone went hungry last year where the two meet, and its aggression is above ${W.hungerAggression};`,
           `crowding: a hex where they meet is crowded, and its aggression is above ${W.crowdAggression};`,
-          `numbers: it has ${W.numbersRatio} times the other's people, and its aggression is above ${W.numbersAggression};`,
+          `numbers: it outnumbers the other ${W.numbersRatio} to 1, and its aggression is above ${W.numbersAggression};`,
           `materials: the other sits on a deposit it needs next door, and its aggression is above ${W.wantAggression};`,
           `revenge: the other beat it in a battle in the last ${W.revengeYears} years.`,
         ],
