@@ -20,6 +20,8 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 
 ## Requests
 
+- [P2] R-017: Close two open tasks without building them (owner, 2026-10-13 05:36 UTC). T-032 desktop live report column: "yes, consider this resolved" (reading: no longer needed, close it). T-040 draw people by age and hunger: "i think this would be just cosmetic and would create too much noise to implement it. let's leave it as is for now." (reading: drop it; do not re-propose).
+
 ## Answered
 
 ### Q-009: Should a civ keep gathering when a few of its people go hungry?
