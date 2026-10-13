@@ -312,6 +312,8 @@ test.describe('3D graphics flag', () => {
     await startGame(page);
     await expect.poll(() => page.evaluate(() => window.popsim.mapRenderer()), { timeout: 15_000 }).toBe('3d');
     await expect(page.locator('#map3d')).toBeVisible();
+    // Let the first day run: before it there is no season to show (RULES.md "Day, night and the seasons").
+    await expect.poll(() => page.evaluate(() => window.popsim.days())).toBeGreaterThan(0);
     await pause(page);
     // A land hex near the middle, tapped where its tile's top is drawn.
     const hex = await page.evaluate(() => {
@@ -636,7 +638,7 @@ test.describe('game', () => {
     await page.waitForTimeout(300);
     expect(await days(page)).toBe(afterStep);
 
-    const labels = ['1×', '5×', '20×', '100×', 'Max'];
+    const labels = ['1×', '50×', '100×', '500×', 'Max'];
     await expect(page.locator('#speed button')).toHaveText(labels);
     for (let i = 0; i < labels.length; i++) {
       const btn = page.locator('#speed button', { hasText: labels[i] }).first();
@@ -866,29 +868,40 @@ test.describe('game', () => {
     await expect.poll(async () => (await camera(page)).scale).toBeLessThan(panned.scale);
   });
 
-  test('bottom sheet opens and lists hexes per terrain', async ({ page }, testInfo) => {
+  test('bottom sheet opens with civs and levels, and no map terrain list', async ({ page }, testInfo) => {
     await startGame(page);
     const sheet = page.locator('#sheet');
     await expect(sheet).toHaveAttribute('data-open', 'false');
     await page.locator('#sheet-handle').click();
     await expect(sheet).toHaveAttribute('data-open', 'true');
     await expect(page.locator('#sheet-handle')).toHaveAttribute('aria-expanded', 'true');
-    await expect(page.locator('#stats')).toBeVisible();
-    const listed = await page.locator('#stats li').evaluateAll((lis) => lis.map((li) => ({
-      t: Number(li.dataset.terrain), name: li.querySelector('.name').textContent,
-      n: Number(li.querySelector('.num').firstChild.textContent.replace(/\D/g, '')),
-    })));
-    const counts = await page.evaluate(() => window.popsim.host.stats().terrainCounts);
-    const names = ['Deep water', 'Coast', 'Plains', 'Forest', 'Hills', 'Mountain', 'Desert', 'Tundra'];
-    expect(listed.length).toBe(counts.filter((n) => n > 0).length);
-    for (const row of listed) {
-      expect(row.name).toBe(names[row.t]);
-      expect(row.n).toBe(counts[row.t]);
-    }
-    expect(listed.reduce((s, r) => s + r.n, 0)).toBe(100);
+    await expect(page.locator('#civ-stats')).toBeVisible();
+    await expect(page.locator('#sheet .sheet-title')).toHaveText(['Civilisations', 'Levels']);
+    await expect(page.locator('#stats')).toHaveCount(0);
     await shot(page, testInfo, 'sheet-open');
     await page.locator('#sheet-handle').click();
     await expect(sheet).toHaveAttribute('data-open', 'false');
+  });
+
+  test('tapping a building in the sheet opens its hex and flies the map there', async ({ page }) => {
+    await startGame(page);
+    await page.locator('#speed button', { hasText: 'Max' }).click();
+    await expect(page.locator('#civ-levels li[data-hex]').first()).toBeAttached({ timeout: 20_000 });
+    await page.locator('#btn-play').click();
+    await expect.poll(() => page.evaluate(() => window.popsim.loop.paused)).toBe(true);
+    await page.locator('#sheet-handle').click();
+    await expect(page.locator('#sheet')).toHaveAttribute('data-open', 'true');
+    const row = page.locator('#civ-levels li[data-hex]').first();
+    await row.scrollIntoViewIfNeeded();
+    const hex = Number(await row.getAttribute('data-hex'));
+    if (test.info().project.use.hasTouch) await row.tap();
+    else await row.click();
+    await expect.poll(() => page.evaluate(() => window.popsim.selected())).toBe(hex);
+    await landed(page);
+    await expect(page.locator('#inspector')).toBeVisible();
+    // On a phone the sheet folds away to show the map; the corner panel of wider screens stays.
+    const corner = await page.locator('#sheet').evaluate((el) => el.getBoundingClientRect().left > 20);
+    if (!corner) await expect(page.locator('#sheet')).toHaveAttribute('data-open', 'false');
   });
 
   test('back to setup pauses, and the game can be resumed', async ({ page }) => {
@@ -1018,7 +1031,7 @@ test.describe('narrow phones', () => {
     await startGame(page);
     const rects = await controlRects(page);
     const speeds = rects.slice(2);
-    expect(speeds.map((r) => r.id)).toEqual(['1×', '5×', '20×', '100×', 'Max']);
+    expect(speeds.map((r) => r.id)).toEqual(['1×', '50×', '100×', '500×', 'Max']);
     for (const r of rects) {
       expect(r.left, r.id).toBeGreaterThanOrEqual(0);
       expect(r.right, r.id).toBeLessThanOrEqual(342);

@@ -507,7 +507,8 @@ export class Buildings {
           destroyed: this.destroyed[k] },
         wonder: { id: w.id, name: w.name, bonuses: effectText(w.effects),
           status: this.wOwner[e] === c ? 'owned' : this.aHex[k] >= 0 ? 'building' : this.attempt[k] === COMMITTED ? 'gathering' : this.wYear[e] >= 0 ? 'taken' : 'free',
-          owner: this.wOwner[e], work: this.aHex[k] >= 0 ? this.aWork[k] : 0, years: w.years },
+          owner: this.wOwner[e], work: this.aHex[k] >= 0 ? this.aWork[k] : 0, years: w.years,
+          hex: this.wOwner[e] === c ? this.wHex[e] : this.aHex[k] },
       });
     }
     const bonuses = {};
