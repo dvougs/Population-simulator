@@ -31,6 +31,8 @@ import { renderLevels, renderLevelGuide } from './ui/levelsPanel.js';
 import { mapParams } from './sim/params.js';
 import { randomSeedString } from './sim/rng.js';
 import { DEEP_WATER } from './sim/terrain.js';
+import { civName, setCivNames } from './ui/civNames.js';
+import { setCivColours } from './render/civStyle.js';
 
 const $ = (id) => document.getElementById(id);
 const ui = {
@@ -148,6 +150,9 @@ async function startGame(params) {
   }
   host.start(params);
   startParams = host.params;
+  // Names and colours belong to this game: set them before anything is drawn.
+  setCivNames(host.stats().civs.map((c) => c.name));
+  setCivColours(startParams.civs.map((c) => c.colour));
   map = host.map();
   renderLevelGuide(ui.levelGuide, map, startParams.civCount);
   renderer.setMap(map, host.stats().civs.map((c) => c.type));
@@ -176,6 +181,8 @@ function showScreen(name) {
   if (name !== 'game' && inside) leaveHex();
   const first = screen === null;
   screen = name;
+  // The pictured worlds keep the default colours; the game's own are set again on the way back.
+  if (name === 'home' || name === 'how') setCivColours();
   ui.home.hidden = name !== 'home';
   ui.how.hidden = name !== 'how';
   ui.mapgen.hidden = name !== 'mapgen';
@@ -333,7 +340,7 @@ async function enterHex(index) {
   // The holder's level decides how its homes look inside (huts and a bonfire at level 1).
   hex.level = owner >= 0 ? host.stats()?.civs[owner]?.level ?? 1 : 1;
   const bits = [s ? `${s.tierName ?? TIER_NAMES[s.tier]} on ${hex.name.toLowerCase()}` : hex.name];
-  if (hex.people > 0 && owner >= 0) bits.push(`Civ ${owner + 1}`);
+  if (hex.people > 0 && owner >= 0) bits.push(civName(owner));
   bits.push(`${formatNumber(hex.people)} ${hex.people === 1 ? 'person' : 'people'}`);
   if (hex.peopleByCiv.filter((n) => n > 0).length >= 2) bits.push('at war');
   $('hex-view-info').textContent = bits.join(' · ');
@@ -356,7 +363,7 @@ const KIND_NAMES = { housing: 'Housing', food: 'Food', industry: 'Industry', tra
 function fillHexBuildings(hex) {
   const box = $('hex-buildings'); const list = $('hex-buildings-list');
   const items = [
-    ...(hex.buildings ?? []).map((b) => ({ ...b, note: `${b.kind === 'wonder' ? 'Wonder' : `Civ ${b.civ + 1}'s building`}, era ${b.era}` })),
+    ...(hex.buildings ?? []).map((b) => ({ ...b, note: `${b.kind === 'wonder' ? 'Wonder' : `${civName(b.civ)}'s building`}, era ${b.era}` })),
     ...(hex.settlement?.buildings ?? []).map((b) => ({ ...b, note: KIND_NAMES[b.kind] ?? b.kind })),
   ];
   list.replaceChildren();
@@ -401,6 +408,8 @@ new ResizeObserver(() => { if (inside) hexView.resize(); }).observe($('hex-canva
 
 /** Back to the running game, on the renderer the 3D flag asks for. */
 async function resumeGame() {
+  // The setup screen may have shown other colours meanwhile.
+  if (startParams) setCivColours(startParams.civs.map((c) => c.colour));
   showScreen('game');
   try {
     if (await pickRenderer() && map) reloadRenderer();

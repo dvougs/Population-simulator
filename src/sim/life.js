@@ -14,7 +14,7 @@ import { NO_PARENT } from './people.js';
 import { indexToAxial, distance } from './hex.js';
 import {
   TRAIT_COUNT, TRAIT_RULES, FERTILITY, LIFE_EXPECTANCY, METABOLISM, HEAT_TOLERANCE, COLD_TOLERANCE,
-  birthChance, oldAgeStart, hungerBurden, climateFactor, typeTraits, clamp01,
+  birthChance, oldAgeStart, hungerBurden, climateFactor, traitValues, clamp01,
 } from './traits.js';
 
 export const LIFE = Object.freeze({
@@ -258,6 +258,7 @@ const childTraits = new Float64Array(TRAIT_COUNT);
  * starts at age 0, full health, in the parent's hex and civ, with the
  * parent's traits each moved by uniform(−mutation, +mutation) from traitRng,
  * clamped to 0 … 1 (copied exactly without traitRng or with mutation 0).
+ * mutation is one number, or one per civ (the civ the child is born into).
  * parents: scratch Int32Array at least people.high long. bonus: optional
  * per-civ addition to the birth chance (levels). Returns births added.
  */
@@ -281,9 +282,10 @@ export function births(people, map, rng, pop, parents, onBirth, traitRng = null,
     const child = people.add(people.hex[p], people.civ[p], 0, LIFE.healthMax, people.id[p], gen, people.founder[p]);
     // people.add may have grown the arrays, so read them afresh.
     const tr = people.traits;
+    const mu = typeof mutation === 'number' ? mutation : mutation[people.civ[p]];
     for (let t = 0; t < TRAIT_COUNT; t++) {
       const v = tr[t][p];
-      childTraits[t] = traitRng && mutation > 0 ? clamp01(v + traitRng.range(-mutation, mutation)) : v;
+      childTraits[t] = traitRng && mu > 0 ? clamp01(v + traitRng.range(-mu, mu)) : v;
     }
     people.setTraits(child, childTraits);
     onBirth(child);
@@ -327,17 +329,21 @@ export function regrow(map, share = 1, closed = null) {
 }
 
 /**
- * Places each civ's founders on its start hex. Founder c × startPop + k is
- * generation 1 of its own line. Each founder's traits are their civ type's
- * values (types[c]; type-less when absent) plus uniform(−founderSpread,
- * +founderSpread) from traitRng, clamped to 0 … 1 (exact type values without traitRng).
+ * Places each civ's founders on its start hex: pops[c] of them (a number is
+ * the same for every civ), numbered on from the civs before, each founder its
+ * own line's generation 1. Each founder's traits are their civ's starting
+ * traits (traits[c]: an object by trait id or a TRAITS-order array; all 0.5
+ * when absent) plus uniform(−founderSpread, +founderSpread) from traitRng,
+ * clamped to 0 … 1 (exact values without traitRng).
  */
-export function found(people, starts, startPop, rng, traitRng = null, types = null) {
+export function found(people, starts, pops, rng, traitRng = null, traits = null) {
   const spread = TRAIT_RULES.founderSpread;
+  let id = 0;
   for (let c = 0; c < starts.length; c++) {
-    const base = typeTraits(types?.[c] ?? 'none');
-    for (let k = 0; k < startPop; k++) {
-      const i = people.add(starts[c], c, rng.int(LIFE.founderAgeMax), LIFE.healthMax, NO_PARENT, 1, c * startPop + k);
+    const base = traitValues(traits?.[c]);
+    const n = typeof pops === 'number' ? pops : pops[c];
+    for (let k = 0; k < n; k++) {
+      const i = people.add(starts[c], c, rng.int(LIFE.founderAgeMax), LIFE.healthMax, NO_PARENT, 1, id++);
       for (let t = 0; t < TRAIT_COUNT; t++) childTraits[t] = traitRng ? clamp01(base[t] + traitRng.range(-spread, spread)) : base[t];
       people.setTraits(i, childTraits);
     }

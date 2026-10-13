@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { peopleTraits } from '../../src/sim/peoples.js';
 import {
   normalizeParams, presetParams, randomParams, mapParams, PRESETS, DEFAULT_PARAMS, LIMITS, MAP_KEYS, LOWLAND_KEYS, LAND_SHAPES,
   END_CONDITIONS,
@@ -13,7 +14,9 @@ function lcg(seed) {
 test('defaults match RULES.md "Map settings" and "Game settings"', () => {
   assert.deepEqual({ ...DEFAULT_PARAMS }, {
     seed: 'pangaea', size: 10, water: 0.25, mountains: 0.12, rivers: 2,
-    plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15, landShape: 'continent', civCount: 3, civTypes: ['expansionist', 'aggressive', 'cooperative'], startPop: 20, mutation: 0.03,
+    plains: 0.4, forest: 0.3, desert: 0.15, tundra: 0.15, landShape: 'continent', civCount: 3, civTypes: ['expansionist', 'aggressive', 'cooperative'],
+    civs: ['romans', 'assyrians', 'babylonians'].map((people, colour) => ({ people, name: '', traits: { ...peopleTraits(people) }, mutation: null, startPop: null, colour })),
+    startPop: 20, mutation: 0.03,
     endConditions: [], endTicks: 2500, dominanceShare: 0.6, dominanceYears: 300, starts: [],
   });
   assert.deepEqual(normalizeParams(), { ...DEFAULT_PARAMS });
@@ -171,10 +174,11 @@ test('seed: any text up to 64 characters, empty means the default', () => {
 });
 
 test('normalizeParams is idempotent and drops unknown keys', () => {
-  const p = normalizeParams({ seed: 'a', size: 33, water: 0.4, width: 999, civs: ['x'] });
+  const p = normalizeParams({ seed: 'a', size: 33, water: 0.4, width: 999, civList: ['x'], civs: ['x', { people: 'nope', extra: 1 }] });
   assert.deepEqual(normalizeParams(p), p);
   assert.equal('width' in p, false);
-  assert.equal('civs' in p, false);
+  assert.equal('civList' in p, false);
+  assert.deepEqual(p.civs.map((c) => Object.keys(c)), Array(3).fill(['people', 'name', 'traits', 'mutation', 'startPop', 'colour']));
 });
 
 test('presets match RULES.md', () => {
@@ -227,9 +231,12 @@ test('randomise ranges match RULES.md (size 10–50, water 10–60%, mountains 5
   // Every draw 0: all four end conditions ticked (First to Kingdom is drawn last), 2 civs, 10 people, 0% mutation.
   assert.deepEqual(lo.endConditions, ['lastCiv', 'kingdom', 'dominance', 'years']);
   assert.deepEqual([lo.civCount, lo.startPop, lo.mutation], [2, 10, 0]);
-  assert.deepEqual(lo.civTypes, ['expansionist', 'expansionist']);
+  // Every draw 0: the first people, then the next one (the first is taken).
+  assert.deepEqual(lo.civs.map((c) => c.people), ['sumerians', 'egyptians']);
+  assert.deepEqual(lo.civTypes, ['isolationist', 'isolationist']);
   assert.deepEqual([hi.civCount, hi.startPop, hi.mutation], [6, 50, 0.1]);
-  assert.deepEqual(hi.civTypes, Array(6).fill('nomadic'));
+  // Every draw near 1: the last people, then from the top of the list.
+  assert.deepEqual(hi.civs.map((c) => c.people), ['incas', 'sumerians', 'egyptians', 'akkadians', 'maya', 'babylonians']);
   assert.equal(lo.endTicks, 1000);
   assert.equal(lo.dominanceShare, 0.5);
   assert.equal(lo.dominanceYears, 100);
@@ -260,6 +267,7 @@ test('randomise ranges match RULES.md (size 10–50, water 10–60%, mountains 5
     assert.ok([100, 200, 300, 500].includes(p.dominanceYears));
     assert.ok(p.civCount >= 2 && p.civCount <= 6, `civs ${p.civCount}`);
     assert.equal(p.civTypes.length, p.civCount);
+    assert.equal(new Set(p.civs.map((c) => c.people)).size, p.civCount, 'every civ a different people');
     for (const t of p.civTypes) typeSeen.add(t);
     assert.ok(p.startPop >= 10 && p.startPop <= 50);
     assert.ok(p.mutation >= 0 && p.mutation <= 0.1 && Math.abs(p.mutation * 100 - Math.round(p.mutation * 100)) < 1e-9, `mutation ${p.mutation}`);
@@ -311,18 +319,21 @@ test('RULES.md "Game settings": civ types are padded and trimmed to the civ coun
   assert.deepEqual(t(['aggressive'], 1), ['aggressive']);
 });
 
-test('RULES.md "Game settings": every preset has its civs, types, people and mutation 3%', () => {
+test('RULES.md "Game settings": every preset has its civs, peoples, types, people and mutation 3%', () => {
   const want = {
-    default: [3, ['expansionist', 'aggressive', 'cooperative'], 20],
-    continent: [4, ['expansionist', 'aggressive', 'cooperative', 'isolationist'], 30],
-    archipelago: [5, ['nomadic', 'expansionist', 'isolationist', 'cooperative', 'aggressive'], 20],
-    highlands: [3, ['isolationist', 'aggressive', 'nomadic'], 20],
-    large: [6, ['expansionist', 'aggressive', 'cooperative', 'isolationist', 'nomadic', 'aggressive'], 40],
+    default: [3, ['expansionist', 'aggressive', 'cooperative'], 20, ['romans', 'assyrians', 'babylonians']],
+    continent: [4, ['expansionist', 'aggressive', 'cooperative', 'isolationist'], 30, ['romans', 'assyrians', 'babylonians', 'egyptians']],
+    archipelago: [5, ['nomadic', 'expansionist', 'isolationist', 'cooperative', 'aggressive'], 20, ['mongols', 'persians', 'sumerians', 'phoenicians', 'vikings']],
+    highlands: [3, ['isolationist', 'aggressive', 'nomadic'], 20, ['incas', 'hittites', 'mongols']],
+    large: [6, ['expansionist', 'aggressive', 'cooperative', 'isolationist', 'nomadic', 'aggressive'], 40, ['romans', 'assyrians', 'babylonians', 'egyptians', 'mongols', 'aztecs']],
   };
-  for (const [k, [n, types, pop]] of Object.entries(want)) {
+  for (const [k, [n, types, pop, peoples]] of Object.entries(want)) {
     const p = presetParams(k);
     assert.equal(p.civCount, n, k);
     assert.deepEqual(p.civTypes, types, k);
+    assert.deepEqual(p.civs.map((c) => c.people), peoples, k);
+    assert.deepEqual(p.civs.map((c) => [c.mutation, c.startPop, c.colour]), peoples.map((_, j) => [null, null, j]), k);
+    p.civs.forEach((c) => assert.deepEqual(c.traits, { ...peopleTraits(c.people) }, k));
     assert.equal(p.startPop, pop, k);
     assert.equal(p.mutation, 0.03, k);
   }

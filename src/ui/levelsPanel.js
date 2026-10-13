@@ -15,6 +15,7 @@ import { BUILDING_COST, WONDERS, WONDER_RULES, ERAS, materialText, effectText } 
 import {
   TIERS, TIER_NAMES, HAND, SETTLE, SETTLEMENT_BUILDINGS, MAX_PROGRESS_BONUS, settlementEffectText,
 } from '../sim/settlements.js';
+import { civName } from './civNames.js';
 
 const materialName = (id) => MATERIAL_NAMES[MATERIAL_IDS.indexOf(id)] ?? id;
 /** Stockpile amounts, rounded down to one decimal so 79.96 never reads as 80. */
@@ -87,7 +88,7 @@ export function wonderStatus(w) {
   if (w.status === 'owned') return 'owned';
   if (w.status === 'building') return `building ${share(w.work, w.years)}`;
   if (w.status === 'gathering') return 'going for it, gathering materials';
-  if (w.status === 'taken') return w.owner >= 0 ? `taken by Civ ${w.owner + 1}` : 'built, now abandoned';
+  if (w.status === 'taken') return w.owner >= 0 ? `taken by ${civName(w.owner)}` : 'built, now abandoned';
   return 'free';
 }
 

@@ -5,7 +5,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { TERRAIN_RGB, LAKE_RGB, RIVER_RGB, SHADE, hexColours, hexRgb } from '../../src/render/palette.js';
-import { CIV_STYLES, EMBLEM_SHAPES, EMBLEM_ORDER, civStyle, emblemSvg } from '../../src/render/civStyle.js';
+import { CIV_STYLES, CIV_COLOURS, CIV_TINTS, EMBLEM_SHAPES, EMBLEM_ORDER, civStyle, emblemSvg, setCivColours } from '../../src/render/civStyle.js';
+import { COLOUR_COUNT } from '../../src/sim/params.js';
 import { PEOPLE_ZOOM_PX, peopleShown, shortCount, hexTotal, largestCiv } from '../../src/render/peopleLayer.js';
 import { Renderer } from '../../src/render/renderer.js';
 import { Simulation } from '../../src/sim/simulation.js';
@@ -92,22 +93,48 @@ test('shading on generated maps: every channel stays within 0..255 and within th
   }
 });
 
-test('RULES.md "How civs and people look": colours and emblems by civ number', () => {
+test('RULES.md "How civs and people look": emblems and default colours by civ number, and the 12 colours', () => {
   const rows = table('## How civs and people look');
   assert.equal(rows.length, 8);
   assert.equal(CIV_STYLES.length, 8);
   const emblemName = { 'upside-down triangle': 'down triangle' };
+  setCivColours();
   rows.forEach(([civ, colour, emblem], k) => {
     assert.equal(civ, `Civ ${k + 1}`);
-    const [name] = colour.split(' (');
-    assert.equal(CIV_STYLES[k].colour, name, civ);
-    assert.deepEqual(CIV_STYLES[k].rgb, rgbOf(colour), civ);
+    assert.equal(Number(colour), k + 1, civ);
+    assert.equal(CIV_STYLES[k].colour, CIV_COLOURS[k].colour, civ);
     assert.equal(CIV_STYLES[k].emblem, emblemName[emblem] ?? emblem, civ);
     assert.ok(EMBLEM_SHAPES[CIV_STYLES[k].emblem], `${civ} has a shape`);
     assert.equal(civStyle(k), CIV_STYLES[k]);
   });
+  // "The 12 colours (RGB): 1 red (230, 57, 70), …"
+  const line = readFileSync(new URL('../../RULES.md', import.meta.url), 'utf8').match(/The 12 colours \(RGB\): (.*?)\. Every/)[1];
+  const listed = [...line.matchAll(/(\d+) (\w+) \((\d+), (\d+), (\d+)\)/g)].map((m) => ({ n: Number(m[1]), colour: m[2], rgb: [m[3], m[4], m[5]].map(Number) }));
+  assert.equal(listed.length, 12);
+  assert.equal(CIV_COLOURS.length, COLOUR_COUNT);
+  listed.forEach((c, j) => {
+    assert.equal(c.n, j + 1);
+    assert.equal(CIV_COLOURS[j].colour, c.colour);
+    assert.deepEqual(CIV_COLOURS[j].rgb, c.rgb);
+  });
   assert.equal(new Set(EMBLEM_ORDER).size, 8, 'every civ has its own emblem');
-  assert.equal(new Set(CIV_STYLES.map((s) => s.rgb.join())).size, 8, 'and its own colour');
+  assert.equal(new Set(CIV_COLOURS.map((s) => s.rgb.join())).size, 12, 'and every colour differs');
+});
+
+test('setCivColours recolours civs in place (styles and tints), and no list means the defaults', () => {
+  const styles = CIV_STYLES;
+  const tints = CIV_TINTS;
+  setCivColours([9, 0]);
+  assert.equal(CIV_STYLES, styles);
+  assert.equal(CIV_TINTS, tints);
+  assert.equal(civStyle(0).colour, 'pink');
+  assert.equal(civStyle(0).emblem, 'circle', 'the emblem stays with the civ number');
+  assert.equal(civStyle(1).colour, 'red');
+  assert.equal(CIV_TINTS[0], (255 << 16) | (125 << 8) | 175);
+  assert.equal(civStyle(2).colour, 'yellow', 'missing entries take their own number');
+  setCivColours();
+  assert.equal(civStyle(0).colour, 'red');
+  assert.equal(CIV_TINTS[1], (58 << 16) | (134 << 8) | 255);
 });
 
 test('emblemSvg draws the civ colour with a dark outline', () => {

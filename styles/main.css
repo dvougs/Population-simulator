@@ -186,6 +186,42 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 6px 
 .type-desc { margin: 4px 0 0; font-size: 16px; line-height: 1.4; color: var(--text-dim); overflow-wrap: anywhere; }
 .map-summary { margin: 0 0 10px; line-height: 1.45; }
 
+/* ---------- Civ Edit sidebar (civEditor.js): full width on a phone, a side panel on wider screens ---------- */
+.civ-editor-backdrop { position: fixed; inset: 0; z-index: 30; background: rgba(5, 8, 12, 0.55); animation: fade-in 0.2s var(--ease) both; }
+.civ-editor { --civ: var(--accent); position: fixed; top: 0; right: 0; bottom: 0; z-index: 31; width: min(440px, 100vw);
+  display: flex; flex-direction: column; background: var(--glass-hi); border-left: 1px solid var(--line-hi);
+  box-shadow: -18px 0 40px rgba(0, 0, 0, 0.45); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  transform: translateX(100%); transition: transform 0.28s var(--ease);
+  padding-top: var(--safe-top); padding-right: var(--safe-right); padding-bottom: var(--safe-bottom); }
+.civ-editor.open { transform: none; }
+.civ-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px;
+  border-bottom: 1px solid var(--line); background: linear-gradient(100deg, color-mix(in srgb, var(--civ) 22%, transparent), transparent 70%); }
+.civ-editor-head h2 { margin: 0; font-size: 1.15rem; min-width: 0; overflow-wrap: anywhere; }
+.civ-editor-body { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 6px 16px 24px; }
+.civ-editor-body section { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.civ-editor-body h3 { margin: 4px 0 8px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); }
+.civ-editor-body .row > label { min-width: 5.5em; }
+.swatches { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.swatch { width: 100%; min-height: var(--tap); border-radius: 12px; border: 2px solid transparent; background: var(--swatch); cursor: pointer; touch-action: manipulation; }
+.swatch[data-taken="true"] { opacity: 0.6; }
+.swatch[aria-checked="true"] { border-color: #fff; box-shadow: 0 0 0 2px var(--bg), 0 0 14px var(--swatch); opacity: 1; }
+.trait-row { padding: 6px 0; }
+.trait-row .row { flex-wrap: wrap; gap: 0 10px; }
+.trait-row .row > label { min-width: 0; flex: 1 1 auto; color: var(--text); font-weight: 600; }
+/* The slider takes its own full-width line under the name, ⓘ and number. */
+.trait-row input[type="range"] { order: 3; flex: 1 1 100%; }
+.trait-num { flex: 0 0 auto; width: 5.2em !important; padding: 0 8px !important; text-align: center; font-variant-numeric: tabular-nums; }
+.trait-text { margin: 0; font-size: 0.9rem; line-height: 1.4; color: var(--text-dim); }
+.trait-rule { margin: 6px 0 0; padding: 8px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); font-size: 0.85rem; line-height: 1.45; color: var(--text); }
+.info-btn { flex: 0 0 auto; min-width: var(--tap); min-height: var(--tap); border: 0; background: none; color: var(--accent); font-size: 1.15rem; cursor: pointer; }
+.budget { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 4px; font-size: 0.9rem; color: var(--text-dim); }
+.budget[data-over="true"] { color: var(--warm); }
+.budget-warn-wrap { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.budget-warn { min-width: var(--tap); min-height: var(--tap); border: 0; background: none; color: var(--warm); font-size: 1.2rem; cursor: help; }
+.budget-note { flex: 1 1 100%; font-size: 0.85rem; line-height: 1.4; color: var(--warm); font-weight: 400; }
+.own-setting .range-row { margin-top: 0; }
+@media (prefers-reduced-motion: reduce) { .civ-editor { transition: none; } }
+
 /* ---------- Home page ---------- */
 .home { overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
   padding: calc(16px + var(--safe-top)) calc(18px + var(--safe-right)) calc(20px + var(--safe-bottom)) calc(18px + var(--safe-left)); }
@@ -345,6 +381,8 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 6px 
 .how-traits { margin: 12px 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
 .how-traits dt { font-weight: 700; margin-top: 8px; color: #cfe6ff; }
 .how-traits dd { margin: 0; color: var(--text-dim); }
+.how-rule { display: block; margin-top: 4px; font-size: 0.85rem; opacity: 0.8; }
+.how-peoples h4 small { font-weight: 400; font-size: 0.85rem; }
 @media (min-width: 560px) { .how-traits { grid-template-columns: 9.5em minmax(0, 1fr); gap: 10px 16px; } .how-traits dt { margin-top: 0; } }
 .how-bars { display: grid; gap: 8px; padding: 14px; border-radius: 16px; background: rgba(8, 11, 16, 0.7); border: 1px solid var(--line); }
 .how-bar-row { display: grid; grid-template-columns: 7.8em minmax(0, 1fr); align-items: center; gap: 10px; font-size: 0.85rem; }
