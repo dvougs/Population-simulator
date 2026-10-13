@@ -4,30 +4,6 @@ How to use this file: answer a question by writing after its "Answer:" line (a n
 
 ## Open
 
-### Q-009: Should a civ keep gathering when a few of its people go hungry?
-- Date: 2026-10-11
-- Why it matters: Levels need materials, and a civ gathers only while its food is "secure" (Q-008 option 1: nobody in the civ went hungry last year). Once a civ fills its land, someone in it goes hungry almost every year, so it stops gathering for good. In headless runs no civ got past L3, so Kingdom and the First to Kingdom ending are out of reach.
-- Evidence: seeds review-20261011f-1 to -3 at b52df73, default setup, 400 years: the largest civ on each seed (1,570, 1,035 and 956 people) is "food not secure" at year 400. On seed review-20261011e-1 over 3,000 years, Civ 1 reached L3 in year 477 and stayed there for 2,500 years with about 1,770 people, unable to gather the copper it needed.
-- Options:
-  1. Secure when at most 5% of the civ's people went hungry last year (the 1.2 food per person rule stays): big civs keep gathering, and levels 4 and 5 become reachable. The director checks with headless runs that Kingdom takes about 1,750 years or more.
-  2. Judge each hex instead of the whole civ: a hex where nobody went hungry last year may send its 20% to gather. Crowded hexes stop, the rest of the civ carries on.
-  3. Keep the rule as it is: levels 4 and 5 stay very rare.
-- Recommendation: 1. It is the smallest change, keeps "food first" in spirit, and makes your 1.0 level ladder reachable.
-- Priority: P1 (suggested; stands unless the owner changes it)
-- Answer: 2026-10-11 21:10 Greek, in the "Level-2 ceiling" project thread: neither option as written. Headless 10,000-year runs showed the 5% rule is not enough, because the starvation and 1.2-food checks also fail almost every year once the map is full. Agreed fix: food is secure when at most 10% of the civ's people went hungry last year, with no starvation or food-per-person check. Built in that thread's own pull request (with Kingdom borders and hex minimums from land per civ), not by the director. Director: do not build Q-009.
-
-### Q-010: The hunger and crowding fight triggers almost never fire. Change them?
-- Date: 2026-10-11
-- Why it matters: The rules (and How to play) say civs fight when a shared hex is short of food or crowded, but the one-time fight certifier found these two triggers start almost no fights. Fights come from Aggressive civs, revenge and 3-to-1 numbers instead, so "scarcity leads to fights" from your design is mostly not happening.
-- Evidence: certifier runs at b52df73, default setup: of 23,349 shared hex-years, the hex was short of food in 1,606 (7%) and at capacity in 35 (0.15%). Of 12,506 fights, about 23 came from hunger alone and about 10 from crowding. The check runs after food regrows (src/sim/contact.js), when hexes look full of food. Someone in the hex had gone hungry that year in 39% of shared hex-years.
-- Options:
-  1. Hunger trigger fires when someone in the hex went hungry this year (instead of food below need after regrowth); crowding when the hex holds at least 80% of its food capacity. Scarcity becomes a real cause of war; more fights overall, which the director checks for extinctions with headless runs.
-  2. Only the hunger change from option 1; crowding stays as it is.
-  3. Keep them as they are and reword RULES.md and How to play to say these triggers are rare.
-- Recommendation: 1. It matches your design ("scarcity plus aggressive people leads to fights") and the director re-runs the certifier's seed sets before release.
-- Priority: P2 (suggested; stands unless the owner changes it)
-- Answer:
-
 ## Proposals
 
 Ideas the director draws from headless simulation runs and the code. At most 6 wait here at a time.
@@ -42,6 +18,36 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Priority: P2 (suggested; stands unless the owner changes it)
 - Decision:
 
+## Requests
+
+## Answered
+
+### Q-009: Should a civ keep gathering when a few of its people go hungry?
+- Date: 2026-10-11
+- Why it matters: Levels need materials, and a civ gathers only while its food is "secure" (Q-008 option 1: nobody in the civ went hungry last year). Once a civ fills its land, someone in it goes hungry almost every year, so it stops gathering for good. In headless runs no civ got past L3, so Kingdom and the First to Kingdom ending are out of reach.
+- Evidence: seeds review-20261011f-1 to -3 at b52df73, default setup, 400 years: the largest civ on each seed (1,570, 1,035 and 956 people) is "food not secure" at year 400. On seed review-20261011e-1 over 3,000 years, Civ 1 reached L3 in year 477 and stayed there for 2,500 years with about 1,770 people, unable to gather the copper it needed.
+- Options:
+  1. Secure when at most 5% of the civ's people went hungry last year (the 1.2 food per person rule stays): big civs keep gathering, and levels 4 and 5 become reachable. The director checks with headless runs that Kingdom takes about 1,750 years or more.
+  2. Judge each hex instead of the whole civ: a hex where nobody went hungry last year may send its 20% to gather. Crowded hexes stop, the rest of the civ carries on.
+  3. Keep the rule as it is: levels 4 and 5 stay very rare.
+- Recommendation: 1. It is the smallest change, keeps "food first" in spirit, and makes your 1.0 level ladder reachable.
+- Priority: P1 (suggested; stands unless the owner changes it)
+- Answer: 2026-10-11 21:10 Greek, in the "Level-2 ceiling" project thread: neither option as written. Headless 10,000-year runs showed the 5% rule is not enough, because the starvation and 1.2-food checks also fail almost every year once the map is full. Agreed fix: food is secure when at most 10% of the civ's people went hungry last year, with no starvation or food-per-person check. Built in that thread's own pull request (with Kingdom borders and hex minimums from land per civ), not by the director. Director: do not build Q-009.
+- Moved: 2026-10-13 (cleanup), done outside the director: built in v0.95 "Levels reachable: looser food security, Kingdom borders, land-based minimums" (commit 7eef554), from the "Level-2 ceiling" project thread. Food security has since been reworked again (RULES.md "Secure food": a hex gathers when at most 20% of its people went hungry). No task.
+
+### Q-010: The hunger and crowding fight triggers almost never fire. Change them?
+- Date: 2026-10-11
+- Why it matters: The rules (and How to play) say civs fight when a shared hex is short of food or crowded, but the one-time fight certifier found these two triggers start almost no fights. Fights come from Aggressive civs, revenge and 3-to-1 numbers instead, so "scarcity leads to fights" from your design is mostly not happening.
+- Evidence: certifier runs at b52df73, default setup: of 23,349 shared hex-years, the hex was short of food in 1,606 (7%) and at capacity in 35 (0.15%). Of 12,506 fights, about 23 came from hunger alone and about 10 from crowding. The check runs after food regrows (src/sim/contact.js), when hexes look full of food. Someone in the hex had gone hungry that year in 39% of shared hex-years.
+- Options:
+  1. Hunger trigger fires when someone in the hex went hungry this year (instead of food below need after regrowth); crowding when the hex holds at least 80% of its food capacity. Scarcity becomes a real cause of war; more fights overall, which the director checks for extinctions with headless runs.
+  2. Only the hunger change from option 1; crowding stays as it is.
+  3. Keep them as they are and reword RULES.md and How to play to say these triggers are rare.
+- Recommendation: 1. It matches your design ("scarcity plus aggressive people leads to fights") and the director re-runs the certifier's seed sets before release.
+- Priority: P2 (suggested; stands unless the owner changes it)
+- Answer:
+- Moved: 2026-10-13 (cleanup), overtaken: "Balancing from 500-year games: crowding at 50% of capacity, Expansionist reworked, scarcity fight triggers" (commit 90e30f6) made the hunger trigger fire when someone in the hex went hungry this year, and crowding use the migration crowding line (50% of food capacity). RULES.md "Contact" (b) and (c) describe it. No task.
+
 ### P-011: Group fights into wars in the history log
 - Date: 2026-10-11
 - Category: UI
@@ -51,10 +57,7 @@ Ideas the director draws from headless simulation runs and the code. At most 6 w
 - Phone performance risk: low: one open war per pair of civs, updated once a year; a shorter log to draw.
 - Priority: P2 (suggested; stands unless the owner changes it)
 - Decision: superseded (owner, 2026-10-11 17:54 UTC: the end screen's History, War section and scrolling rework is being built outside the director cycle, in a separate pull request from a project thread; no task for the director).
-
-## Requests
-
-## Answered
+- Moved: 2026-10-13 (cleanup), done outside the director: "Reworked End screen: War card, short History, folded cards" (commit 9e65a2d). No task.
 
 ### R-017: Buildings and wonders: a unique building per civ type for each era, needed to reach the next level and giving that type's own bonuses, plus one shared wonder per era that only the first civ to finish it gets, with an extreme bonus at a huge material cost; all visible on their hexes and tappable to show their bonuses; balance proven by thorough testing (owner, 2026-10-11 22:38 Greek, in the project chat).
 - Handled outside the director cycle: designed and built in the "Buildings and wonders" project thread, in its own pull request. Director: no task for this; do not build it.
