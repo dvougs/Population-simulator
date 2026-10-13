@@ -39,7 +39,7 @@ export const LIMITS = Object.freeze({
   dominanceShare: { min: 0.25, max: 1 },
   dominanceYears: { min: 10, max: 10000 },
   civCount: { min: 1, max: 8 },
-  startPop: { min: 2, max: 200 },
+  startPop: { min: 4, max: 200 },
   mutation: { min: 0, max: 0.1 },
   trait: { min: 0, max: 1 },
   seedLength: 64,

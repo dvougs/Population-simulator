@@ -567,7 +567,7 @@ test('RULES.md "End screen" History lines for diplomacy events', () => {
 
 test('seeded run: relations and trade show up in stats, nobody fights battles inside a truce or at peace, and the same params give the same hash', () => {
   const run = () => {
-    const s = new Simulation({ seed: 'peace1', size: 12, civCount: 4, startPop: 40, civTypes: ['aggressive', 'expansionist', 'cooperative', 'aggressive'] });
+    const s = new Simulation({ seed: 'peace2', size: 12, civCount: 4, startPop: 40, civTypes: ['aggressive', 'expansionist', 'cooperative', 'aggressive'] });
     const fought = [];
     const onBattle = s.onBattle;
     s.onBattle = (h, a, d, ...rest) => {

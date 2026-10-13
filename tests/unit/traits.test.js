@@ -219,25 +219,27 @@ test('RULES.md A year 4 Deaths: old age starts at 35 + 20 × l; 5 years later wi
   assert.equal(oldAgeChance(95, 1, 5), (95 - 60) / 40);
 });
 
-test('RULES.md A year 5 Births: chance (2.5% + 5% f)(0.75 + 0.5 m) + 0.5% per level above 1', () => {
+test('RULES.md A year 5 Births: a woman\'s yearly chance is 6 × ((2.5% + 5% f)(0.75 + 0.5 m) + civ bonus) at her best ages', () => {
   const rate = (f, m, bonus = null) => {
     const map = makeMap(3, 3, () => PLAINS);
     map.foodCap.fill(1e6);
     const people = new People(16384);
     for (let k = 0; k < 8000; k++) {
-      const i = people.add(k % 9, 0, 25, 100, 0);
+      // Even slots are women (the sex that gives birth), odd slots men with the same traits.
+      const i = people.add(k % 9, 0, 27, 100, 0, 1, 0, k % 2 === 0 ? 1 : 0);
       people.setTraits(i, [f, 0.5, 0.5, 0.5, 0.5, m, 0.5, 0.5]);
     }
     const s = scratch(map, people);
-    return births(people, map, new Rng(`b${f}${m}`), s.pop, s.parents, () => {}, null, 0, bonus) / 8000;
+    return births(people, map, new Rng(`b${f}${m}`), s.pop, s.parents, () => {}, null, 0, bonus) / 4000;
   };
-  const near = (got, want) => assert.ok(Math.abs(got - want) < 0.006, `${got} vs ${want}`);
-  near(rate(0.5, 0.5), 0.05);
-  near(rate(0, 0.5), 0.025);
-  near(rate(1, 0.5), 0.075);
-  near(rate(0.5, 1), 0.0625);
-  near(rate(0.5, 0), 0.0375);
-  near(rate(0.5, 0.5, Float64Array.of(0.02)), 0.07);
+  // Twins count both children, so births run 1.5% above the women who gave birth.
+  const near = (got, want) => assert.ok(Math.abs(got - want * 1.015) < 0.03, `${got} vs ${want}`);
+  near(rate(0.5, 0.5), 0.3);
+  near(rate(0, 0.5), 0.15);
+  near(rate(1, 0.5), 0.45);
+  near(rate(0.5, 1), 0.375);
+  near(rate(0.5, 0), 0.225);
+  near(rate(0.5, 0.5, Float64Array.of(0.02)), 0.42);
 });
 
 test('RULES.md Traits: a civ\'s starting traits in TRAITS order; missing ones are 0.5', () => {
@@ -293,61 +295,64 @@ test('RULES.md Traits: founders are clamped to 0 .. 1 (a starting value near the
   for (let i = 0; i < people.high; i++) for (let t = 0; t < 8; t++) assert.ok(people.traits[t][i] >= 0 && people.traits[t][i] <= 1);
 });
 
-/** One hex of fertile adults with the given traits; returns the children's traits. */
-function children(parentTraits, mutation, seed = 'm', rngOn = true) {
+/**
+ * One hex of mothers (fertility 1, so many children) with their own traits and as many fathers with theirs;
+ * returns the children's traits and what the parents' average is.
+ */
+function children(motherTraits, mutation, seed = 'm', rngOn = true, fatherTraits = motherTraits) {
   const map = makeMap(3, 3, () => PLAINS);
   map.foodCap.fill(1e6);
   const people = new People(4096);
-  const n = 800;
-  for (let k = 0; k < n; k++) {
-    const i = people.add(k % 9, 0, 25, 100, 0);
-    people.setTraits(i, parentTraits);
-    people.fertility[i] = 1; // many children
-    parentTraits = parentTraits.slice();
-  }
+  const n = 400;
+  const mother = motherTraits.slice();
+  mother[0] = 1;
+  for (let k = 0; k < n; k++) people.setTraits(people.add(k % 9, 0, 25, 100, 0, 1, 0, 1), mother);
+  for (let k = 0; k < n; k++) people.setTraits(people.add(k % 9, 0, 25, 100, 0, 1, 0, 0), fatherTraits);
   const s = scratch(map, people);
   const first = people.high;
   const got = births(people, map, new Rng(seed), s.pop, s.parents, () => {}, rngOn ? new Rng(`${seed}t`) : null, mutation);
   assert.ok(got > 20, 'enough children to look at');
   const out = [];
   for (let i = first; i < people.high; i++) out.push(people.traits.map((a) => a[i]));
-  return out;
+  const avg = mother.map((v, t) => (Math.fround(v) + Math.fround(fatherTraits[t])) / 2);
+  return { kids: out, avg };
 }
 
-test('RULES.md Traits: children get each parent trait ± mutation, clamped, drawn separately per trait', () => {
-  const parent = [1, 0.5, 0.02, 0.98, 0.5, 0.5, 0.5, 0.5];
-  const kids = children(parent, 0.05);
+test('RULES.md Traits: children get the average of both parents\' traits ± mutation, clamped, drawn separately per trait', () => {
+  const mother = [1, 0.5, 0.02, 0.98, 0.5, 0.5, 0.5, 0.5];
+  const father = [0.6, 0.3, 0, 1, 0.5, 0.5, 0.5, 0.5];
+  const { kids, avg } = children(mother, 0.05, 'm', true, father);
   let moved = 0;
   const seenSigns = [new Set(), new Set()];
   for (const k of kids) {
     for (let t = 0; t < 8; t++) {
       assert.ok(k[t] >= 0 && k[t] <= 1, 'clamped to 0 .. 1');
-      const p = Math.fround(parent[t]);
-      assert.ok(Math.abs(k[t] - p) <= 0.05 + 1e-6, `trait ${t} moved ${k[t] - p}`);
+      assert.ok(Math.abs(k[t] - avg[t]) <= 0.05 + 1e-6, `trait ${t} moved ${k[t] - avg[t]}`);
     }
-    assert.ok(k[0] <= 1, 'fertility 1 cannot go above 1');
-    if (k[1] !== 0.5) moved++;
-    seenSigns[0].add(Math.sign(k[1] - 0.5));
-    seenSigns[1].add(Math.sign(k[2] - 0.02));
+    if (Math.abs(k[1] - 0.4) > 1e-6) moved++;
+    seenSigns[0].add(Math.sign(k[1] - 0.4));
+    seenSigns[1].add(Math.sign(k[4] - 0.5));
   }
+  assert.ok(Math.abs(avg[1] - 0.4) < 1e-6 && Math.abs(avg[0] - 0.8) < 1e-6, 'the average, not the mother\'s value');
   assert.ok(moved > kids.length * 0.9, 'a trait moves almost every time');
   assert.ok(seenSigns[0].has(1) && seenSigns[0].has(-1), 'both directions');
   assert.ok(kids.some((k) => k[2] === 0), 'clamped at 0');
   assert.ok(kids.some((k) => k[3] === 1), 'clamped at 1');
-  // Separate draws: two traits do not move together.
-  assert.ok(kids.some((k) => Math.sign(k[1] - 0.5) !== Math.sign(k[4] - 0.5)));
-  // Uniform: the largest step is close to the limit.
-  const biggest = Math.max(...kids.map((k) => Math.abs(k[1] - 0.5)));
+  assert.ok(kids.some((k) => Math.sign(k[1] - 0.4) !== Math.sign(k[4] - 0.5)), 'separate draws per trait');
+  const biggest = Math.max(...kids.map((k) => Math.abs(k[1] - 0.4)));
   assert.ok(biggest > 0.045, `${biggest}`);
 });
 
-test('RULES.md Traits: mutation 0 (or no trait stream) gives exact copies of the parent', () => {
-  const parent = [1, 0.37, 0.21, 0.83, 0.5, 0.64, 0.12, 0.99].map(Math.fround);
-  for (const kid of children(parent, 0)) assert.deepEqual(kid, parent);
-  for (const kid of children(parent, 0.05, 'n', false)) assert.deepEqual(kid, parent);
+test('RULES.md Traits: mutation 0 (or no trait stream) gives exactly the parents\' average', () => {
+  const mother = [1, 0.37, 0.21, 0.83, 0.5, 0.64, 0.12, 0.99];
+  const father = [0.2, 0.91, 0.5, 0.17, 0.5, 0.36, 0.88, 0.01];
+  for (const run of [children(mother, 0, 'z', true, father), children(mother, 0.05, 'n', false, father)]) {
+    for (const kid of run.kids) assert.deepEqual(kid, run.avg.map(Math.fround));
+  }
+  assert.ok(Math.abs(children(mother, 0, 'z', true, father).avg[1] - 0.64) < 1e-6);
 });
 
-test('RULES.md Game settings: mutation 3% by default moves a child by at most ±0.03 in a seeded run', () => {
+test('RULES.md Game settings: mutation 3% by default moves a child by at most ±0.03 from its parents\' average in a seeded run', () => {
   const sim = new Simulation({ seed: 'mut', size: 10, civCount: 1, civTypes: ['expansionist'], startPop: 30 });
   assert.equal(sim.params.mutation, 0.03);
   sim.tick(60);
@@ -355,40 +360,53 @@ test('RULES.md Game settings: mutation 3% by default moves a child by at most ±
   const byId = new Map();
   for (let i = 0; i < p.high; i++) if (p.alive[i]) byId.set(p.id[i], i);
   let checked = 0;
+  let moved = 0;
   for (const [, i] of byId) {
-    const parent = byId.get(p.parent[i]);
-    if (parent === undefined) continue;
-    for (let t = 0; t < 8; t++) assert.ok(Math.abs(p.traits[t][i] - p.traits[t][parent]) <= 0.03 + 1e-6);
+    const m = byId.get(p.parent[i]);
+    const f = byId.get(p.father[i]);
+    if (m === undefined || f === undefined || p.gen[i] === 1) continue;
+    for (let t = 0; t < 8; t++) {
+      const d = Math.abs(p.traits[t][i] - (p.traits[t][m] + p.traits[t][f]) / 2);
+      assert.ok(d <= 0.03 + 1e-6);
+      if (d > 1e-6) moved++;
+    }
     checked++;
   }
-  assert.ok(checked > 10, `children with a living parent: ${checked}`);
+  assert.ok(checked > 10, `children with both parents alive: ${checked}`);
+  assert.ok(moved > 0);
 });
 
-test('RULES.md Traits: with mutation 0% every descendant keeps its founder\'s traits', () => {
+test('RULES.md Traits: with mutation 0% a child is exactly its parents\' average and no one leaves the founders\' range', () => {
   const sim = new Simulation({ seed: 'nomut', size: 10, civCount: 2, startPop: 20, mutation: 0 });
+  const lo = new Float64Array(8).fill(1);
+  const hi = new Float64Array(8);
+  for (let i = 0; i < sim.people.high; i++) {
+    for (let t = 0; t < 8; t++) { lo[t] = Math.min(lo[t], sim.people.traits[t][i]); hi[t] = Math.max(hi[t], sim.people.traits[t][i]); }
+  }
   sim.tick(80);
   const p = sim.people;
   assert.ok(p.count > 40);
-  const founderTraits = new Map();
-  const fresh = new Simulation({ seed: 'nomut', size: 10, civCount: 2, startPop: 20, mutation: 0 });
-  for (let i = 0; i < fresh.people.high; i++) founderTraits.set(fresh.people.founder[i], fresh.people.traits.map((a) => a[i]));
-  let children = 0;
-  for (let i = 0; i < p.high; i++) {
-    if (!p.alive[i]) continue;
-    assert.deepEqual(p.traits.map((a) => a[i]), founderTraits.get(p.founder[i]));
-    if (p.gen[i] > 1) children++;
+  const byId = new Map();
+  for (let i = 0; i < p.high; i++) if (p.alive[i]) byId.set(p.id[i], i);
+  let exact = 0;
+  for (const [, i] of byId) {
+    for (let t = 0; t < 8; t++) assert.ok(p.traits[t][i] >= lo[t] - 1e-6 && p.traits[t][i] <= hi[t] + 1e-6, 'inside the founders\' range');
+    const m = byId.get(p.parent[i]);
+    const f = byId.get(p.father[i]);
+    if (m === undefined || f === undefined || p.gen[i] === 1) continue;
+    for (let t = 0; t < 8; t++) assert.equal(p.traits[t][i], Math.fround((p.traits[t][m] + p.traits[t][f]) / 2));
+    exact++;
   }
-  assert.ok(children > 0);
+  assert.ok(exact > 5, `${exact}`);
 });
 
 test('RULES.md Traits: a civ\'s own mutation applies to the children born into it', () => {
   const parent = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5];
   // The parents are all in civ 0: its entry decides, the other civ's does not.
   const exact = children(parent, Float64Array.of(0, 0.1), 'own0');
-  // children() makes every parent's fertility 1.
-  const copied = [1, ...parent.slice(1)].map(Math.fround);
-  for (const t of exact) assert.deepEqual(t, copied);
+  // children() makes every mother's fertility 1, the fathers keep 0.5: the average is 0.75.
+  for (const t of exact.kids) assert.deepEqual(t, exact.avg.map(Math.fround));
   const mutated = children(parent, Float64Array.of(0.1, 0), 'own1');
-  assert.ok(mutated.some((t) => t.some((v, k) => Math.abs(v - copied[k]) > 0.01)));
-  for (const t of mutated) t.forEach((v, k) => assert.ok(Math.abs(v - copied[k]) <= 0.1 + 1e-6));
+  assert.ok(mutated.kids.some((t) => t.some((v, k) => Math.abs(v - mutated.avg[k]) > 0.01)));
+  for (const t of mutated.kids) t.forEach((v, k) => assert.ok(Math.abs(v - mutated.avg[k]) <= 0.1 + 1e-6));
 });

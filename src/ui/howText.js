@@ -246,12 +246,16 @@ export function howText() {
         kicker: 'People',
         title: 'Every person is real',
         paras: [
-          `No faceless numbers here: each person is simulated one by one, with an age, health from 0 to ${L.healthMax}, a hunger count, `
-            + 'a parent, a family line and eight traits of their own.',
+          `No faceless numbers here: each person is simulated one by one, a man or a woman, with an age, health from 0 to ${L.healthMax}, `
+            + 'a hunger count, a mother and a father, a family line and eight traits of their own.',
           `A person eats about ${L.foodPerPerson} food a year. Fed, they gain ${L.healthFedGain} health; hungry, they lose about ${L.healthHungryLoss}, `
             + `so ${starveYears} lean years in a row are usually the end.`,
-          `Between ${L.fertileMin} and ${L.fertileMax}, a fed person in a hex that is not yet full has about a ${pct(L.baseBirthChance)} chance a year of a child. `
-            + 'No partner needed: the child starts beside them, in the same civ, and inherits their traits.',
+          `Women have the children, from ${L.fertileMin} to ${L.fertileMax}: a fed woman in a hex that is not yet full, with a man of her civ in her hex `
+            + `or next door, has up to a ${pct(L.baseBirthChance)} chance a year at her best ages (mid-20s), less when younger or older, `
+            + `and rests a year after each child. Births are ${pct(1 - L.girlShare)} boys, ${pct(L.twinChance)} are twins, `
+            + 'and the child gets the average of its parents\' traits.',
+          `Life is hard for the young: ${pct(L.infantDeath)} of babies die in their first year and about 1 in 3 children never reach 16. `
+            + `Giving birth kills the mother ${pct(L.childbirthDeath)} of the time.`,
           `From about ${L.baseOldAgeStart}, old age begins to claim people, a little more each year; nobody lives past about ${oldestAge}.`,
         ],
       },

@@ -55,7 +55,7 @@ test('RULES.md "Gathering": the numbers', () => {
   assert.equal(GATHER.secureHungryPct, 10);
   assert.deepEqual([GATHER.starveYears, GATHER.starveShortPct, GATHER.starveFamishPct], [10, 2, 10]);
   assert.equal(GATHER.secureFoodPerPerson, undefined, 'no food-per-person check any more');
-  assert.equal(GATHER.gatherShare, 0.2);
+  assert.equal(GATHER.gatherShare, 0.3);
   assert.equal(GATHER.adultAge, 16);
   assert.equal(GATHER.personBase, 0.5);
   // By hand a gatherer yields 0.5 / 0.25 / 0.0625 and a deposit gives at most 10 / 5 / 1.25 (industry buildings: see settlements.test.js).
@@ -491,29 +491,29 @@ test('RULES.md "What levels do": a river hex gets the plains bonus; food above a
 
 const adults = (hex, civ, n, t = {}) => [hex, civ, n, t];
 
-test('RULES.md "Gathering": 20% of the adults gather, 0.5 wood a gatherer; the yield goes to the stockpile', () => {
+test('RULES.md "Gathering": 30% of the adults gather, 0.5 wood a gatherer; the yield goes to the stockpile', () => {
   const w = world(['expansionist'], [adults(55, 0, 50)], { deposits: { 55: [WOOD] } });
   step(w);
-  near(stockOf(w, 0, WOOD), 5); // 10 gatherers × 0.5
-  assert.equal(w.levels.gatherers[55], 10);
-  assert.equal(w.levels.gathered[55], 5);
+  near(stockOf(w, 0, WOOD), 7.5); // 15 gatherers × 0.5
+  assert.equal(w.levels.gatherers[55], 15);
+  assert.equal(w.levels.gathered[55], 7.5);
   assert.equal(w.levels.gatherMask[55], 1 << WOOD);
   step(w, { year: 2 });
-  near(stockOf(w, 0, WOOD), 10, 1e-6);
+  near(stockOf(w, 0, WOOD), 15, 1e-6);
   assert.equal(w.levels.secure[0], 0, 'food state 0: secure');
 });
 
 test('RULES.md "Gathering": only adults (16 or older) count; gatherers are weighted by 0.5 + cooperation', () => {
   const w = world(['expansionist'], [adults(55, 0, 30, { age: 15 }), adults(55, 0, 20, { age: 16 })], { deposits: { 55: [WOOD] } });
   step(w);
-  assert.equal(w.levels.gatherers[55], 4, '20% of the 20 adults');
+  assert.equal(w.levels.gatherers[55], 6, '30% of the 20 adults');
   const c = world(['expansionist'], [adults(55, 0, 20, { coop: 1 })], { deposits: { 55: [WOOD] } });
   step(c);
-  near(c.levels.gatherers[55], 6, 1e-5); // 0.2 × 20 × 1.5
-  near(stockOf(c, 0, WOOD), 3, 1e-5);
+  near(c.levels.gatherers[55], 9, 1e-5); // 0.3 × 20 × 1.5
+  near(stockOf(c, 0, WOOD), 4.5, 1e-5);
   const z = world(['expansionist'], [adults(55, 0, 20, { coop: 0 })], { deposits: { 55: [WOOD] } });
   step(z);
-  near(z.levels.gatherers[55], 2, 1e-5); // 0.2 × 20 × 0.5
+  near(z.levels.gatherers[55], 3, 1e-5); // 0.3 × 20 × 0.5
   const kids = world(['expansionist'], [adults(55, 0, 20, { age: 15 })], { deposits: { 55: [WOOD] } });
   step(kids);
   assert.equal(stockOf(kids, 0, WOOD), 0);
@@ -522,44 +522,44 @@ test('RULES.md "Gathering": only adults (16 or older) count; gatherers are weigh
 test('RULES.md "Gathering": Cooperative civs gather 25% more', () => {
   const w = world(['cooperative', 'expansionist'], [adults(55, 0, 50), adults(66, 1, 50)], { deposits: { 55: [WOOD], 66: [WOOD] } });
   step(w);
-  near(w.levels.gatherers[55 * 2 + 0], 12.5);
-  near(w.levels.gatherers[66 * 2 + 1], 10);
-  near(stockOf(w, 0, WOOD), 6.25);
-  near(stockOf(w, 1, WOOD), 5);
+  near(w.levels.gatherers[55 * 2 + 0], 18.75);
+  near(w.levels.gatherers[66 * 2 + 1], 15);
+  near(stockOf(w, 0, WOOD), 9.375);
+  near(stockOf(w, 1, WOOD), 7.5);
 });
 
 test('RULES.md "Gathering": by hand a deposit gives at most 10 a year (uncommon 5, exotic 1.25); gatherers yield 0.5, 0.25 and 0.0625', () => {
   const w = world(['expansionist'], [adults(55, 0, 200), adults(66, 0, 100)], { deposits: { 55: [WOOD], 66: [GOLD] } });
   w.map.food.fill(1e6);
   step(w);
-  assert.equal(w.levels.gatherers[55], 40);
-  assert.equal(stockOf(w, 0, WOOD), 10, '40 × 0.5 = 20, capped at 10');
-  assert.equal(w.levels.gatherers[66], 20);
-  assert.equal(heldOf(w, 0, GOLD), 1.25, '20 × 0.0625 = 1.25 exactly the cap');
+  assert.equal(w.levels.gatherers[55], 60);
+  assert.equal(stockOf(w, 0, WOOD), 10, '60 × 0.5 = 30, capped at 10');
+  assert.equal(w.levels.gatherers[66], 30);
+  assert.equal(heldOf(w, 0, GOLD), 1.25, '30 × 0.0625 = 1.875, capped at 1.25');
   const g = world(['expansionist'], [adults(66, 0, 40)], { deposits: { 66: [GOLD] } });
   g.map.food.fill(1e6);
   step(g);
-  near(stockOf(g, 0, GOLD), 0.5, 1e-9); // 8 gatherers × 0.0625
+  near(stockOf(g, 0, GOLD), 0.75, 1e-9); // 12 gatherers × 0.0625
   const h = world(['expansionist'], [adults(66, 0, 200)], { deposits: { 66: [GEMSTONES] } });
   h.map.food.fill(1e6);
   step(h);
-  assert.equal(stockOf(h, 0, GEMSTONES), 1.25, '40 × 0.0625 = 2.5, capped at 1.25');
+  assert.equal(stockOf(h, 0, GEMSTONES), 1.25, '60 × 0.0625 = 3.75, capped at 1.25');
   const u = world(['expansionist'], [adults(66, 0, 200)], { deposits: { 66: [COPPER] } });
   u.map.food.fill(1e6);
   step(u);
-  assert.equal(stockOf(u, 0, COPPER), 5, 'uncommon: 0.25 each, 40 × 0.25 = 10 capped at 5');
+  assert.equal(stockOf(u, 0, COPPER), 5, 'uncommon: 0.25 each, 60 × 0.25 = 15 capped at 5');
   const v = world(['expansionist'], [adults(66, 0, 40)], { deposits: { 66: [COPPER] } });
   v.map.food.fill(1e6);
   step(v);
-  assert.equal(stockOf(v, 0, COPPER), 2, '8 gatherers × 0.25');
+  assert.equal(stockOf(v, 0, COPPER), 3, '12 gatherers × 0.25');
 });
 
 test('RULES.md "Gathering": gatherers split equally among the deposits worked in the hex', () => {
   const w = world(['expansionist'], [adults(55, 0, 60)], { deposits: { 55: [WOOD, STONE, CLAY] } });
   w.map.food.fill(1e6);
   step(w);
-  assert.equal(w.levels.gatherers[55], 12);
-  for (const m of [WOOD, STONE, CLAY]) near(stockOf(w, 0, m), 2, 1e-6); // 12 / 3 gatherers × 0.5
+  assert.equal(w.levels.gatherers[55], 18);
+  for (const m of [WOOD, STONE, CLAY]) near(stockOf(w, 0, m), 3, 1e-6); // 18 / 3 gatherers × 0.5
   assert.equal(w.levels.gatherMask[55], (1 << WOOD) | (1 << STONE) | (1 << CLAY));
 });
 
@@ -571,8 +571,8 @@ test('RULES.md "Gathering": a civ works what its next level still needs first; o
   assert.equal(w.levels.gatherMask[55], 1 << WOOD, 'wood only: the next level needs it');
   assert.equal(w.levels.gatherMask[66], (1 << COPPER) | (1 << GOLD), 'nothing the next level needs: later levels\' materials');
   assert.equal(w.levels.gatherMask[77], 1 << SALT);
-  near(heldOf(w, 0, COPPER), 1.25, 1e-6); // 10 gatherers, split in two: 5 × 0.25
-  near(heldOf(w, 0, GOLD), 0.3125, 1e-6); // 5 × 0.0625
+  near(heldOf(w, 0, COPPER), 1.875, 1e-6); // 15 gatherers, split in two: 7.5 × 0.25
+  near(heldOf(w, 0, GOLD), 0.46875, 1e-6); // 7.5 × 0.0625
 });
 
 test('RULES.md "Gathering": a material whose stockpile covers the next level is no longer next; once nothing is needed, nobody gathers', () => {
@@ -624,15 +624,15 @@ test('RULES.md "Gathering": a hex gathers while at most 20% of the people living
     step(w, opt);
     return [w.levels.secure[0], stockOf(w, 0, WOOD)];
   };
-  assert.deepEqual(run(() => {}), [0, 5], 'nobody hungry');
-  assert.deepEqual(run(() => ({ hungry: [1], hungryHex: { 55: 1 } })), [0, 5], 'one hungry person');
-  assert.deepEqual(run(() => ({ hungry: [10], hungryHex: { 55: 10 } })), [1, 5], '10 of 50 is exactly 20%: the hex gathers; the civ-wide label is short (over 10%)');
+  assert.deepEqual(run(() => {}), [0, 7.5], 'nobody hungry');
+  assert.deepEqual(run(() => ({ hungry: [1], hungryHex: { 55: 1 } })), [0, 7.5], 'one hungry person');
+  assert.deepEqual(run(() => ({ hungry: [10], hungryHex: { 55: 10 } })), [1, 7.5], '10 of 50 is exactly 20%: the hex gathers; the civ-wide label is short (over 10%)');
   assert.deepEqual(run(() => ({ hungry: [11], hungryHex: { 55: 11 } })), [1, 0], '11 of 50 is over 20%');
   // The statistics sheet's food label is civ-wide (10%, see the food state tests); the hex's own count decides whether it gathers.
   assert.deepEqual(run(() => ({ hungry: [0], hungryHex: { 55: 11 } })), [0, 0], 'the hex is not secure although the civ is');
-  assert.deepEqual(run(() => ({ hungry: [11], hungryHex: { 55: 0 } })), [1, 5], 'the hex is secure although the civ is not');
+  assert.deepEqual(run(() => ({ hungry: [11], hungryHex: { 55: 0 } })), [1, 7.5], 'the hex is secure although the civ is not');
   // Food in the hexes and starvation no longer matter.
-  assert.deepEqual(run((w) => { w.map.food[55] = 0; }), [0, 5], 'an empty larder');
+  assert.deepEqual(run((w) => { w.map.food[55] = 0; }), [0, 7.5], 'an empty larder');
   // Everyone living in the hex counts, whatever their civ: the holder is civ 1 here (200 against 40).
   const w = world(['expansionist', 'aggressive'], [adults(55, 0, 40), adults(55, 1, 200)], { deposits: { 55: [WOOD] } });
   step(w, { hungryHex: { 55: 48 } });
@@ -646,10 +646,10 @@ test('RULES.md "Gathering": only the civ holding a hex gathers there; the others
   const w = world(['expansionist', 'aggressive'], [adults(55, 0, 30), adults(55, 1, 10)], { deposits: { 55: [WOOD] } });
   w.map.food[55] = 1e6;
   step(w);
-  // Civ 0 holds the hex (more people): 6 gatherers, 3 wood; civ 1's 10 people gather nothing.
-  near(stockOf(w, 0, WOOD), 3, 1e-6);
+  // Civ 0 holds the hex (more people): 9 gatherers, 4.5 wood; civ 1's 10 people gather nothing.
+  near(stockOf(w, 0, WOOD), 4.5, 1e-6);
   assert.equal(stockOf(w, 1, WOOD), 0);
-  assert.equal(w.levels.gatherers[55 * 2], 6);
+  assert.equal(w.levels.gatherers[55 * 2], 9);
   assert.equal(w.levels.gatherers[55 * 2 + 1], 0);
   assert.equal(w.levels.settlements.holder[55], 0);
   // The cap is for the one holder: 400 people's worth of gatherers still give at most 10.
@@ -662,7 +662,7 @@ test('RULES.md "Gathering": only the civ holding a hex gathers there; the others
   const k = world(['expansionist', 'aggressive'], [adults(55, 0, 20), adults(55, 0, 20, { age: 5 }), adults(55, 1, 25)], { deposits: { 55: [WOOD] } });
   k.map.food[55] = 1e6;
   step(k);
-  near(stockOf(k, 0, WOOD), 0.5 * 4, 1e-6); // 20% of 20 adults
+  near(stockOf(k, 0, WOOD), 0.5 * 6, 1e-6); // 30% of 20 adults
   assert.equal(stockOf(k, 1, WOOD), 0);
 });
 
@@ -672,16 +672,16 @@ test('RULES.md "Gathering": last year\'s fight winner takes the hex and gathers 
   const fw = new Int8Array(w.map.count).fill(-1);
   fw[55] = 1;
   step(w, { fightWinner: fw });
-  near(stockOf(w, 1, WOOD), 1, 1e-6); // 2 gatherers × 0.5
+  near(stockOf(w, 1, WOOD), 1.5, 1e-6); // 3 gatherers × 0.5
   assert.equal(stockOf(w, 0, WOOD), 0);
-  assert.equal(w.levels.gathered[55 * 2 + 1], 1);
+  assert.equal(w.levels.gathered[55 * 2 + 1], 1.5);
   assert.equal(w.levels.settlements.holder[55], 1);
   // A winner with nobody left there takes nothing.
   const v = world(['expansionist', 'aggressive'], [adults(55, 0, 30), adults(60, 1, 10)], { deposits: { 55: [WOOD] } });
   v.map.food[55] = 1e6;
   step(v, { fightWinner: fw });
   assert.equal(v.levels.settlements.holder[55], 0);
-  near(stockOf(v, 0, WOOD), 3, 1e-6);
+  near(stockOf(v, 0, WOOD), 4.5, 1e-6);
   // The winner holds the hex but the hex is not secure (9 of 40 hungry): nobody gathers.
   const u = world(['expansionist', 'aggressive'], [adults(55, 0, 30), adults(55, 1, 10)], { deposits: { 55: [WOOD] } });
   u.map.food[55] = 1e6;
@@ -1040,7 +1040,7 @@ function foodWorld(pop, hungry, starvedPerYear = []) {
   const lv = new Levels(makeMap(10, 10, () => PLAINS), ['expansionist']);
   lv.civPop[0] = pop;
   lv.hungry[0] = hungry;
-  for (const d of starvedPerYear) { const y = new Int32Array(3); y[1] = d; lv.noteStarved(y); }
+  for (const d of starvedPerYear) { const y = new Int32Array(5); y[1] = d; lv.noteStarved(y); }
   return lv;
 }
 
@@ -1063,22 +1063,22 @@ test('RULES.md "Secure food": starvation is summed over the last 10 years only',
   // 10 years of 2 deaths = 20 = 2%: short; the 11th year pushes the first out.
   const lv = foodWorld(1000, 0, Array(10).fill(2));
   assert.equal(lv.foodState(0), 1);
-  const y = new Int32Array(3);
+  const y = new Int32Array(5);
   lv.noteStarved(y); // an 11th year with no deaths: 18 over the last 10
   assert.equal(lv.foodState(0), 0);
   // One big year ages out after 10 more years.
   const big = foodWorld(1000, 0, [150]);
   assert.equal(big.foodState(0), 2);
-  for (let k = 0; k < 9; k++) big.noteStarved(new Int32Array(3));
+  for (let k = 0; k < 9; k++) big.noteStarved(new Int32Array(5));
   assert.equal(big.foodState(0), 2, 'still within the 10 years');
-  big.noteStarved(new Int32Array(3));
+  big.noteStarved(new Int32Array(5));
   assert.equal(big.foodState(0), 0, 'the 11th year since');
   // Only starvation (cause 1) counts, and only the civ\'s own.
   const two = new Levels(makeMap(10, 10, () => PLAINS), ['expansionist', 'aggressive']);
   two.civPop[0] = 1000; two.civPop[1] = 1000;
-  const d = new Int32Array(6);
-  d[0] = 500; d[2] = 500; // civ 0 killed by other causes
-  d[3 + 1] = 100; // civ 1 starved
+  const d = new Int32Array(10);
+  d[0] = 500; d[2] = 500; d[3] = 500; d[4] = 500; // civ 0 killed by other causes (old age, war, childhood, childbirth)
+  d[5 + 1] = 100; // civ 1 starved (five causes a civ)
   two.noteStarved(d);
   assert.deepEqual([two.foodState(0), two.foodState(1)], [0, 2]);
 });

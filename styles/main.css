@@ -515,6 +515,17 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 6px 
 .death-bar .old-age { background: #8aa4c8; }
 .death-bar .starvation { background: var(--danger); }
 .death-bar .war { background: #c9a227; }
+.death-bar .childhood { background: #b48ac8; }
+.death-bar .childbirth { background: #d88aa4; }
+.pyr-key { display: flex; justify-content: space-between; margin: 0 0 6px; font-size: 14px; color: var(--text-dim); }
+.pyramid { display: grid; gap: 2px; }
+.pyr-row { display: grid; grid-template-columns: 1fr 52px 1fr; align-items: center; height: 12px; }
+.pyr-side { display: flex; height: 100%; }
+.pyr-side.men { justify-content: flex-end; }
+.pyr-bar { display: block; height: 100%; border-radius: 2px; }
+.pyr-side.men .pyr-bar { background: #8aa4c8; }
+.pyr-side.women .pyr-bar { background: #d88aa4; }
+.pyr-age { text-align: center; font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .end-log { gap: 4px; }
 .end-cities { margin: 0; padding-left: 1.4em; display: grid; gap: 4px; font-size: 0.9rem; }
 .end-cities .emblem { margin-right: 4px; vertical-align: -1px; }

@@ -1,14 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CivStats, HISTORY_ROWS, HISTORY_FIELDS } from '../../src/sim/civStats.js';
-import { DEATH_OLD_AGE, DEATH_STARVATION, DEATH_WAR } from '../../src/sim/life.js';
+import { CivStats, HISTORY_ROWS, HISTORY_FIELDS, EXTINCT_CAUSES, COMPLETE_FAMILY_AGE, GROWN_UP_AGE } from '../../src/sim/civStats.js';
+import { DEATH_OLD_AGE, DEATH_STARVATION, DEATH_WAR, DEATH_CHILDHOOD, DEATH_CHILDBIRTH } from '../../src/sim/life.js';
 import { TRAITS, TRAIT_COUNT } from '../../src/sim/traits.js';
 
 const year = (st, y, pop, hexes = pop.map(() => 1), oldest = pop.map(() => 0)) =>
   st.endYear(y, Int32Array.from(pop), Int32Array.from(hexes), Int32Array.from(oldest));
 
 test('history columns match RULES.md "Statistics"', () => {
-  assert.deepEqual(HISTORY_FIELDS, ['pop', 'hexes', 'births', 'deathsOldAge', 'deathsStarvation', 'lifespanSum', 'deathsWar', 'level']);
+  assert.deepEqual(HISTORY_FIELDS, ['pop', 'hexes', 'births', 'deathsOldAge', 'deathsStarvation', 'lifespanSum', 'deathsWar', 'level',
+    'deathsChildhood', 'deathsChildbirth']);
+  assert.deepEqual(EXTINCT_CAUSES, ['oldAge', 'starvation', 'war', 'childhood', 'childbirth', 'switching']);
+  assert.deepEqual([COMPLETE_FAMILY_AGE, GROWN_UP_AGE], [45, 15]);
   assert.equal(HISTORY_ROWS, 8192);
 });
 
@@ -141,9 +144,9 @@ test('RULES.md "Statistics": war deaths are their own column and count towards l
   st.death(0, DEATH_OLD_AGE, 80);
   year(st, 1, [5, 5]);
   const [a, b] = st.summary();
-  assert.deepEqual(a.deaths, { oldAge: 1, starvation: 0, war: 2 });
+  assert.deepEqual(a.deaths, { oldAge: 1, starvation: 0, war: 2, childhood: 0, childbirth: 0 });
   assert.equal(a.avgLifespan, 40, '(30 + 10 + 80) / 3, war deaths included');
-  assert.deepEqual(b.deaths, { oldAge: 0, starvation: 0, war: 0 });
+  assert.deepEqual(b.deaths, { oldAge: 0, starvation: 0, war: 0, childhood: 0, childbirth: 0 });
   const h = st.historyData();
   assert.deepEqual([...h.deathsWar], [2, 0]);
   assert.deepEqual([...h.deathsOldAge], [1, 0]);
@@ -164,7 +167,7 @@ test('fights count for both sides and wins for the winner; switches count in and
   assert.deepEqual(s.map((c) => c.switchesIn), [1, 1, 1]);
 });
 
-test('RULES.md "Statistics": extinction cause is the most deaths that year (tie: old age, starvation, war), switching if none', () => {
+test('RULES.md "Statistics": extinction cause is the most deaths that year (tie: old age, starvation, war, childhood, childbirth), switching if none', () => {
   const cause = (setup) => {
     const st = new CivStats(1);
     year(st, 0, [3]);
@@ -175,6 +178,11 @@ test('RULES.md "Statistics": extinction cause is the most deaths that year (tie:
   assert.equal(cause((st) => { st.death(0, DEATH_WAR, 5); st.death(0, DEATH_WAR, 5); st.death(0, DEATH_STARVATION, 5); }), 'war');
   assert.equal(cause((st) => { st.death(0, DEATH_WAR, 5); st.death(0, DEATH_STARVATION, 5); }), 'starvation');
   assert.equal(cause((st) => { st.death(0, DEATH_WAR, 5); st.death(0, DEATH_OLD_AGE, 5); }), 'oldAge');
+  assert.equal(cause((st) => { st.death(0, DEATH_CHILDHOOD, 3); st.death(0, DEATH_CHILDHOOD, 3); st.death(0, DEATH_WAR, 5); }), 'childhood');
+  assert.equal(cause((st) => { st.death(0, DEATH_CHILDBIRTH, 30, 1, 3); st.death(0, DEATH_CHILDBIRTH, 30, 1, 3); st.death(0, DEATH_CHILDHOOD, 3); }), 'childbirth');
+  assert.equal(cause((st) => { st.death(0, DEATH_CHILDBIRTH, 30, 1, 3); st.death(0, DEATH_CHILDHOOD, 3); }), 'childhood', 'tie: childhood before childbirth');
+  assert.equal(cause((st) => { st.death(0, DEATH_CHILDBIRTH, 30, 1, 3); st.death(0, DEATH_WAR, 30); }), 'war', 'tie: war before childbirth');
+  assert.equal(cause((st) => { st.death(0, DEATH_CHILDHOOD, 3); st.death(0, DEATH_OLD_AGE, 70); }), 'oldAge', 'tie: old age first');
   assert.equal(cause(() => {}), 'switching');
 });
 
@@ -228,4 +236,52 @@ test('RULES.md "Statistics": merged rows take the trait averages and the level f
     assert.ok(Math.abs(h.traits[r * TRAIT_COUNT] - (later % 100) / 100) < 1e-6, `row ${r} fertility`);
     assert.equal(h.level[r], 1 + (later % 5), `row ${r} level`);
   }
+});
+
+test('RULES.md "Statistics": childhood and childbirth deaths are their own columns and count towards lifespan and totals', () => {
+  const st = new CivStats(2);
+  st.death(0, DEATH_CHILDHOOD, 1);
+  st.death(0, DEATH_CHILDHOOD, 4);
+  st.death(0, DEATH_CHILDBIRTH, 25, 1, 2);
+  st.death(0, DEATH_OLD_AGE, 70);
+  year(st, 1, [5, 5]);
+  const [a, b] = st.summary();
+  assert.deepEqual(a.deaths, { oldAge: 1, starvation: 0, war: 0, childhood: 2, childbirth: 1 });
+  assert.equal(a.avgLifespan, 25, '(1 + 4 + 25 + 70) / 4, every cause included');
+  assert.deepEqual(b.deaths, { oldAge: 0, starvation: 0, war: 0, childhood: 0, childbirth: 0 });
+  const h = st.historyData();
+  assert.deepEqual([...h.deathsChildhood], [2, 0]);
+  assert.deepEqual([...h.deathsChildbirth], [1, 0]);
+  assert.deepEqual([...h.deathsOldAge], [1, 0]);
+  assert.deepEqual([...h.lifespanSum], [100, 0]);
+});
+
+test('RULES.md "Statistics": lifespan of those who grew up counts deaths at 15 or older only (boundary 14 / 15)', () => {
+  const st = new CivStats(1);
+  st.death(0, DEATH_CHILDHOOD, 14);
+  year(st, 1, [5]);
+  assert.equal(st.summary()[0].grownLifespan, null, 'no one died at 15 or older yet');
+  st.death(0, DEATH_STARVATION, 15);
+  st.death(0, DEATH_OLD_AGE, 60);
+  st.death(0, DEATH_CHILDHOOD, 1);
+  year(st, 2, [5]);
+  const [c] = st.summary();
+  assert.equal(c.grownLifespan, 37.5);
+  assert.equal(c.avgLifespan, 22.5, '(14 + 15 + 60 + 1) / 4');
+});
+
+test('RULES.md "Statistics": children per woman is the children borne by women who died at 45 or older, over those women', () => {
+  const st = new CivStats(2);
+  st.death(0, DEATH_OLD_AGE, 44, 1, 9); // too young
+  st.death(0, DEATH_OLD_AGE, 60, 0, 9); // a man
+  year(st, 1, [5, 5]);
+  assert.equal(st.summary()[0].childrenPerWoman, null, 'none until such a woman has died');
+  st.death(0, DEATH_OLD_AGE, 45, 1, 5);
+  st.death(0, DEATH_OLD_AGE, 70, 1, 4);
+  st.death(0, DEATH_STARVATION, 50, 1, 6);
+  st.death(1, DEATH_OLD_AGE, 80, 1, 2);
+  year(st, 2, [5, 5]);
+  const [a, b] = st.summary();
+  assert.equal(a.childrenPerWoman, 5, '(5 + 4 + 6) / 3');
+  assert.equal(b.childrenPerWoman, 2);
 });

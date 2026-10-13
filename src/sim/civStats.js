@@ -4,14 +4,20 @@
 // of rows are merged and each new row covers twice as many years, so memory
 // stays bounded however long the game runs.
 
-import { DEATH_OLD_AGE, DEATH_WAR } from './life.js';
+import { DEATH_OLD_AGE, DEATH_STARVATION, DEATH_WAR, DEATH_CHILDHOOD, DEATH_CAUSES } from './life.js';
 import { TRAITS, TRAIT_COUNT } from './traits.js';
 
 export const HISTORY_ROWS = 8192;
 /** History columns, per civ. pop, hexes and level are values at the end of the row's last year; the rest are sums over the row. */
-export const HISTORY_FIELDS = ['pop', 'hexes', 'births', 'deathsOldAge', 'deathsStarvation', 'lifespanSum', 'deathsWar', 'level'];
+export const HISTORY_FIELDS = ['pop', 'hexes', 'births', 'deathsOldAge', 'deathsStarvation', 'lifespanSum', 'deathsWar', 'level',
+  'deathsChildhood', 'deathsChildbirth'];
 /** What a civ died out of: the cause of most of its deaths in its last year, or switching when nobody died that year. */
-export const EXTINCT_CAUSES = ['oldAge', 'starvation', 'war', 'switching'];
+export const EXTINCT_CAUSES = ['oldAge', 'starvation', 'war', 'childhood', 'childbirth', 'switching'];
+/** Women who die at this age or older count towards children per woman (their families are complete). */
+export const COMPLETE_FAMILY_AGE = 45;
+/** Deaths from this age on count towards the lifespan of those who grew up. */
+export const GROWN_UP_AGE = 15;
+const CAUSE_FIELD = [3, 4, 6, 8, 9];
 const F = HISTORY_FIELDS.length;
 const LEVEL_FIELD = HISTORY_FIELDS.indexOf('level');
 /** Columns merged by keeping the later row (the rest are added). */
@@ -25,14 +31,22 @@ export class CivStats {
     this.deathsOldAge = new Int32Array(civs);
     this.deathsStarvation = new Int32Array(civs);
     this.deathsWar = new Int32Array(civs);
+    this.deathsChildhood = new Int32Array(civs);
+    this.deathsChildbirth = new Int32Array(civs);
+    /** Deaths at GROWN_UP_AGE or older, and their ages added up (lifespan of those who grew up). */
+    this.grownDeaths = new Int32Array(civs);
+    this.grownLifespanSum = new Float64Array(civs);
+    /** Women who died at COMPLETE_FAMILY_AGE or older, and the children they bore. */
+    this.mothersDone = new Int32Array(civs);
+    this.childrenDone = new Int32Array(civs);
     /** Fights each civ took part in (as attacker or defender), and won. */
     this.fights = new Int32Array(civs);
     this.fightsWon = new Int32Array(civs);
     /** People who switched into and out of each civ. */
     this.switchesIn = new Int32Array(civs);
     this.switchesOut = new Int32Array(civs);
-    /** This year's deaths per civ by cause ([civ × 3 + cause]: old age, starvation, war), for the extinction cause. */
-    this.yearDeaths = new Int32Array(civs * 3);
+    /** This year's deaths per civ by cause ([civ × DEATH_CAUSES + cause]: old age, starvation, war, childhood, childbirth), for the extinction cause. */
+    this.yearDeaths = new Int32Array(civs * DEATH_CAUSES);
     this.extinctCause = new Int8Array(civs).fill(-1);
     this.lifespanSum = new Float64Array(civs);
     this.peakPop = new Int32Array(civs);
@@ -64,13 +78,19 @@ export class CivStats {
     this.pending[civ * F + 2]++;
   }
 
-  death(civ, cause, age) {
-    if (cause === DEATH_OLD_AGE) { this.deathsOldAge[civ]++; this.pending[civ * F + 3]++; }
-    else if (cause === DEATH_WAR) { this.deathsWar[civ]++; this.pending[civ * F + 6]++; }
-    else { this.deathsStarvation[civ]++; this.pending[civ * F + 4]++; }
-    this.yearDeaths[civ * 3 + cause]++;
+  /** A death of a person of this civ, age and sex (female 1), who had borne `kids` children. */
+  death(civ, cause, age, female = 0, kids = 0) {
+    if (cause === DEATH_OLD_AGE) this.deathsOldAge[civ]++;
+    else if (cause === DEATH_STARVATION) this.deathsStarvation[civ]++;
+    else if (cause === DEATH_WAR) this.deathsWar[civ]++;
+    else if (cause === DEATH_CHILDHOOD) this.deathsChildhood[civ]++;
+    else this.deathsChildbirth[civ]++;
+    this.pending[civ * F + CAUSE_FIELD[cause]]++;
+    this.yearDeaths[civ * DEATH_CAUSES + cause]++;
     this.lifespanSum[civ] += age;
     this.pending[civ * F + 5] += age;
+    if (age >= GROWN_UP_AGE) { this.grownDeaths[civ]++; this.grownLifespanSum[civ] += age; }
+    if (female && age >= COMPLETE_FAMILY_AGE) { this.mothersDone[civ]++; this.childrenDone[civ] += kids; }
   }
 
   fight(attacker, defender, winner) {
@@ -101,10 +121,12 @@ export class CivStats {
     for (let k = 0; k < c; k++) {
       if (this.pop[k] > 0 && pop[k] === 0) {
         this.extinctYear[k] = year;
-        // Most deaths that year wins; ties go to the earlier cause (old age, starvation, war).
+        // Most deaths that year wins; ties go to the earlier cause (old age, starvation, war, childhood, childbirth).
+        const y = this.yearDeaths;
+        const D = DEATH_CAUSES;
         let best = -1;
-        for (let c = 0; c < 3; c++) if (this.yearDeaths[k * 3 + c] > 0 && (best < 0 || this.yearDeaths[k * 3 + c] > this.yearDeaths[k * 3 + best])) best = c;
-        this.extinctCause[k] = best < 0 ? 3 : best;
+        for (let c = 0; c < D; c++) if (y[k * D + c] > 0 && (best < 0 || y[k * D + c] > y[k * D + best])) best = c;
+        this.extinctCause[k] = best < 0 ? D : best;
       }
       this.pop[k] = pop[k];
       this.hexes[k] = hexes[k];
@@ -153,19 +175,26 @@ export class CivStats {
   summary() {
     const out = [];
     for (let k = 0; k < this.civs; k++) {
-      const deaths = this.deathsOldAge[k] + this.deathsStarvation[k] + this.deathsWar[k];
+      const deaths = this.deathsOldAge[k] + this.deathsStarvation[k] + this.deathsWar[k] + this.deathsChildhood[k] + this.deathsChildbirth[k];
       out.push({
         id: k,
         name: `Civ ${k + 1}`,
         pop: this.pop[k],
         hexes: this.hexes[k],
         births: this.births[k],
-        deaths: { oldAge: this.deathsOldAge[k], starvation: this.deathsStarvation[k], war: this.deathsWar[k] },
+        deaths: {
+          oldAge: this.deathsOldAge[k], starvation: this.deathsStarvation[k], war: this.deathsWar[k],
+          childhood: this.deathsChildhood[k], childbirth: this.deathsChildbirth[k],
+        },
         fights: this.fights[k],
         fightsWon: this.fightsWon[k],
         switchesIn: this.switchesIn[k],
         switchesOut: this.switchesOut[k],
         avgLifespan: deaths > 0 ? Math.round((this.lifespanSum[k] / deaths) * 10) / 10 : null,
+        /** Average age at death of those who died at GROWN_UP_AGE or older. */
+        grownLifespan: this.grownDeaths[k] > 0 ? Math.round((this.grownLifespanSum[k] / this.grownDeaths[k]) * 10) / 10 : null,
+        /** Children borne per woman, over the women who died at COMPLETE_FAMILY_AGE or older. */
+        childrenPerWoman: this.mothersDone[k] > 0 ? Math.round((this.childrenDone[k] / this.mothersDone[k]) * 10) / 10 : null,
         oldestAge: this.oldestAge[k],
         peakPop: this.peakPop[k],
         peakPopYear: this.peakPopYear[k],

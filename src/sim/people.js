@@ -27,8 +27,16 @@ export class People {
     };
     this.alive = grow(Uint8Array, old?.alive);
     this.id = grow(Uint32Array, old?.id);
-    /** Id of the parent (NO_PARENT for the founders). */
+    /** Id of the mother (NO_PARENT for the founders). */
     this.parent = grow(Uint32Array, old?.parent);
+    /** Id of the father (NO_PARENT for the founders). */
+    this.father = grow(Uint32Array, old?.father);
+    /** 1 for a woman, 0 for a man. */
+    this.female = grow(Uint8Array, old?.female);
+    /** A woman's years left before she can have a child again (see births in life.js). */
+    this.rest = grow(Uint8Array, old?.rest);
+    /** Children a woman has borne (twins count 2), up to 255. */
+    this.kids = grow(Uint8Array, old?.kids);
     this.age = grow(Uint16Array, old?.age);
     /** 0 to HEALTH_MAX. */
     this.health = grow(Uint8Array, old?.health);
@@ -53,7 +61,7 @@ export class People {
   }
 
   /** Adds a person and returns its slot. Grows the arrays (doubling) only when every slot is taken. */
-  add(hex, civ, age, health, parentId, gen = 1, founder = 0) {
+  add(hex, civ, age, health, parentId, gen = 1, founder = 0, female = 0, fatherId = NO_PARENT) {
     let i;
     if (this.freeTop > 0) i = this.free[--this.freeTop];
     else {
@@ -63,6 +71,10 @@ export class People {
     this.alive[i] = 1;
     this.id[i] = this.nextId++;
     this.parent[i] = parentId;
+    this.father[i] = fatherId;
+    this.female[i] = female;
+    this.rest[i] = 0;
+    this.kids[i] = 0;
     this.age[i] = age;
     this.health[i] = health;
     this.hunger[i] = 0;
@@ -91,7 +103,7 @@ export class People {
   /** The used part of every array (for hashing). Views, not copies. */
   views() {
     const n = this.high;
-    return [this.alive, this.id, this.parent, this.age, this.health, this.hunger, this.hex, this.civ, ...this.traits]
+    return [this.alive, this.id, this.parent, this.father, this.female, this.rest, this.kids, this.age, this.health, this.hunger, this.hex, this.civ, ...this.traits]
       .map((a) => a.subarray(0, n));
   }
 }

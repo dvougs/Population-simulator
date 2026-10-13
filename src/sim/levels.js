@@ -26,6 +26,7 @@ import { COOPERATION } from './traits.js';
 import { Buildings, ERAS, WONDERS, reduce } from './buildings.js';
 import { Settlements, TIERS, SETTLE, SB_INDEX } from './settlements.js';
 import { Diplomacy } from './diplomacy.js';
+import { DEATH_CAUSES, DEATH_STARVATION } from './life.js';
 
 // Tundra and mountains are closed in winter, so they gather for three seasons of four.
 const WINTER_SHUT = winterClosedMask(TERRAIN_COUNT);
@@ -62,7 +63,7 @@ export const GATHER = Object.freeze({
   starveShortPct: 2,
   starveFamishPct: 10,
   /** Share of a secure civ's adults (in hexes with a deposit it wants) that gather. */
-  gatherShare: 0.2,
+  gatherShare: 0.3,
   /** Adults are people of this age or older. */
   adultAge: 16,
   /** A gatherer's yield is multiplied by (personBase + their cooperation): 1 at cooperation 0.5. */
@@ -702,7 +703,7 @@ export class Levels {
   noteStarved(yearDeaths) {
     const Y = GATHER.starveYears;
     this.starvePos = (this.starvePos + 1) % Y;
-    for (let c = 0; c < this.civs; c++) this.starveRing[c * Y + this.starvePos] = yearDeaths[c * 3 + 1];
+    for (let c = 0; c < this.civs; c++) this.starveRing[c * Y + this.starvePos] = yearDeaths[c * DEATH_CAUSES + DEATH_STARVATION];
   }
 
   /** Civ c's food: 0 secure, 1 short, 2 famine, from last year's hunger and the last years' starvation. */

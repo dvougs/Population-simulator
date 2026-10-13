@@ -15,6 +15,7 @@ import { amount } from './levelsPanel.js';
 import { WONDERS } from '../sim/buildings.js';
 import { TIER_NAMES } from '../sim/settlements.js';
 import { civName } from './civNames.js';
+import { GROWN_UP_AGE } from '../sim/civStats.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 /** Chart points per civ at most; longer histories are sampled evenly (the last row always kept). */
@@ -45,6 +46,7 @@ export function renderEndScreen(el, report, actions) {
     stockpileCard(report),
     traitsCard(report),
     peopleCard(report),
+    pyramidCard(report),
     deathsCard(report),
     recordsCard(report),
     historyCard(report),
@@ -77,7 +79,8 @@ function civsCard(r) {
     c.level ? `level ${c.level} ${c.levelName}${c.reached?.[c.level - 1] ? ` since year ${c.reached[c.level - 1]}` : ''}` : null,
     `peak ${formatNumber(c.peakPop)} in year ${c.peakPopYear}`,
     `${formatNumber(c.peakHexes)} hexes at most`,
-    c.avgLifespan === null ? 'no deaths' : `lived ${c.avgLifespan} years on average`,
+    c.avgLifespan === null ? 'no deaths' : `lived ${c.avgLifespan} years on average${c.grownLifespan === null ? '' : `, ${c.grownLifespan} for those who reached ${GROWN_UP_AGE}`}`,
+    c.childrenPerWoman === null ? null : `${c.childrenPerWoman} children per woman`,
     `switched in ${formatNumber(c.switchesIn)}, out ${formatNumber(c.switchesOut)}`,
     c.trade && c.trade.bought + c.trade.sold >= 1
       ? `traded ${formatNumber(Math.round(c.trade.bought + c.trade.sold))} worth${c.trade.partner >= 0 ? `, most with ${civName(c.trade.partner)}` : ''}` : null,
@@ -299,18 +302,49 @@ function peopleCard(r) {
   ]));
 }
 
+const DEATH_ROWS = [
+  ['oldAge', 'Old age', 'old-age'], ['starvation', 'Starvation', 'starvation'], ['war', 'War', 'war'],
+  ['childhood', 'Childhood', 'childhood'], ['childbirth', 'Childbirth', 'childbirth'],
+];
+
 function deathsCard(r) {
-  const { oldAge, starvation, war } = r.deaths;
-  const total = oldAge + starvation + war;
+  const d = r.deaths;
+  const total = DEATH_ROWS.reduce((s, [k]) => s + d[k], 0);
   const bar = (n, cls) => h('span', { class: `bar ${cls}`, style: { width: pct(n, total) } });
   return fold('end-deaths', 'Deaths by cause', false,
-    h('div', { class: 'death-bar', 'aria-hidden': 'true' }, bar(oldAge, 'old-age'), bar(starvation, 'starvation'), bar(war, 'war')),
+    h('div', { class: 'death-bar', 'aria-hidden': 'true' }, DEATH_ROWS.map(([k, , cls]) => bar(d[k], cls))),
     dl([
-      ['Old age', `${formatNumber(oldAge)} (${pct(oldAge, total)})`],
-      ['Starvation', `${formatNumber(starvation)} (${pct(starvation, total)})`],
-      ['War', `${formatNumber(war)} (${pct(war, total)})`],
+      ...DEATH_ROWS.map(([k, label]) => [label, `${formatNumber(d[k])} (${pct(d[k], total)})`]),
       ['Total', formatNumber(total)],
     ]));
+}
+
+/** Men (left) and women (right) of all civs by age band at the end, oldest at the top. */
+function pyramidCard(r) {
+  const P = r.pyramid;
+  const men = new Array(P.bands).fill(0);
+  const women = new Array(P.bands).fill(0);
+  for (let c = 0; c < r.civs.length; c++) {
+    for (let b = 0; b < P.bands; b++) {
+      men[b] += P.counts[(c * 2) * P.bands + b];
+      women[b] += P.counts[(c * 2 + 1) * P.bands + b];
+    }
+  }
+  const most = Math.max(1, ...men, ...women);
+  const totalMen = men.reduce((a, b) => a + b, 0);
+  const totalWomen = women.reduce((a, b) => a + b, 0);
+  const label = (b) => (b === P.bands - 1 ? `${P.top}+` : `${b * P.band}–${b * P.band + P.band - 1}`);
+  const rows = [];
+  for (let b = P.bands - 1; b >= 0; b--) {
+    rows.push(h('div', { class: 'pyr-row' },
+      h('span', { class: 'pyr-side men' }, h('span', { class: 'pyr-bar', style: { width: `${(100 * men[b]) / most}%` } })),
+      h('span', { class: 'pyr-age' }, label(b)),
+      h('span', { class: 'pyr-side women' }, h('span', { class: 'pyr-bar', style: { width: `${(100 * women[b]) / most}%` } }))));
+  }
+  return fold('end-pyramid', 'Men and women by age', false,
+    h('p', { class: 'pyr-key' }, h('span', {}, `Men ${formatNumber(totalMen)}`), h('span', {}, `Women ${formatNumber(totalWomen)}`)),
+    totalMen + totalWomen === 0 ? h('p', {}, 'Nobody is left.')
+      : h('div', { class: 'pyramid', role: 'img', 'aria-label': `Men ${totalMen} and women ${totalWomen} by age, in ${P.band}-year bands` }, rows));
 }
 
 function recordsCard(r) {

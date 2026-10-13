@@ -86,9 +86,9 @@ test('RULES.md "Game settings": a civ\'s traits, own mutation and starting peopl
   const g = p.civs[0].traits;
   assert.deepEqual([g.fertility, g.strength, g.aggression, g.cooperation], [1, 0, 0.33, peopleTraits('greeks').cooperation]);
   assert.equal(g.lifeExpectancy, peopleTraits('greeks').lifeExpectancy);
-  assert.deepEqual([p.civs[0].mutation, p.civs[0].startPop], [0.1, 2]);
+  assert.deepEqual([p.civs[0].mutation, p.civs[0].startPop], [0.1, 4]);
   assert.deepEqual([p.civs[1].mutation, p.civs[1].startPop], [null, null]);
-  assert.deepEqual([civMutation(p, 0), civStartPop(p, 0), civMutation(p, 1), civStartPop(p, 1)], [0.1, 2, 0.05, 30]);
+  assert.deepEqual([civMutation(p, 0), civStartPop(p, 0), civMutation(p, 1), civStartPop(p, 1)], [0.1, 4, 0.05, 30]);
 });
 
 test('RULES.md "Game settings": colours are distinct; a missing or taken one is the first free colour from the civ\'s number', () => {

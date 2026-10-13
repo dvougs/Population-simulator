@@ -29,6 +29,7 @@ const MOVE_MS = 600;
 
 const CELL = 64; // atlas cell, px
 const CELL_R = 24; // emblem radius inside a cell, px
+const WOMAN_DOT_R = 8; // the dark dot in a woman's emblem, px
 const GLYPHS = '0123456789kM.';
 // World sizes (HEX_SIZE is 32) of the count digits; emblem sizes are in spots.js.
 const DIGIT_SPRITE = 0.62 * HEX_SIZE; // whole cell, so the digit itself is about 0.36 hex high
@@ -43,21 +44,32 @@ export function peopleShown(scale) {
   return 2 * HEX_SIZE * scale >= PEOPLE_ZOOM_PX;
 }
 
-/** One canvas: row 0 the eight emblems in white with a dark outline, rows 1 to 2 the count glyphs. */
+/** One canvas: row 0 the eight emblems in white with a dark outline (men), rows 1 to 2 the count glyphs, row 3 the emblems with a dark dot in the middle (women). */
 function buildAtlas() {
   const canvas = document.createElement('canvas');
   canvas.width = 8 * CELL;
   canvas.height = 4 * CELL; // powers of two, so mipmaps work on every WebGL
   const ctx = canvas.getContext('2d');
   ctx.lineJoin = 'round';
-  EMBLEM_ORDER.forEach((emblem, k) => {
-    traceEmblem(ctx, emblem, k * CELL + CELL / 2, CELL / 2, CELL_R);
-    ctx.fillStyle = '#ffffff';
-    ctx.fill('evenodd');
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = '#0b0e13';
-    ctx.stroke();
-  });
+  for (const row of [0, 3]) {
+    EMBLEM_ORDER.forEach((emblem, k) => {
+      const x = k * CELL + CELL / 2;
+      const y = row * CELL + CELL / 2;
+      traceEmblem(ctx, emblem, x, y, CELL_R);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill('evenodd');
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = '#0b0e13';
+      ctx.stroke();
+      if (row === 3) {
+        // The tint colours the white; the dot stays dark, so women read at a glance in every civ colour.
+        ctx.beginPath();
+        ctx.arc(x, y, WOMAN_DOT_R, 0, 2 * Math.PI);
+        ctx.fillStyle = '#0b0e13';
+        ctx.fill();
+      }
+    });
+  }
   ctx.font = 'bold 46px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -75,10 +87,11 @@ function buildAtlas() {
   });
   const cut = (col, row) => new Texture({ source, frame: new Rectangle(col * CELL, row * CELL, CELL, CELL) });
   const emblems = {};
-  EMBLEM_ORDER.forEach((e, k) => { emblems[e] = cut(k, 0); });
+  const womenEmblems = {};
+  EMBLEM_ORDER.forEach((e, k) => { emblems[e] = cut(k, 0); womenEmblems[e] = cut(k, 3); });
   const glyphs = {};
   [...GLYPHS].forEach((ch, k) => { glyphs[ch] = cut(k % 8, 1 + Math.floor(k / 8)); });
-  return { source, emblems, glyphs };
+  return { source, emblems, womenEmblems, glyphs };
 }
 
 let atlas = null;
@@ -146,6 +159,7 @@ export class PeopleLayer {
     this.pId = g(Uint32Array, this.pId);
     this.pHex = g(Int32Array, this.pHex);
     this.pCiv = g(Uint8Array, this.pCiv);
+    this.pFemale = g(Uint8Array, this.pFemale);
     this.fromX = g(Float32Array, this.fromX);
     this.fromY = g(Float32Array, this.fromY);
     this.toX = g(Float32Array, this.toX);
@@ -190,6 +204,7 @@ export class PeopleLayer {
       this.pId[i] = id;
       this.pHex[i] = h;
       this.pCiv[i] = data.civ[i];
+      this.pFemale[i] = data.female ? data.female[i] : 0;
       this.toX[i] = tx;
       this.toY[i] = ty;
     }
@@ -327,7 +342,7 @@ export class PeopleLayer {
         this.peopleC.addChild(sp);
       }
       const c = this.pCiv[i];
-      const tex = this.atlas.emblems[civStyle(c).emblem];
+      const tex = (this.pFemale[i] ? this.atlas.womenEmblems : this.atlas.emblems)[civStyle(c).emblem];
       if (sp.texture !== tex) sp.texture = tex;
       const tint = this.tints[c % this.tints.length];
       if (sp.tint !== tint) sp.tint = tint;

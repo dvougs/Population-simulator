@@ -12,7 +12,13 @@ import { generateMap, countTerrain, hashMap, fnv } from './mapgen.js';
 import { indexToAxial } from './hex.js';
 import { Rng } from './rng.js';
 import { People, NO_PARENT } from './people.js';
-import { pickStarts, found, eat, deaths, births, regrow } from './life.js';
+import { pickStarts, found, eat, deaths, births, regrow, BirthScratch } from './life.js';
+
+/** Age bands of the population pyramid: 5 years each, the last one PYRAMID_TOP and over. */
+export const PYRAMID_BAND = 5;
+export const PYRAMID_TOP = 80;
+export const PYRAMID_BANDS = PYRAMID_TOP / PYRAMID_BAND + 1;
+const BAND_OF = Uint8Array.from({ length: PYRAMID_TOP }, (_, a) => Math.floor(a / PYRAMID_BAND));
 import { buildStepReach, landPieces, migrate, migrationRules, setReach } from './migration.js';
 import { Contact } from './contact.js';
 import { War, WAR } from './war.js';
@@ -129,10 +135,13 @@ export class Simulation {
     this.civPop = new Int32Array(civs);
     this.civHexes = new Int32Array(civs);
     this.civOldest = new Int32Array(civs);
+    /** Women per civ at the end of the last year. */
+    this.civWomen = new Int32Array(civs);
     /** Years in a row each civ has held at least the dominance share of the land. */
     this.dominanceStreak = new Int32Array(civs);
     this.landHexes = n - this.terrainCounts[DEEP_WATER];
     this.allocPersonScratch();
+    this.birthScratch = new BirthScratch(n, civs, this.people.capacity);
 
     this.civStats = new CivStats(civs);
     const people = this.people;
@@ -140,7 +149,10 @@ export class Simulation {
     this.records = new Records(civs, founders, map.cols);
     this.records.founders(people);
     const rec = this.records;
-    this.onDeath = (i, cause) => { st.death(people.civ[i], cause, people.age[i]); rec.death(i, people, cause, this.tickCount); };
+    this.onDeath = (i, cause) => {
+      st.death(people.civ[i], cause, people.age[i], people.female[i], people.kids[i]);
+      rec.death(i, people, cause, this.tickCount);
+    };
     this.onBirth = (i) => { st.birth(people.civ[i]); rec.birth(i, people, this.tickCount); };
     this.onBattle = (h, attacker, defender, holder, winner, byWinner, byLoser) => {
       st.fight(attacker, defender, winner);
@@ -185,7 +197,8 @@ export class Simulation {
     for (let i = 0; i < people.high; i++) if (alive[i] && age[i] < 65535) age[i]++;
     eat(people, this.map, this.rng.eat, this.hexPop, this.seen, this.picked, this.needSum, this.eaten, lv.shelter, lv.hungerMul);
     deaths(people, this.rng.death, this.onDeath, lv.oldAgeDelay);
-    births(people, this.map, this.rng.birth, this.hexPop, this.parents, this.onBirth, this.rng.traits, this.mutation, lv.birthBonus);
+    births(people, this.map, this.rng.birth, this.hexPop, this.parents, this.onBirth, this.rng.traits, this.mutation, lv.birthBonus,
+      this.birthScratch, this.onDeath);
     if (this.dest.length < people.capacity) this.allocPersonScratch();
     this.expansionPriorities();
   }
@@ -322,7 +335,9 @@ export class Simulation {
     ct.fill(0);
     // Locals, not traits[t][i]: this loop runs over everyone every year.
     const [t0, t1, t2, t3, t4, t5, t6, t7] = p.traits;
-    const { civPop, civHexes, civOldest, hexCivPop } = this;
+    const { civPop, civHexes, civOldest, hexCivPop, civWomen } = this;
+    civWomen.fill(0);
+    const female = p.female;
     civPop.fill(0);
     civHexes.fill(0);
     civOldest.fill(0);
@@ -358,6 +373,7 @@ export class Simulation {
       if (hunger[i] > 0) { hungry[c]++; hungryHex[hex[i]]++; }
       if (age[i] >= adultAge) effort[k] += personBase + coop[i];
       if (age[i] > civOldest[c]) civOldest[c] = age[i];
+      if (female[i]) civWomen[c]++;
       const b = c * TRAIT_COUNT;
       ct[b] += t0[i]; ct[b + 1] += t1[i]; ct[b + 2] += t2[i]; ct[b + 3] += t3[i];
       ct[b + 4] += t4[i]; ct[b + 5] += t5[i]; ct[b + 6] += t6[i]; ct[b + 7] += t7[i];
@@ -453,6 +469,7 @@ export class Simulation {
         ...c, name: this.civNames[k], people: this.params.civs[k].people, colour: this.params.civs[k].colour,
         type: this.civTypes[k], typeName: CIV_TYPE_NAMES[this.civTypes[k]], ...this.levels.summary(k),
         trade: diplomacy.trade[k],
+        women: this.civWomen[k], men: this.civPop[k] - this.civWomen[k],
       })),
       /** Battles and sieges under way (see war.js summary), and how many there have been. */
       battles: this.war.summary(this.map.cols),
@@ -481,16 +498,30 @@ export class Simulation {
    * run (plain data plus the history's typed arrays), so it costs one pass
    * over the living at most.
    */
+  /** Everyone alive by civ, sex and age band (counted now, only for the end screen): counts[(civ × 2 + female) × bands + band]. */
+  pyramid() {
+    const p = this.people;
+    const counts = new Int32Array(this.civCount * 2 * PYRAMID_BANDS);
+    for (let i = 0; i < p.high; i++) {
+      if (!p.alive[i]) continue;
+      const a = p.age[i];
+      counts[(p.civ[i] * 2 + p.female[i]) * PYRAMID_BANDS + (a < PYRAMID_TOP ? BAND_OF[a] : PYRAMID_BANDS - 1)]++;
+    }
+    return { band: PYRAMID_BAND, top: PYRAMID_TOP, bands: PYRAMID_BANDS, counts };
+  }
+
   report() {
     const civs = this.civStats.summary();
-    const deaths = { oldAge: 0, starvation: 0, war: 0 };
-    for (const c of civs) { deaths.oldAge += c.deaths.oldAge; deaths.starvation += c.deaths.starvation; deaths.war += c.deaths.war; }
+    const deaths = { oldAge: 0, starvation: 0, war: 0, childhood: 0, childbirth: 0 };
+    for (const c of civs) for (const k in deaths) deaths[k] += c.deaths[k];
     return {
       ...this.stats(),
       winnerName: this.winner === null ? null : this.civNames[this.winner],
       endConditions: this.params.endConditions.slice(),
       landHexes: this.landHexes,
       deaths,
+      /** People by sex and age band at the end: pyramid[(civ × 2 + female) × bands + band], bands of PYRAMID_BAND years, the last PYRAMID_TOP and over. */
+      pyramid: this.pyramid(),
       famine: { ...FAMINE },
       history: this.history(),
       records: this.namedRecords(),
@@ -546,7 +577,7 @@ export class Simulation {
 
   /**
    * Where everyone is, for drawing: people per civ per hex and, per pool slot,
-   * alive, id, hex and civ. Copies of the used part only (plain typed arrays).
+   * alive, id, hex, civ and sex. Copies of the used part only (plain typed arrays).
    */
   population() {
     const p = this.people;
@@ -560,38 +591,49 @@ export class Simulation {
       id: p.id.slice(0, n),
       hex: p.hex.slice(0, n),
       civ: p.civ.slice(0, n),
+      /** 1 for a woman. */
+      female: p.female.slice(0, n),
     };
   }
 
   /**
    * One person by pool slot and id (the id guards against a reused slot), or
    * null if that person is no longer alive. Children are counted on demand:
-   * the living people whose parent is this person.
+   * the living people whose mother or father is this person.
    */
   person(slot, id) {
     const p = this.people;
     if (!Number.isInteger(slot) || slot < 0 || slot >= p.high || !p.alive[slot] || p.id[slot] !== id) return null;
     const parent = p.parent[slot];
+    const father = p.father[slot];
     let children = 0;
     let parentAlive = false;
+    let fatherAlive = false;
     for (let i = 0; i < p.high; i++) {
       if (!p.alive[i]) continue;
-      if (p.parent[i] === id) children++;
+      if (p.parent[i] === id || p.father[i] === id) children++;
       if (parent !== NO_PARENT && p.id[i] === parent) parentAlive = true;
+      if (father !== NO_PARENT && p.id[i] === father) fatherAlive = true;
     }
     const h = p.hex[slot];
     const cols = this.map.cols;
     return {
       slot,
       id,
+      female: p.female[slot] === 1,
       age: p.age[slot],
       health: p.health[slot],
       hunger: p.hunger[slot],
       civ: p.civ[slot],
       civName: this.civNames[p.civ[slot]],
+      /** The mother (parent) and father ids, null for founders. */
       parent: parent === NO_PARENT ? null : parent,
       parentAlive: parent === NO_PARENT ? null : parentAlive,
+      father: father === NO_PARENT ? null : father,
+      fatherAlive: father === NO_PARENT ? null : fatherAlive,
       children,
+      /** Children a woman has borne, living or dead (0 for a man). */
+      born: p.kids[slot],
       /** The 8 traits (0 … 1), keyed by trait id (see traits.js TRAITS). */
       traits: Object.fromEntries(TRAITS.map((k, t) => [k, p.traits[t][slot]])),
       hex: h,

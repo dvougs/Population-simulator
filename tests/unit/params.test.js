@@ -34,7 +34,7 @@ test('ranges match RULES.md', () => {
   assert.equal(LIMITS.seedLength, 64);
   assert.deepEqual(END_CONDITIONS, ['lastCiv', 'kingdom', 'dominance', 'years']);
   assert.deepEqual(LIMITS.civCount, { min: 1, max: 8 });
-  assert.deepEqual(LIMITS.startPop, { min: 2, max: 200 });
+  assert.deepEqual(LIMITS.startPop, { min: 4, max: 200 });
   assert.deepEqual(LIMITS.mutation, { min: 0, max: 0.1 });
   assert.deepEqual(LIMITS.dominanceShare, { min: 0.25, max: 1 });
   assert.deepEqual(LIMITS.dominanceYears, { min: 10, max: 10000 });
@@ -298,11 +298,11 @@ test('presets set the end conditions per RULES.md "Game settings"', () => {
   }
 });
 
-test('RULES.md "Game settings": civ count 1 to 8, starting population 2 to 200, mutation 0% to 10% whole percent', () => {
+test('RULES.md "Game settings": civ count 1 to 8, starting population 4 to 200, mutation 0% to 10% whole percent', () => {
   const c = (v) => normalizeParams({ civCount: v }).civCount;
   assert.deepEqual([c(0), c(1), c(8), c(9), c(2.4), c('x'), c(undefined)], [1, 1, 8, 8, 2, 3, 3]);
   const s = (v) => normalizeParams({ startPop: v }).startPop;
-  assert.deepEqual([s(1), s(2), s(200), s(201), s('x')], [2, 2, 200, 200, 20]);
+  assert.deepEqual([s(1), s(3), s(4), s(5), s(200), s(201), s('x')], [4, 4, 4, 5, 200, 200, 20]);
   const m = (v) => normalizeParams({ mutation: v }).mutation;
   assert.deepEqual([m(-0.01), m(0), m(0.01), m(0.1), m(0.11), m(0.034), m('x'), m(null)], [0, 0, 0.01, 0.1, 0.1, 0.03, 0.03, 0.03]);
 });

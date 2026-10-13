@@ -123,7 +123,7 @@ test('a seeded crowded run: the population identity holds with war deaths and sw
     });
     sim.tick(250);
     for (const c of sim.stats().civs) {
-      const deaths = c.deaths.oldAge + c.deaths.starvation + c.deaths.war;
+      const deaths = c.deaths.oldAge + c.deaths.starvation + c.deaths.war + c.deaths.childhood + c.deaths.childbirth;
       assert.equal(startPop + c.births - deaths + c.switchesIn - c.switchesOut, c.pop, `${seed} civ ${c.id}`);
       if (c.deaths.war > 0) sawWar = true;
       if (c.switchesIn > 0) sawSwitch = true;

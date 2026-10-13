@@ -9,7 +9,7 @@
 //                          [--dominance-share f] [--dominance-years n]
 //
 // Prints the map summary, per-civ population every --every years (with the state
-// hash), per-civ totals (type, births, deaths by cause including war, fights fought
+// hash), per-civ totals (type, men and women, births, deaths by cause (old age, starvation, war, childhood, childbirth), fights fought
 // and won, civ switches in and out, lifespans, extinction year and cause),
 // each civ's average traits, each civ's level (with the year it reached each level), food security
 // and capital store, its settlements by size, the greatest cities, each civ's era buildings and wonder chase, who holds each wonder, the end-screen records, wars per pair of civs and the history chronicle's events by kind, the end conditions and how the run ended,
@@ -174,7 +174,7 @@ function wondersJson(list) {
 
 /** Recorded history as plain arrays: one entry per row (one row per year unless the run outgrew the history). */
 function historyJson(hist, names) {
-  const fields = ['pop', 'hexes', 'level', 'births', 'deathsOldAge', 'deathsStarvation', 'deathsWar', 'lifespanSum'];
+  const fields = ['pop', 'hexes', 'level', 'births', 'deathsOldAge', 'deathsStarvation', 'deathsWar', 'deathsChildhood', 'deathsChildbirth', 'lifespanSum'];
   const tc = hist.traitCount;
   const trait = (r, k, t) => {
     const v = hist.traits[(r * hist.civs + k) * tc + t];
@@ -199,13 +199,16 @@ if (args.json) {
   console.log(`  ${p.civCount} ${p.civCount === 1 ? 'civ' : 'civs'}, ${p.startPop} people each, mutation ±${Math.round(p.mutation * 100)}%; `
     + `${stats.totalPop} people alive at year ${stats.tick}`);
   for (const c of result.civs) {
-    const deaths = c.deaths.oldAge + c.deaths.starvation + c.deaths.war;
+    const deaths = c.deaths.oldAge + c.deaths.starvation + c.deaths.war + c.deaths.childhood + c.deaths.childbirth;
     const where = c.start ? ` from (${c.start.col}, ${c.start.row})` : '';
-    const fate = c.extinctYear !== null ? `EXTINCT in year ${c.extinctYear}` : `${c.pop} alive in ${c.hexes} ${c.hexes === 1 ? 'hex' : 'hexes'}`;
+    const fate = c.extinctYear !== null ? `EXTINCT in year ${c.extinctYear}`
+      : `${c.pop} alive (${c.men} men, ${c.women} women) in ${c.hexes} ${c.hexes === 1 ? 'hex' : 'hexes'}`;
     console.log(`  ${c.name} (${c.typeName})${where}: ${fate}; peak ${c.peakPop} people, ${c.peakHexes} ${c.peakHexes === 1 ? 'hex' : 'hexes'}; ${c.births} births; `
-      + `${deaths} deaths (old age ${c.deaths.oldAge}, starvation ${c.deaths.starvation}, war ${c.deaths.war}); `
+      + `${deaths} deaths (old age ${c.deaths.oldAge}, starvation ${c.deaths.starvation}, war ${c.deaths.war}, `
+      + `childhood ${c.deaths.childhood}, childbirth ${c.deaths.childbirth}); `
       + `${c.fights} fights, ${c.fightsWon} won; switches in ${c.switchesIn}, out ${c.switchesOut}; `
-      + `average lifespan ${c.avgLifespan ?? '-'}; oldest ${c.oldestAge}`);
+      + `average lifespan ${c.avgLifespan ?? '-'} (${c.grownLifespan ?? '-'} for those who reached 15); `
+      + `${c.childrenPerWoman ?? '-'} children per woman; oldest ${c.oldestAge}`);
   }
   const short = { fertility: 'f', lifeExpectancy: 'l', strength: 'str', aggression: 'agg', cooperation: 'coop', metabolism: 'm', heatTolerance: 'h', coldTolerance: 'c' };
   for (const c of result.civs) {

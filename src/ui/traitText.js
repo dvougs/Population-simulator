@@ -59,9 +59,9 @@ export function drift(m, n = EXAMPLE_GENERATIONS) {
 
 /** Plain explanation of mutation at ±m, with the 10-generation example. */
 export function mutationText(m) {
-  if (m <= 0) return 'Children copy their parent\'s traits exactly, so a civ\'s traits only change as some families die out and others grow.';
+  if (m <= 0) return 'Children get exactly the average of their parents\' traits, so a civ\'s traits only change as some families die out and others grow.';
   const d = drift(m);
-  return `Each child gets its parent's traits, each nudged by a random amount up to ±${num(m)}. `
+  return `Each child gets the average of its parents' traits, each nudged by a random amount up to ±${num(m)}. `
     + `After ${EXAMPLE_GENERATIONS} generations (roughly 300 years) one family line has drifted about ±${num(d.typical)} by chance (at most ±${num(d.most)}). `
     + 'The civ as a whole moves further: traits that help people eat, survive and have children spread, so a desert people grows to bear the heat.';
 }

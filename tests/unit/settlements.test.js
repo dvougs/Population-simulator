@@ -18,7 +18,7 @@ import { Simulation } from '../../src/sim/simulation.js';
 import { MATERIAL_COUNT, MATERIAL_IDS, WOOD, STONE, CLAY, COPPER, IRON, SALT, GOLD, GEMSTONES, SPICES } from '../../src/sim/materials.js';
 import { PLAINS, FOREST, COAST, DEEP_WATER } from '../../src/sim/terrain.js';
 import { COOPERATION, STRENGTH, AGGRESSION } from '../../src/sim/traits.js';
-import { makeMap, scratch } from './helpers.js';
+import { makeMap, scratch, addAdults } from './helpers.js';
 
 const RULES = readFileSync(new URL('../../RULES.md', import.meta.url), 'utf8');
 const near = (got, want, eps = 1e-9, msg = '') => assert.ok(Math.abs(got - want) <= eps, `${msg} ${got} vs ${want}`);
@@ -859,28 +859,28 @@ function lvWorld(types, groups, deposits = {}, { size = 10 } = {}) {
   return w;
 }
 
-test('RULES.md "Gathering" yield: with a Woodcutter, 20 gatherers give 20 wood (hand: 10, the cap); a Mine doubles uncommon to 1 a gatherer', () => {
+test('RULES.md "Gathering" yield: with a Woodcutter, 30 gatherers give at most 20 wood (hand: 10, the cap); a Mine doubles uncommon to 1 a gatherer', () => {
   const hand = lvWorld(['expansionist'], [[55, 0, 100]], { 55: [WOOD] }).step();
-  assert.equal(hand.levels.gatherers[55], 20);
-  assert.equal(hand.levels.settlements.store[55 * MATERIAL_COUNT + WOOD], 10, '20 × 0.5 = 10, the hand cap');
+  assert.equal(hand.levels.gatherers[55], 30);
+  assert.equal(hand.levels.settlements.store[55 * MATERIAL_COUNT + WOOD], 10, '30 × 0.5 = 15, capped at the hand 10');
   const w = lvWorld(['expansionist'], [[55, 0, 100]], { 55: [WOOD] });
   w.levels.settlements.built[55] |= 1 << B('woodcutter');
   w.levels.settlements.setIndustry(55);
   w.step();
-  assert.equal(w.levels.settlements.store[55 * MATERIAL_COUNT + WOOD], 20, '20 × 1 = 20, the building\'s cap');
-  // 100 adults: 20 gatherers on 2 deposits (wood, copper): 10 each; copper by hand 2.5 (cap 5), with a Mine 10.
+  assert.equal(w.levels.settlements.store[55 * MATERIAL_COUNT + WOOD], 20, '30 × 1 = 30, capped at the building\'s 20');
+  // 100 adults: 30 gatherers on 2 deposits (wood, copper): 15 each; copper by hand 3.75 (cap 5), with a Mine 15.
   const c0 = lvWorld(['expansionist'], [[55, 0, 100]], { 55: [WOOD, COPPER] });
   c0.levels.level[0] = 2;
   c0.step();
-  near(c0.levels.settlements.store[55 * MATERIAL_COUNT + COPPER], 10 * 0.25);
-  near(c0.levels.settlements.store[55 * MATERIAL_COUNT + WOOD], 10 * 0.5);
+  near(c0.levels.settlements.store[55 * MATERIAL_COUNT + COPPER], 15 * 0.25);
+  near(c0.levels.settlements.store[55 * MATERIAL_COUNT + WOOD], 15 * 0.5);
   const c1 = lvWorld(['expansionist'], [[55, 0, 100]], { 55: [WOOD, COPPER] });
   c1.levels.level[0] = 2;
   c1.levels.settlements.built[55] |= 1 << B('mine');
   c1.levels.settlements.setIndustry(55);
   c1.step();
-  near(c1.levels.settlements.store[55 * MATERIAL_COUNT + COPPER], 10);
-  near(c1.levels.settlements.store[55 * MATERIAL_COUNT + WOOD], 5, 1e-9);
+  near(c1.levels.settlements.store[55 * MATERIAL_COUNT + COPPER], 15);
+  near(c1.levels.settlements.store[55 * MATERIAL_COUNT + WOOD], 7.5, 1e-9);
 });
 
 test('RULES.md "Gathering" yield: the yield goes into the hex\'s own store, up to its cap; the rest is lost', () => {
@@ -896,11 +896,11 @@ test('RULES.md "Gathering": a hex that carried goods last year gathers 25% less,
   const full = lvWorld(['expansionist'], [[55, 0, 100]], { 55: [WOOD] });
   full.levels.settlements.used[55] = 1;
   full.step();
-  near(full.levels.gatherers[55], 20 * 0.75, 1e-5);
+  near(full.levels.gatherers[55], 30 * 0.75, 1e-5);
   const half = lvWorld(['expansionist'], [[55, 0, 100]], { 55: [WOOD] });
   half.levels.settlements.used[55] = 0.5;
   half.step();
-  near(half.levels.gatherers[55], 20 * 0.875, 1e-5);
+  near(half.levels.gatherers[55], 30 * 0.875, 1e-5);
 });
 
 // ---- civic progress ---------------------------------------------------------------------------------------------------
@@ -1292,7 +1292,7 @@ test('RULES.md "A year" Births: no births in a hex with people (all civs) at or 
       map.housing = new Float32Array(map.count).fill(housing);
       map.imported = new Float32Array(map.count).fill(imported);
       const people = new People(16);
-      for (let k = 0; k < pop; k++) people.add(5, k % 2, 25, 100, 0);
+      addAdults(people, 5, 0, Math.floor(pop / 2), Math.ceil(pop / 2));
       const s = scratch(map, people);
       total += births(people, map, new Rng(`room${pop}-${t}`), s.pop, s.parents, () => {});
     }

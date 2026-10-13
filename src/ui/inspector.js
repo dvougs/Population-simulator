@@ -332,11 +332,13 @@ export function renderPersonCard(el, person, { onClose, onShowHex, dead = false 
   const rows = [
     ['Status', dead ? 'Died' : 'Alive'],
     ['Civ', name, () => [emblem(person.civ), name]],
+    ['Sex', person.female ? 'Woman' : 'Man'],
     ['Age', `${person.age} years`],
     ['Health', `${person.health} / 100`],
     ['Hunger', person.hunger === 0 ? 'Ate this year' : `${person.hunger} year${person.hunger === 1 ? '' : 's'} without food`],
-    ['Parent', person.parent === null ? 'None (founder)' : `#${person.parent}${person.parentAlive ? '' : ' (died)'}`],
-    ['Children', `${person.children} living`],
+    ['Mother', person.parent === null ? 'None (founder)' : `#${person.parent}${person.parentAlive ? '' : ' (died)'}`],
+    ['Father', person.father === null ? 'None (founder)' : `#${person.father}${person.fatherAlive ? '' : ' (died)'}`],
+    ['Children', person.female ? `${person.children} living, ${person.born} born` : `${person.children} living`],
     ['Hex', `(${person.col}, ${person.row})`],
     ...TRAITS.map((k, t) => [TRAIT_NAMES[t], person.traits ? person.traits[k].toFixed(2) : '–']),
   ];
@@ -345,7 +347,7 @@ export function renderPersonCard(el, person, { onClose, onShowHex, dead = false 
   el.dataset.shown = key;
   el.replaceChildren(
     h('header', {},
-      h('h3', { id: 'inspector-title' }, emblem(person.civ, 16), ` Person #${person.id}`),
+      h('h3', { id: 'inspector-title' }, emblem(person.civ, 16), ` ${person.female ? 'Woman' : 'Man'} #${person.id}`),
       h('button', { type: 'button', class: 'btn ghost', 'aria-label': 'Close person details', onclick: onClose }, '✕')),
     dl(rows),
     h('button', { type: 'button', class: 'btn small people-toggle', onclick: () => onShowHex?.() }, 'Show their hex'),
