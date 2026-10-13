@@ -176,7 +176,7 @@ test('RULES.md "Wonders": materials, years and bonuses per era equal the table',
     assert.deepEqual([...WONDERS[e].materials], parseMaterials(r[2]));
     assert.equal(WONDERS[e].years, Number(r[3]));
   });
-  assert.deepEqual(WONDERS.map((w) => w.years), [60, 100, 150, 200]);
+  assert.deepEqual(WONDERS.map((w) => w.years), [40, 70, 100, 120]);
   assert.deepEqual(WONDERS.map((w) => w.name), ['Sun Circle', 'Hanging Gardens', 'Great Wall', 'Grand Library']);
   assert.deepEqual({ ...WONDERS[0].effects }, { birth: 0.01, loyalty: 0.5 });
   assert.deepEqual({ ...WONDERS[1].effects }, { food: 0.3 });
@@ -626,19 +626,47 @@ test('RULES.md "The decision": a threat the civ beats does not count', () => {
   assert.ok(committed(v.step()));
 });
 
-test('RULES.md "Who thinks about it": only with its own era building standing, and never once the wonder is finished', () => {
-  assert.ok(!committed(wonderWorld('cooperative', 8, { building: false }).step()));
+test('RULES.md "Who thinks about it": no era building needed, and never once the wonder is finished', () => {
+  assert.ok(committed(wonderWorld('cooperative', 8, { building: false }).step()), 'no building at all is fine');
   const building = wonderWorld('cooperative', 8, { building: false });
   building.bd.state[0] = BUILDING; building.bd.hex[0] = 11;
-  assert.ok(!committed(building.step()), 'being built is not enough');
+  assert.ok(committed(building.step()), 'one still being built is fine');
   const done = wonderWorld('cooperative', 8);
   done.bd.wYear[0] = 5; done.bd.wOwner[0] = 1; done.bd.wHex[0] = 99;
   assert.ok(!committed(done.step()));
-  // Only the wonder of the civ's own era: a level 2 civ does not go for the Sun Circle.
-  const l2 = wonderWorld('cooperative', 13);
+});
+
+test('RULES.md "Who thinks about it": any civ at the wonder\'s era or later, the earliest unfinished wonder first, one at a time', () => {
+  // Level 2 with no buildings: era 1's wonder first (not its own era's).
+  const l2 = wonderWorld('cooperative', 13, { building: false });
   l2.lv.level[0] = 2;
-  l2.bd.state[0] = NONE; l2.bd.state[1] = STANDING; l2.bd.hex[1] = 11;
-  assert.ok(l2.step().bd.attempt[1] === COMMITTED && l2.bd.attempt[0] === NONE);
+  l2.step();
+  assert.equal(l2.bd.attempt[0], COMMITTED);
+  assert.equal(l2.bd.attempt[1], NONE, 'one wonder at a time');
+  assert.equal(l2.bd.attemptOf(0), 1);
+  assert.equal(l2.bd.committedEra(0), 1);
+  // Era 1's wonder finished: it goes for era 2's.
+  const next = wonderWorld('cooperative', 13, { building: false });
+  next.lv.level[0] = 2;
+  next.bd.wYear[0] = 5; next.bd.wOwner[0] = 1; next.bd.wHex[0] = 99;
+  next.step();
+  assert.equal(next.bd.attempt[0], NONE);
+  assert.equal(next.bd.attempt[1], COMMITTED);
+  assert.equal(next.bd.attemptOf(0), 2);
+  // A Kingdom (level 5) too, for the earliest unfinished one.
+  const k = wonderWorld('cooperative', 13, { building: false });
+  k.lv.level[0] = 5;
+  k.bd.wYear[0] = 5; k.bd.wOwner[0] = 1; k.bd.wHex[0] = 99;
+  k.bd.wYear[1] = 5; k.bd.wOwner[1] = 1; k.bd.wHex[1] = 97;
+  k.step();
+  assert.equal(k.bd.attempt[2], COMMITTED, 'Great Wall');
+  // A level 1 civ does not think about era 2's wonder.
+  const l1 = wonderWorld('cooperative', 13, { building: false });
+  l1.bd.wYear[0] = 5; l1.bd.wOwner[0] = 1; l1.bd.wHex[0] = 99;
+  assert.equal(l1.step().bd.attemptOf(0), -1);
+  // None committed: attemptOf and committedEra are -1.
+  assert.equal(mk(['cooperative']).bd.attemptOf(0), -1);
+  assert.equal(mk(['cooperative']).bd.committedEra(0), -1);
 });
 
 test('RULES.md "Who thinks about it": decides in the first year it qualifies and again every 25 years', () => {
@@ -749,9 +777,9 @@ function race(types, builders, left = 1) {
   return w;
 }
 
-test('RULES.md "Work": the first to finish gets the wonder; a wonder takes 60 years of work', () => {
+test('RULES.md "Work": the first to finish gets the wonder; a wonder takes 40 years of work (Sun Circle)', () => {
   const w = race(['expansionist', 'aggressive'], [[0, 10], [1, 10]], 2);
-  w.bd.aWork[ERAS] = 60 - 1; // civ 1 is a year ahead
+  w.bd.aWork[ERAS] = 40 - 1; // civ 1 is a year ahead
   w.step();
   assert.equal(w.bd.wOwner[0], 1);
   assert.equal(w.bd.wBuilder[0], 1);
@@ -774,7 +802,7 @@ test('RULES.md "Work": a year counts only with 10 people in the wonder\'s hex', 
   const w = race(['expansionist'], [[0, 9]], 1);
   w.step(3);
   assert.equal(w.bd.wYear[0], -1);
-  assert.equal(w.bd.aWork[0], 59);
+  assert.equal(w.bd.aWork[0], 39);
   w.put(11, 0, 10).step();
   assert.equal(w.bd.wOwner[0], 0);
 });
@@ -812,23 +840,40 @@ test('RULES.md "Wonders": once finished, no civ at that era thinks about it or b
   assert.equal(w.bd.wOwner[0], 0);
 });
 
-test('RULES.md "Captured": the owner keeps it while it has people in the hex; with none, the civ with the most people takes it', () => {
+test('RULES.md "Captured": a finished wonder belongs to whoever holds the hex\'s settlement', () => {
   const w = mk(['expansionist', 'aggressive', 'cooperative']);
   w.bd.wOwner[0] = 0; w.bd.wHex[0] = 45; w.bd.wYear[0] = 1; w.bd.wBuilder[0] = 0;
-  w.put(45, 0, 1).put(45, 1, 50);
+  w.put(45, 0, 50);
   w.step();
-  assert.equal(w.bd.wOwner[0], 0, 'one person is enough');
+  assert.equal(w.lv.settlements.holder[45], 0);
+  assert.equal(w.bd.wOwner[0], 0);
+  // 62 people is below 1.25 × 50 = 62.5: the holder keeps the settlement and the wonder, though others outnumber its few.
+  w.put(45, 1, 62).step();
+  assert.equal(w.lv.settlements.holder[45], 0);
+  assert.equal(w.bd.wOwner[0], 0);
   assert.deepEqual(w.events('captured'), []);
   near(w.bd.eff.birth[0], 0.01);
-  w.put(45, 0, 0).put(45, 2, 10).step();
+  // 63 is at least 62.5: civ 1 takes the settlement and the wonder in the same year.
+  w.put(45, 1, 63).step();
+  assert.equal(w.lv.settlements.holder[45], 1);
   assert.equal(w.bd.wOwner[0], 1);
   assert.equal(w.bd.wCaptures[0], 1);
-  assert.deepEqual(w.events('captured'), [['captured', 1, 1, 2, 0]]);
+  assert.deepEqual(w.events('captured'), [['captured', 1, 1, 3, 0]]);
   near(w.bd.eff.birth[1], 0.01); near(w.bd.eff.birth[0], 0);
   assert.equal(w.bd.wBuilder[0], 0, 'the builder is remembered');
-  // The new owner keeps it even when others have more people.
-  w.put(45, 2, 500).step();
+  // The old owner still having people there does not matter; the holder keeps it even when others have more people.
+  w.put(45, 2, 70).step();
+  assert.equal(w.lv.settlements.holder[45], 1);
   assert.equal(w.bd.wOwner[0], 1);
+});
+
+test('RULES.md "Captured": the holder changes when its people are gone: the civ with the most people takes it', () => {
+  const w = mk(['expansionist', 'aggressive', 'cooperative']);
+  w.bd.wOwner[0] = 0; w.bd.wHex[0] = 45; w.bd.wYear[0] = 1;
+  w.put(45, 0, 5).step();
+  assert.equal(w.bd.wOwner[0], 0);
+  w.put(45, 0, 0).put(45, 1, 10).put(45, 2, 20).step();
+  assert.equal(w.bd.wOwner[0], 2);
 });
 
 test('RULES.md "Captured": a tie goes to the lower civ number', () => {
@@ -953,9 +998,13 @@ test('RULES.md "What levels do": food capacity adds the biggest food bonus among
   s.put(11, 0, 1).put(11, 1, 1).put(12, 0, 1);
   s.stand(0, 2, 11).stand(0, 4, 12);
   s.step();
+  assert.equal(s.lv.settlements.holder[11], 0, 'a tie: the lower civ number');
   near(s.map.foodCap[11], FOOD_CAPACITY[PLAINS] * 1.1, 1e-3);
+  // The wonder goes to the hex's holder: civ 1 outnumbers civ 0 there 2 to 1 (at least 1.25 times) and takes it.
   s.bd.wOwner[1] = 1; s.bd.wHex[1] = 11; s.bd.wYear[1] = 1;
+  s.put(11, 1, 2);
   s.step();
+  assert.equal(s.lv.settlements.holder[11], 1);
   near(s.map.foodCap[11], FOOD_CAPACITY[PLAINS] * 1.3, 1e-3);
   near(s.map.foodCap[12], FOOD_CAPACITY[HILLS] * 1.1, 1e-3);
 });
@@ -1118,32 +1167,32 @@ test('RULES.md "Levelling up": a land bonus applies when levelling and to the mi
 test('RULES.md "Levelling up": a years bonus (Observatory 10%, Grand Library 30%) lowers the years to ⌈× (1 − bonus)⌉', () => {
   const w = mk(['isolationist', 'nomadic', 'expansionist']);
   const lv = w.lv;
-  assert.equal(lv.yearsFor(0, 1), 120);
-  assert.equal(lv.yearsFor(1, 1), 188);
+  assert.equal(lv.yearsFor(0, 1), 80);
+  assert.equal(lv.yearsFor(1, 1), 110);
   w.stand(0, 4, 45);
-  assert.equal(lv.yearsFor(0, 1), 108, '120 × 0.9');
-  assert.equal(lv.yearsFor(0, 4), 576, '640 × 0.9');
+  assert.equal(lv.yearsFor(0, 1), 72, '80 × 0.9');
+  assert.equal(lv.yearsFor(0, 4), 288, '320 × 0.9');
   w.bd.wOwner[3] = 0; w.bd.totals();
-  assert.equal(lv.yearsFor(0, 4), 384, '640 × 0.6');
-  assert.equal(lv.yearsFor(0, 1), 72);
+  assert.equal(lv.yearsFor(0, 4), 192, '320 × 0.6');
+  assert.equal(lv.yearsFor(0, 1), 48);
   w.bd.wOwner[3] = 1; w.bd.totals();
-  assert.equal(lv.yearsFor(1, 1), 132, '188 × 0.7 = 131.6');
-  assert.equal(lv.yearsFor(2, 1), 150, 'a civ without it');
+  assert.equal(lv.yearsFor(1, 1), 77, '110 × 0.7');
+  assert.equal(lv.yearsFor(2, 1), 100, 'a civ without it');
   const act = mk(['isolationist']);
   for (let k = 0; k < 15; k++) act.put(11 + k, 0, 10);
   act.stand(0, 4, 11);
   act.bd.state[0] = STANDING; act.bd.hex[0] = 11; act.bd.aCheck[0] = 1e9;
   act.give(0, { wood: 100, stone: 38, clay: 38 });
-  act.lv.yearsAt[0] = 107;
+  act.lv.yearsAt[0] = 71;
   act.step();
-  assert.equal(act.lv.level[0], 2, '108 years');
+  assert.equal(act.lv.level[0], 2, '72 years');
   const short = mk(['isolationist']);
   for (let k = 0; k < 15; k++) short.put(11 + k, 0, 10);
   short.stand(0, 4, 11);
   short.bd.state[0] = STANDING; short.bd.hex[0] = 11; short.bd.aCheck[0] = 1e9;
   short.give(0, { wood: 100, stone: 38, clay: 38 });
-  short.lv.yearsAt[0] = 106;
-  assert.equal(short.step().lv.level[0], 1, '107 years');
+  short.lv.yearsAt[0] = 70;
+  assert.equal(short.step().lv.level[0], 1, '71 years');
 });
 
 test('RULES.md "Levelling up": a cost bonus (Guild Hall 15%) lowers every material cost of levels and buildings to ⌈× 0.85⌉', () => {
@@ -1353,7 +1402,7 @@ test('Simulation.buildings(), inspect(...).buildings and host.buildings(): plain
   assert.deepEqual([tent.status, tent.work, tent.years, tent.civ], ['building', 7, 30, 1]);
   const library = list.find((b) => b.kind === 'wonder');
   assert.deepEqual([library.name, library.civ, library.builder, library.year, library.captures, library.status, library.work, library.years],
-    ['Grand Library', 1, 0, 500, 2, 'standing', 200, 200]);
+    ['Grand Library', 1, 0, 500, 2, 'standing', 120, 120]);
   assert.deepEqual(library.bonuses, ['gathering ×2', 'years needed at a level −30%']);
   bd.wOwner[3] = -1; bd.totals();
   assert.equal(sim.buildings().find((b) => b.kind === 'wonder').status, 'abandoned');
@@ -1400,7 +1449,7 @@ test('Levels.summary and Buildings.summary: plain data for the sheet (status, co
   assert.equal(w.lv.summary(0).next.waitingForWonder, true);
   w.bd.aHex[0] = 47; w.bd.aWork[0] = 3;
   const b = w.lv.summary(0).buildings.eras[0].wonder;
-  assert.deepEqual([b.status, b.work, b.years], ['building', 3, 60]);
+  assert.deepEqual([b.status, b.work, b.years], ['building', 3, 40]);
   w.bd.wYear[0] = 9; w.bd.wOwner[0] = 1; w.bd.totals();
   assert.equal(w.lv.summary(0).buildings.eras[0].wonder.status, 'building', 'still building by its own attempt');
   w.bd.aHex[0] = -1; w.bd.attempt[0] = NONE;
@@ -1569,4 +1618,89 @@ test('a seeded run: civs build, buildings are deterministic, hash is the same tw
   // Era buildings are optional now and come after the level in the spending order, so this run may build none of them;
   // the settlements around it do build (see settlements.test.js).
   assert.ok(a.levels.some((l) => l > 1), 'someone levelled up without an era building');
+});
+
+// ---- wonders of earlier eras (RULES.md "Who thinks about it", "Committed") ------------------------------------
+
+/** A Cooperative civ at level 3 with 25 hexes of 14 people (what level 4 needs on 100 land hexes for two civs), no era building. */
+function levelThree() {
+  const w = mk(['cooperative', 'expansionist']);
+  for (let k = 0; k < 25; k++) w.put(11 + k, 0, 14);
+  w.lv.level[0] = 3;
+  return w;
+}
+
+test('RULES.md "Committed": a level 3 civ with no era building commits to the unfinished era 1 wonder, and that does not hold back its level', () => {
+  const w = levelThree();
+  w.step();
+  assert.equal(w.bd.state[2], NONE, 'no Builders era building');
+  assert.equal(w.bd.attempt[0], COMMITTED, 'the Sun Circle, the earliest unfinished');
+  assert.equal(w.bd.attempt[2], NONE);
+  assert.equal(w.bd.committedEra(0), 1);
+  assert.equal(w.bd.attemptOf(0), 1);
+  assert.equal(w.lv.level[0], 3);
+  // Everything for the level (3 to 4) is there: it levels up although it has not started the wonder.
+  w.lv.yearsAt[0] = 5000;
+  w.give(0, { stone: 300, copper: 80, iron: 60, salt: 40 });
+  w.step();
+  assert.equal(w.lv.level[0], 4);
+  assert.deepEqual(w.events('level'), [['level', 0, 3, 4, 2]]);
+  assert.equal(w.bd.attempt[0], COMMITTED, 'still going for the Sun Circle');
+  assert.equal(w.bd.aHex[0], -1);
+  // Its own era's wonder would have held it back (waitingForWonder is for the level's own era only).
+  assert.equal(w.bd.waitingForWonder(0, 3), false);
+  assert.equal(w.bd.waitingForWonder(0, 1), true);
+});
+
+test('RULES.md "Committed": a committed wonder of an earlier era is gathered for first, and started in the wonder era\'s people per hex', () => {
+  const w = levelThree();
+  w.step();
+  assert.equal(w.bd.committedEra(0), 1);
+  // Levels.targets puts the committed wonder first (the Sun Circle: 160 wood, 120 stone, 80 clay), ahead of the level's stone.
+  w.lv.targets(0);
+  assert.deepEqual([w.lv.target[WOOD], w.lv.target[STONE], w.lv.target[2]], [160, 120, 80]);
+  // The wonder's materials arrive: it starts, whatever the level is, in a hex with 10 people (the era 1 number).
+  w.give(0, { wood: 160, stone: 120, clay: 80 });
+  w.lv.yearsAt[0] = 0;
+  w.step();
+  assert.ok(w.bd.aHex[0] >= 0, 'started');
+  assert.equal(w.bd.aWork[0], 0);
+  assert.equal(w.bd.committedEra(0), -1, 'started: no longer gathered for');
+  assert.equal(w.bd.attemptOf(0), 1, 'but still its one wonder');
+});
+
+test('RULES.md "Who thinks about it": one wonder at a time: while one is committed or building, the civ thinks about no other', () => {
+  const w = levelThree();
+  w.step(30);
+  assert.equal(w.bd.attempt[0], COMMITTED);
+  for (const k of [1, 2]) assert.equal(w.bd.attempt[k], NONE, `era ${k + 1} wonder not considered`);
+  // Once it gives up (or the wonder is finished) it looks again, the earliest unfinished first.
+  // (Finishing clears every other civ's attempt at it, see "Work"; done by hand here.)
+  w.bd.wYear[0] = 40; w.bd.wOwner[0] = 1; w.bd.wHex[0] = 99;
+  w.bd.attempt[0] = NONE; w.bd.aCheck[0] = 31;
+  w.step(26);
+  assert.equal(w.bd.attempt[1], COMMITTED, 'the Hanging Gardens next');
+  assert.equal(w.bd.attempt[2], NONE);
+});
+
+test('Levels.targets: a Kingdom committed to a wonder still gathers for it; without one it gathers nothing', () => {
+  const w = mk(['cooperative', 'expansionist']);
+  w.lv.level[0] = 5;
+  for (let k = 0; k < 40; k++) w.put(11 + k, 0, 20);
+  w.bd.wYear[0] = 1; w.bd.wOwner[0] = 1; w.bd.wHex[0] = 99; // Sun Circle gone
+  w.step();
+  assert.equal(w.bd.attempt[1], COMMITTED, 'a Kingdom commits to the Hanging Gardens');
+  w.lv.targets(0);
+  assert.equal(w.lv.target[STONE], 250);
+  assert.equal(w.lv.target[WOOD], 0);
+  // Every wonder finished: nothing to gather for.
+  const v = mk(['cooperative', 'expansionist']);
+  v.lv.level[0] = 5;
+  for (let k = 0; k < 40; k++) v.put(11 + k, 0, 20);
+  v.bd.wYear.fill(1);
+  v.bd.wOwner.fill(1);
+  v.step();
+  v.lv.targets(0);
+  assert.ok(Array.from({ length: MATERIAL_COUNT }, (_, m) => v.lv.target[m]).every((x) => x === 0));
+  assert.equal(v.bd.attemptOf(0), -1);
 });

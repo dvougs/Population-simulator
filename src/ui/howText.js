@@ -83,7 +83,7 @@ export function levelFacts() {
       name,
       does: does[k] + birth,
       needs: r ? `${r.years} years as ${LEVEL_NAMES[k - 1]}, ${r.landPct}% of its share of the land (${r.perHex} people per hex), `
-        + `its own ${LEVEL_NAMES[k - 1]} building standing; spends ${materialList(r.materials)}.` : null,
+        + `then spends ${materialList(r.materials)}.` : null,
     };
   });
 }
@@ -134,14 +134,14 @@ export function buildingsSection() {
     eras,
     types: buildingFacts(),
     after: [
-      'Each level also has one wonder for the whole world. Any civ at that level may try, but only the first to finish gets it; '
+      'Each level also has one wonder for the whole world. Any civ at that level or higher may try, but only the first to finish gets it; '
         + `the others stop and get ${W.refund === 0.5 ? 'half' : pct(W.refund)} of their materials back. A wonder is not needed to level up, but its bonus is huge.`,
-      'Wonders can be taken. When the owner has nobody left in the wonder\'s hex, the civ with the most people there takes it, bonus and all. '
+      'Wonders can be taken. A wonder belongs to whoever holds its hex: win the hex, by numbers or in a fight, and the wonder is yours, bonus and all. '
         + 'An empty wonder stands abandoned, its bonus silent, until someone settles it. A wonder near a border is a prize worth a war.',
-      `Who tries? A civ thinks about it once its own building for the level stands, and again every ${W.checkYears} years. `
+      `Who tries? A civ thinks about the unfinished wonders of its level and earlier ones, one at a time and the oldest first, every ${W.checkYears} years. `
         + `It weighs its type's lean (${andList(lean)}), how safe it is (the share of its hexes away from threats it cannot beat) `
         + `and whether it already holds the land its next level needs (counting up to × ${num(W.landCap)}), and each wonder it already owns multiplies its keenness by ${num(W.perOwned)}. If it all multiplies to ${num(W.commitScore)} or more, it commits.`,
-      'A committed civ will not level up until it starts the wonder: it gathers the materials, and building begins. '
+      'A civ committed to its own level\'s wonder will not level up until it starts it: it gathers the materials, and building begins. An older wonder never holds back its level. '
         + `It gives up after ${W.giveUpYears} years without starting, or as soon as its safety falls below ${num(W.giveUpSafety)}.`,
     ],
   };
@@ -364,7 +364,7 @@ export function howText() {
           'Each settlement puts up its own buildings, one at a time, paid from its store: huts and houses, fields, docks, granaries and irrigation, '
             + 'industry on its deposits, warehouses and markets, shrines, schools and libraries, palisades and walls. '
             + `Civic buildings make every year at a level count for more, up to +${pct(MAX_PROGRESS_BONUS)}. Hungry places get food from neighbours with food to spare. `
-            + `A hex that changes hands loses ${pct(SETTLE.looted)} of its store to looting.`,
+            + `When a hex changes hands, ${pct(SETTLE.looted)} of its store is looted and carried off to the winner's capital.`,
         ],
         levels: levelFacts(),
         buildings: buildingsSection(),

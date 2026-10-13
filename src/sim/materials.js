@@ -15,6 +15,8 @@ export const GOLD = 6;
 export const GEMSTONES = 7;
 export const SPICES = 8;
 export const MATERIAL_COUNT = 9;
+/** A store within this much of a cost counts as holding it, so sums of fractional yields never leave a civ a hair short. */
+export const COST_EPS = 0.001;
 
 export const MATERIAL_IDS = ['wood', 'stone', 'clay', 'copper', 'iron', 'salt', 'gold', 'gemstones', 'spices'];
 export const MATERIAL_NAMES = ['Wood', 'Stone', 'Clay', 'Copper', 'Iron', 'Salt', 'Gold', 'Gemstones', 'Spices'];

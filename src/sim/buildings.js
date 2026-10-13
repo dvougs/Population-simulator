@@ -11,7 +11,7 @@
 // randomness: sites, decisions, completions and captures are all settled by
 // fixed rules (most people, then the lower civ number or hex index).
 
-import { MATERIAL_COUNT, MATERIAL_IDS, MATERIAL_NAMES } from './materials.js';
+import { MATERIAL_COUNT, MATERIAL_IDS, MATERIAL_NAMES, COST_EPS } from './materials.js';
 import { DEEP_WATER, HILLS, MOUNTAIN, DESERT, TUNDRA } from './terrain.js';
 
 /** Eras with a building and a wonder: levels 1 (Foragers) to 4 (Organised). */
@@ -83,13 +83,13 @@ export const BUILDINGS = Object.freeze({
 
 /** WONDERS[era − 1]: one per era for the whole world. */
 export const WONDERS = Object.freeze([
-  Object.freeze({ id: 'sunCircle', name: 'Sun Circle', materials: mats({ wood: 160, stone: 120, clay: 80 }), years: 60,
+  Object.freeze({ id: 'sunCircle', name: 'Sun Circle', materials: mats({ wood: 160, stone: 120, clay: 80 }), years: 40,
     effects: Object.freeze({ birth: 0.01, loyalty: 0.5 }) }),
-  Object.freeze({ id: 'hangingGardens', name: 'Hanging Gardens', materials: mats({ stone: 250, clay: 150, copper: 60, gold: 10 }), years: 100,
+  Object.freeze({ id: 'hangingGardens', name: 'Hanging Gardens', materials: mats({ stone: 250, clay: 150, copper: 60, gold: 10 }), years: 70,
     effects: Object.freeze({ food: 0.3 }) }),
-  Object.freeze({ id: 'greatWall', name: 'Great Wall', materials: mats({ stone: 400, copper: 80, iron: 80, gemstones: 15 }), years: 150,
+  Object.freeze({ id: 'greatWall', name: 'Great Wall', materials: mats({ stone: 400, copper: 80, iron: 80, gemstones: 15 }), years: 100,
     effects: Object.freeze({ defence: 1, strength: 0.5 }) }),
-  Object.freeze({ id: 'grandLibrary', name: 'Grand Library', materials: mats({ iron: 200, gold: 40, gemstones: 30, spices: 30 }), years: 200,
+  Object.freeze({ id: 'grandLibrary', name: 'Grand Library', materials: mats({ iron: 200, gold: 40, gemstones: 30, spices: 30 }), years: 120,
     effects: Object.freeze({ gather: 1, years: 0.3 }) }),
 ]);
 
@@ -308,13 +308,16 @@ export class Buildings {
         }
       }
     }
+    // A finished wonder belongs to whoever holds its hex's settlement (−1: nobody lives there).
+    const holder = lv.settlements?.holder ?? null;
     for (let e = 0; e < E; e++) {
       const h = this.wHex[e];
       if (h < 0) continue;
       const o = this.wOwner[e];
-      if (o >= 0 && cnt[h * civs + o] > 0) continue;
       let to = -1;
-      for (let c = 0; c < civs; c++) if (cnt[h * civs + c] > 0 && (to < 0 || cnt[h * civs + c] > cnt[h * civs + to])) to = c;
+      if (holder) to = holder[h];
+      else if (o >= 0 && cnt[h * civs + o] > 0) to = o;
+      else for (let c = 0; c < civs; c++) if (cnt[h * civs + c] > 0 && (to < 0 || cnt[h * civs + c] > cnt[h * civs + to])) to = c;
       if (to === o) continue;
       this.wOwner[e] = to;
       if (to >= 0) { this.wCaptures[e]++; onEvent?.('captured', to, e + 1, year, o); }
@@ -358,42 +361,48 @@ export class Buildings {
       }
     }
 
-    // 3. Decide and start, for each civ at its current era.
+    // 3. Decide and start, for each civ: its current era's building, and wonders of its era or earlier.
     for (let c = 0; c < civs; c++) {
       const L = lv.level[c];
-      if (lv.civPop[c] === 0 || L > E) continue;
+      if (lv.civPop[c] === 0) continue;
       const k = c * E + L - 1;
       const need = lv.perHexFor(L);
       const danger = hostile[c] & ~beats[c];
       // The era building is optional: it waits until the capital also keeps what the next level costs.
-      if (this.state[k] === NONE && this.affords(stock, c, this.buildingCost(c, L, cost), lv.reserve)) {
+      if (L <= E && this.state[k] === NONE && this.affords(stock, c, this.buildingCost(c, L, cost), lv.reserve)) {
         const h = this.site(c, cnt, need, hostile[c]);
         if (h >= 0) {
           for (let m = 0; m < MATERIAL_COUNT; m++) stock[c * MATERIAL_COUNT + m] -= cost[m];
           this.state[k] = BUILDING; this.hex[k] = h; this.work[k] = 0;
         }
       }
-      if (this.wYear[L - 1] >= 0) continue;
-      if (this.attempt[k] === NONE) {
-        // Only a civ with its own era building standing thinks about the wonder.
-        if (this.state[k] !== STANDING || year - this.aCheck[k] < WONDER_RULES.checkYears) continue;
-        this.aCheck[k] = year;
-        if (this.score(c, L, cnt, danger, lv) >= WONDER_RULES.commitScore) { this.attempt[k] = COMMITTED; this.aSince[k] = year; }
-        continue;
+      // Wonders: any unfinished one of its era or an earlier one, one at a time, the earliest first.
+      const busy = this.attemptOf(c);
+      for (let e = 1; e <= Math.min(L, E); e++) {
+        if (this.wYear[e - 1] >= 0) continue;
+        const ka = c * E + e - 1;
+        if (busy >= 0 && busy !== e) continue;
+        if (this.attempt[ka] === NONE) {
+          if (year - this.aCheck[ka] < WONDER_RULES.checkYears) continue;
+          this.aCheck[ka] = year;
+          if (this.score(c, L, cnt, danger, lv) >= WONDER_RULES.commitScore) { this.attempt[ka] = COMMITTED; this.aSince[ka] = year; }
+          break;
+        }
+        if (this.aHex[ka] >= 0) break;
+        // Committed, not started: give up, or start once the materials are in.
+        if (year - this.aSince[ka] >= WONDER_RULES.giveUpYears
+          || ((year - this.aSince[ka]) % WONDER_RULES.checkYears === 0 && this.safety(c, cnt, danger) < WONDER_RULES.giveUpSafety)) {
+          this.attempt[ka] = NONE; this.aCheck[ka] = year;
+          break;
+        }
+        if (!this.affords(stock, c, WONDERS[e - 1].materials)) break;
+        const h = this.site(c, cnt, lv.perHexFor(e), hostile[c]);
+        if (h < 0) break;
+        const w = WONDERS[e - 1].materials;
+        for (let m = 0; m < MATERIAL_COUNT; m++) stock[c * MATERIAL_COUNT + m] -= w[m];
+        this.aHex[ka] = h; this.aWork[ka] = 0;
+        break;
       }
-      if (this.aHex[k] >= 0) continue;
-      // Committed, not started: give up, or start once the materials are in.
-      if (year - this.aSince[k] >= WONDER_RULES.giveUpYears
-        || ((year - this.aSince[k]) % WONDER_RULES.checkYears === 0 && this.safety(c, cnt, danger) < WONDER_RULES.giveUpSafety)) {
-        this.attempt[k] = NONE; this.aCheck[k] = year;
-        continue;
-      }
-      if (!this.affords(stock, c, WONDERS[L - 1].materials)) continue;
-      const h = this.site(c, cnt, need, hostile[c]);
-      if (h < 0) continue;
-      const w = WONDERS[L - 1].materials;
-      for (let m = 0; m < MATERIAL_COUNT; m++) stock[c * MATERIAL_COUNT + m] -= w[m];
-      this.aHex[k] = h; this.aWork[k] = 0;
     }
     this.totals();
   }
@@ -411,7 +420,7 @@ export class Buildings {
   affords(stock, c, list, reserve = null) {
     for (let m = 0; m < MATERIAL_COUNT; m++) {
       const keep = reserve ? reserve[c * MATERIAL_COUNT + m] : 0;
-      if (stock[c * MATERIAL_COUNT + m] - keep < list[m]) return false;
+      if (stock[c * MATERIAL_COUNT + m] - keep + COST_EPS < list[m]) return false;
     }
     return true;
   }
@@ -427,6 +436,18 @@ export class Buildings {
     for (let e = 0; e < ERAS; e++) if (this.wOwner[e] >= 0) add(this.wOwner[e], WONDERS[e].effects);
     // Bonuses that take something away stop short of all of it.
     for (const k of CAPPED) for (let c = 0; c < civs; c++) if (this.eff[k][c] > MAX_SHARE) this.eff[k][c] = MAX_SHARE;
+  }
+
+  /** Era (1 to 4) of the wonder civ c is going for (committed or building), or −1. */
+  attemptOf(c) {
+    for (let e = 0; e < ERAS; e++) if (this.attempt[c * ERAS + e] !== NONE || this.aHex[c * ERAS + e] >= 0) return e + 1;
+    return -1;
+  }
+
+  /** Era of the wonder civ c is committed to and has not started (it gathers for it first), or −1. */
+  committedEra(c) {
+    for (let e = 0; e < ERAS; e++) if (this.attempt[c * ERAS + e] === COMMITTED && this.aHex[c * ERAS + e] < 0) return e + 1;
+    return -1;
   }
 
   /** Civ c is committed to era L's wonder and has not started it (its level waits). */

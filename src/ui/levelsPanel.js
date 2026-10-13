@@ -38,7 +38,7 @@ export function renderLevels(el, stats) {
     const head = h('div', { class: 'level-head' },
       emblem(k),
       h('span', { class: 'name' }, `${c.name} · Level ${c.level} ${c.levelName}`),
-      c.pop > 0 ? h('span', { class: c.foodSecure ? 'tag ok' : 'tag' }, c.foodSecure ? 'Well fed' : 'Many hungry') : null);
+      c.pop > 0 ? h('span', { class: c.foodSecure ? 'tag ok' : 'tag' }, c.food === 'famine' ? 'Famine' : c.foodSecure ? 'Well fed' : 'Food short') : null);
     const parts = [head];
     if (c.pop === 0) parts.push(h('p', { class: 'muted' }, 'Died out.'));
     else if (c.next) {
@@ -91,7 +91,7 @@ export function wonderStatus(w) {
   return 'free';
 }
 
-/** A civ's era buildings, its current era's wonder chase (and any wonder it owns), and its total bonuses. */
+/** A civ's era buildings, its current era's wonder and any it is going for or owns, and its total bonuses. */
 function buildingsBlock(c) {
   const { eras, bonusText } = c.buildings;
   const items = eras.map((e) => {
@@ -102,7 +102,7 @@ function buildingsBlock(c) {
       h('span', { class: 'b-name' }, `${e.era} ${b.name}`), h('span', { class: 'b-status' }, `${status}${lost}`),
       h('small', {}, b.bonuses.join('; ')));
   });
-  const wonders = eras.filter((e) => e.era === c.level || e.wonder.status === 'owned').map((e) => {
+  const wonders = eras.filter((e) => e.era === c.level || ['owned', 'building', 'gathering'].includes(e.wonder.status)).map((e) => {
     const w = e.wonder;
     return h('li', { 'data-era': e.era, 'data-status': w.status },
       h('span', { class: 'b-name' }, w.name), h('span', { class: 'b-status' }, wonderStatus(w)),

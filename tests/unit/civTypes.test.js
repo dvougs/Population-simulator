@@ -27,7 +27,7 @@ test('RULES.md "Civ types": the type table numbers', () => {
   assert.deepEqual({ ...TYPE_RULES.expansionist }, { crowdedShare: 0.3 });
   assert.deepEqual({ ...TYPE_RULES.aggressive }, { alwaysFights: true });
   assert.deepEqual({ ...TYPE_RULES.cooperative }, { neverStartsFights: true, switchAwayFactor: 0.5 });
-  assert.deepEqual({ ...TYPE_RULES.isolationist }, { fedNeverSetsOut: true });
+  assert.deepEqual({ ...TYPE_RULES.isolationist }, { fedKeepsApart: true });
   assert.deepEqual({ ...TYPE_RULES.nomadic }, { movePoints: 5, setOutFactor: 2 });
 });
 
@@ -39,7 +39,7 @@ test('RULES.md "Civ types": the setup screen text is the type\'s sentence, then 
   assert.equal(civTypeText('cooperative'),
     'Never starts a fight, and its people leave it for another civ half as often as others do. Starts with cooperation 0.7; other traits 0.5.');
   assert.equal(civTypeText('isolationist'),
-    'Stays home: its people only set out when they go hungry, never because the hex is crowded. Starts with life expectancy 0.6; other traits 0.5.');
+    'Keeps to itself: when its hex is crowded, its people only move to land with no other civ in or next to it. Starts with life expectancy 0.6; other traits 0.5.');
   assert.equal(civTypeText('nomadic'),
     'Wanders far: 5 movement points a year instead of 3, and sets out twice as often. Starts with metabolism 0.45, heat tolerance 0.6, cold tolerance 0.6; other traits 0.5.');
   assert.deepEqual(Object.keys(CIV_TYPE_TRAITS.aggressive), ['aggression', 'strength']);
@@ -57,7 +57,7 @@ test('RULES.md "Migration" by civ type: the per-civ migration table', () => {
     expansionist: [0.5, 0.2, 0.3, 0],
     aggressive: [0.5, 0.2, 0.5, 0],
     cooperative: [0.5, 0.2, 0.5, 0],
-    isolationist: [0.5, 0, 0.5, 0],
+    isolationist: [0.5, 0.2, 0.5, 0], // a fed one sets out as usual, but only towards land apart from other civs
     nomadic: [1, 0.4, 0.5, 5],
     nonsense: [0.5, 0.2, 0.5, 0],
   };
@@ -91,12 +91,57 @@ test('RULES.md "Migration" by type: hungry people set out 50% (Nomadic 100%)', (
   assert.equal(moveShare('nomadic', 40, { hunger: 1 }), 1, 'every hungry nomad sets out');
 });
 
-test('RULES.md "Migration" by type: fed people in a crowded hex set out 20% (Nomadic 40%, Isolationist never)', () => {
+test('RULES.md "Migration" by type: fed people in a crowded hex set out 20% (Nomadic 40%, Isolationist 20% but only apart from other civs)', () => {
   // 49 of 60 is more than 50% for everyone.
   for (const t of ['expansionist', 'aggressive', 'cooperative']) near(moveShare(t, 49), 0.2, 0.035);
   near(moveShare('nomadic', 49), 0.4, 0.04);
-  assert.equal(moveShare('isolationist', 49), 0, 'a fed Isolationist never sets out');
-  assert.equal(moveShare('isolationist', 59), 0);
+  near(moveShare('isolationist', 49), 0.2, 0.035);
+  near(moveShare('isolationist', 59), 0.2, 0.035);
+  assert.equal(moveShare('isolationist', 30), 0, 'not crowded at exactly 50%');
+});
+
+/** Civ 0 (Isolationist) crowd of n in C and one person of civ 1 in `other`; where the movers of civ 0 end up, counted per hex. */
+function apartRun(n, other, hunger, trials = 40) {
+  const map = makeMap(10, 10, () => PLAINS);
+  const people = new People(n + 1);
+  for (let k = 0; k < n; k++) { const i = people.add(C, 0, 25, 50, 0); people.hunger[i] = hunger; }
+  people.add(other, 1, 25, 50, 0);
+  const reach = buildReach(map);
+  const rules = migrationRules(['isolationist', 'aggressive'], map, reach);
+  const s = scratch(map, people);
+  const held = new Uint8Array(map.count * 2);
+  const ends = new Map();
+  for (let t = 0; t < trials; t++) {
+    for (let i = 0; i < n; i++) people.hex[i] = C;
+    people.hex[n] = other;
+    migrate(people, map, reach, new Rng(`apart${n}${hunger}${t}`), s.pop, s.spare, s.dest, held, rules);
+    for (let i = 0; i < n; i++) if (people.hex[i] !== C) ends.set(people.hex[i], (ends.get(people.hex[i]) ?? 0) + 1);
+  }
+  return { map, ends };
+}
+
+test('RULES.md "Migration" by type: a fed Isolationist never enters a hex with, or next to, another civ\'s people; a hungry one may', () => {
+  const other = C + 1; // a neighbour of C
+  const { map, ends } = apartRun(49, other, 0);
+  const banned = new Set([other, ...map.neighbours.slice(other * 6, other * 6 + 6)]);
+  banned.delete(C);
+  const nearC = [...map.neighbours.slice(C * 6, C * 6 + 6)];
+  assert.ok(nearC.some((h) => banned.has(h)) && nearC.some((h) => !banned.has(h)), 'the scene bans some targets and not others');
+  let moved = 0;
+  for (const [h, k] of ends) { moved += k; assert.ok(!banned.has(h), `fed mover entered ${h}`); }
+  assert.ok(moved > 100, `fed Isolationists still move to the free land: ${moved}`);
+  const hungry = apartRun(40, other, 1);
+  let into = 0;
+  for (const [h, k] of hungry.ends) if (banned.has(h)) into += k;
+  assert.ok(into > 0, 'hungry Isolationists go anywhere');
+  // Another civ far away changes nothing: all six neighbours are open.
+  assert.equal(apartRun(49, 0, 0).ends.size, 6);
+});
+
+test('RULES.md "Migration" by type: other types ignore other civs\' people when fed (only Isolationist keeps apart)', () => {
+  const map = makeMap(10, 10, () => PLAINS);
+  const rules = migrationRules(CIV_TYPES, map, buildReach(map));
+  assert.deepEqual([...rules.keepApart], [0, 0, 0, 1, 0]);
 });
 
 test('RULES.md "Migration" by type: crowded means above 50% of capacity, above 30% for Expansionist (boundaries)', () => {
@@ -142,7 +187,7 @@ test('a Simulation builds its migration and contact rules from params.civTypes',
   const sim = new Simulation({ seed: 'types', civCount: 4, civTypes: types });
   assert.deepEqual(sim.civTypes, types);
   assert.deepEqual([...sim.migrationRules.movePoints], [5, 0, 0, 0]);
-  assert.deepEqual([...sim.migrationRules.crowdedChance], [0.4, 0, 0.2, 0.2]);
+  assert.deepEqual([...sim.migrationRules.crowdedChance], [0.4, 0.2, 0.2, 0.2]);
   assert.deepEqual(sim.stats().civs.map((c) => c.type), types);
   assert.deepEqual(sim.stats().civs.map((c) => c.typeName), ['Nomadic', 'Isolationist', 'Expansionist', 'Aggressive']);
   // Padded to the civ count: a missing type takes the default for that number.

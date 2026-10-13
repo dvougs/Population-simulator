@@ -264,15 +264,21 @@ test('RULES.md "Holder": the civ that won a fight there last year takes the hex 
   assert.equal(v.st.holder[45], 0);
 });
 
-test('RULES.md "Holder": a hex that changes hands loses 50% of its store and its planned building; standing buildings stay', () => {
+test('RULES.md "Holder": a hex that changes hands loses its planned building; 50% of its store goes to the new holder\'s capital, 50% stays; standing buildings stay', () => {
   const w = mk(['expansionist', 'aggressive']);
-  w.put(45, 0, 8).upd();
+  w.put(45, 0, 8).put(47, 1, 40).upd(); // civ 1's capital is 47
+  assert.equal(w.st.capital[1], 47);
   w.store(45, { wood: 100, stone: 41 }).build(45, 'huts');
   w.st.plan[45] = B('palisade'); w.st.started[45] = 1; w.st.work[45] = 3;
+  const before = [w.stock(47, 'wood'), w.stock(47, 'stone')];
   w.put(45, 1, 10).upd();
   assert.equal(w.st.holder[45], 1);
-  near(w.stock(45, 'wood'), 50);
+  near(w.stock(45, 'wood'), 50, 1e-9, 'half stays in the hex');
   near(w.stock(45, 'stone'), 20.5);
+  near(w.stock(47, 'wood') - before[0], 50, 1e-9, 'half reaches the new holder\'s capital');
+  near(w.stock(47, 'stone') - before[1], 20.5);
+  near(w.st.looted[1], 70.5, 1e-9, 'tracked in looted[civ]');
+  assert.equal(w.st.looted[0], 0);
   assert.equal(w.st.plan[45], -1);
   assert.equal(w.st.started[45], 0);
   assert.equal(w.st.work[45], 0);
@@ -282,6 +288,35 @@ test('RULES.md "Holder": a hex that changes hands loses 50% of its store and its
   v.put(45, 0, 8).upd();
   v.store(45, { wood: 50 }).upd(3);
   near(v.stock(45, 'wood'), 50);
+  assert.equal(v.st.looted[0], 0);
+});
+
+test('RULES.md "Holder": the loot fills the capital only up to its store cap; the rest is lost', () => {
+  const w = mk(['expansionist', 'aggressive']);
+  w.put(45, 0, 8).put(47, 1, 40).upd();
+  const cap = w.st.storeCap[47];
+  w.store(47, { wood: cap - 10 }).store(45, { wood: 100 });
+  w.put(45, 1, 10).upd();
+  assert.equal(w.st.holder[45], 1);
+  near(w.stock(47, 'wood'), cap, 1e-9, 'filled to the cap');
+  near(w.st.looted[1], 10, 1e-9, 'only what fitted counts');
+  near(w.stock(45, 'wood'), 50);
+  // A full capital takes nothing.
+  const v = mk(['expansionist', 'aggressive']);
+  v.put(45, 0, 8).put(47, 1, 40).upd();
+  v.store(47, { wood: v.st.storeCap[47] }).store(45, { wood: 100 });
+  v.put(45, 1, 10).upd();
+  assert.equal(v.st.looted[1], 0);
+  near(v.stock(45, 'wood'), 50);
+});
+
+test('RULES.md "Holder": when the hex becomes the new holder\'s capital, the half stays in the hex and nothing is carried', () => {
+  const w = mk(['expansionist', 'aggressive']);
+  w.put(45, 0, 8).upd();
+  w.store(45, { wood: 100 });
+  w.put(45, 1, 10).upd();
+  assert.equal(w.st.capital[1], 45);
+  near(w.stock(45, 'wood'), 100);
 });
 
 test('RULES.md "Holder": a hex nobody lives in keeps its buildings and store for 30 years, then they are lost', () => {
@@ -365,12 +400,22 @@ test('RULES.md "Capital": capitalMin is 1.1 times the largest one-material cost 
   lv.level[0] = 3; lv.capitalNeeds();
   near(min(), SETTLE.capitalNeed * 450, 1e-9); // stone 300 + 150 = 450; Great Wall 400
   lv.level[0] = 4; lv.capitalNeeds();
-  near(min(), SETTLE.capitalNeed * 230, 1e-9); // iron 150 + 80; Grand Library 200
+  near(min(), SETTLE.capitalNeed * 400, 1e-9); // iron 150 + 80 = 230; but the unfinished Great Wall (era 3) wants 400 stone
+  lv.buildings.wYear[2] = 5; lv.capitalNeeds();
+  near(min(), SETTLE.capitalNeed * 250, 1e-9, 'the Great Wall is finished: the Hanging Gardens (250 stone, era 2) still count');
+  lv.buildings.wYear[1] = 5; lv.capitalNeeds();
+  near(min(), SETTLE.capitalNeed * 230, 1e-9, 'wonders of eras 1 to 3 finished: only the level and building');
   // A finished building leaves only the level.
   lv.buildings.state[3] = 2; lv.capitalNeeds();
   near(min(), SETTLE.capitalNeed * 230, 1e-9, 'the cap is for the level and the building together even once it stands');
+  lv.buildings.wYear[1] = -1; lv.buildings.wYear[2] = -1;
+  // Every unfinished wonder of its era or earlier counts, the biggest cost deciding.
   lv.level[0] = 5; lv.capitalNeeds();
-  assert.equal(min(), 0, 'a Kingdom needs nothing');
+  near(min(), SETTLE.capitalNeed * 400, 1e-9, 'a Kingdom still keeps what an unfinished wonder costs');
+  lv.buildings.wYear.fill(5); lv.capitalNeeds();
+  assert.equal(min(), 0, 'a Kingdom with every wonder finished needs nothing');
+  lv.level[0] = 2; lv.capitalNeeds();
+  near(min(), SETTLE.capitalNeed * 300, 1e-9, 'level + building (300 wood) with every wonder finished');
 });
 
 test('RULES.md "Supply routes": the capital collects the next level and the era building together (and the wonder if committed and not started)', () => {

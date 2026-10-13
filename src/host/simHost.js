@@ -6,6 +6,7 @@ import { Simulation, startHexes } from '../sim/simulation.js';
 import { mapParams, normalizeParams } from '../sim/params.js';
 import { generateMap, hashMap, countTerrain } from '../sim/mapgen.js';
 import { buildReach, buildStepReach } from '../sim/migration.js';
+import { spreadStarts } from '../sim/life.js';
 
 /** The drawable part of a map: sizes and typed arrays only. */
 function mapData(map) {
@@ -47,6 +48,12 @@ export class LocalSimHost {
     const at = startHexes(params, map);
     const fixed = normalizeParams(params).starts;
     return { starts: Array.from(at), chosen: at.map((h, c) => h >= 0 && fixed[c] === h) };
+  }
+
+  /** Random positions for every civ of `params`, spread as evenly as the land allows (setup screen only). */
+  spreadStarts(params) {
+    const p = normalizeParams(params);
+    return spreadStarts(this.generated(p), p.civCount, Math.random);
   }
 
   /** The map for params, kept while the map settings stay the same (the setup screen asks often). */
