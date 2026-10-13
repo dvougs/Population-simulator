@@ -1,5 +1,5 @@
 // RULES.md "Settlements" (holder, size, capital, store caps, buildings, choosing, building, supply routes) and the
-// rules that read it: "A year" (Births room), "Migration" (crowding), "Fights" (settlement defence), "Gathering and
+// rules that read it: "A year" (Births room), "Migration" (crowding), "War" (settlement walls), "Gathering and
 // levels" (industry yields, civic progress, the capital's store pays), on hand-built hexes.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -9,7 +9,6 @@ import {
   MAX_PROGRESS_BONUS, CIVIC_COUNTED, CAMP, VILLAGE, TOWN, CITY, METROPOLIS, MEGAPOLIS, tierFor, settlementName,
 } from '../../src/sim/settlements.js';
 import { Levels } from '../../src/sim/levels.js';
-import { Contact } from '../../src/sim/contact.js';
 import { room, crowdLine } from '../../src/sim/life.js';
 import { births } from '../../src/sim/life.js';
 import { buildReach, migrate } from '../../src/sim/migration.js';
@@ -1346,40 +1345,6 @@ test('RULES.md "Migration": a hex is crowded above 50% of its support (food capa
   assert.ok(imp > 0.15 && imp < 0.25, `51 people over a line of 50 (${imp})`);
 });
 
-/** A fight in the middle of a 5 x 5 map: civ 1 (Cooperative) held the hex last year with 40 people, 30 now; civ 0 (Aggressive) attacks with 35. */
-function siege(walls, settlementHolder = 1) {
-  const map = makeMap(5, 5, () => PLAINS);
-  map.foodCap.fill(1e6); map.food.fill(1e6);
-  const people = new People(512);
-  const add = (civ, n) => { for (let k = 0; k < n; k++) { const i = people.add(12, civ, 25, 100, 0); people.hunger[i] = 0; people.traits[AGGRESSION][i] = 0.5; people.traits[STRENGTH][i] = 0.5; people.traits[COOPERATION][i] = 0.5; } };
-  add(1, 30); add(0, 35);
-  const contact = new Contact(map, ['aggressive', 'cooperative']);
-  contact.hexDefence = new Float32Array(map.count);
-  contact.hexHolder = new Int8Array(map.count).fill(-1);
-  contact.hexDefence[12] = walls;
-  contact.hexHolder[12] = settlementHolder;
-  const last = new Int32Array(map.count * 2);
-  last[12 * 2 + 1] = 40; last[12 * 2 + 0] = 10;
-  const fights = [];
-  contact.year(people, map, last, 100, new Rng('w'), new Rng('s'), () => {}, (hex, attacker, defender, holder, winner) => fights.push({ attacker, defender, holder, winner }), () => {});
-  return fights;
-}
-
-test('RULES.md "Fights": the holder\'s settlement defence (Palisade +25%, Stone walls +75%, Palace +50%) adds to its strength when the holder also holds the settlement', () => {
-  // Holder 30 x 0.5 = 15 against 17.5: the attacker wins; the holder needs more than 17.5 / 15 - 1 = 16.7% defence.
-  assert.equal(siege(0).length, 1);
-  assert.equal(siege(0)[0].holder, 1);
-  assert.equal(siege(0)[0].winner, 0, 'no walls: 17.5 beats 15');
-  assert.equal(siege(0.15)[0].winner, 0, '17.25 loses to 17.5');
-  assert.equal(siege(0.25)[0].winner, 1, 'a Palisade: 18.75 beats 17.5');
-  assert.equal(siege(0.5)[0].winner, 1, 'a Palace');
-  assert.equal(siege(0.75)[0].winner, 1, 'Stone walls');
-  // The walls are the settlement holder\'s: if the attacker holds the settlement they do not help the fight\'s holder.
-  assert.equal(siege(0.75, 0)[0].winner, 0);
-  assert.equal(siege(0.75, -1)[0].winner, 0, 'nobody holds the settlement');
-  assert.deepEqual([B('palisade'), B('stoneWalls'), B('palace')].map((k) => SETTLEMENT_BUILDINGS[k].effects.defence), [0.25, 0.75, 0.5]);
-});
-
 // ---- events, snapshot and determinism ---------------------------------------------------------------------------------
 
 test('RULES.md "Statistics" city events: a hex reaching its highest tier from city up is reported once; a city taken is reported with the civ it was taken from', () => {
@@ -1480,8 +1445,7 @@ test('a seeded run: housing and imports are wired into births, and the capital o
   const sim = new Simulation({ seed: 'settle-wire', size: 12, civCount: 2, startPop: 40 });
   assert.equal(sim.map.housing, sim.levels.settlements.housing);
   assert.equal(sim.map.imported, sim.levels.settlements.imported);
-  assert.equal(sim.contact.hexDefence, sim.levels.settlements.defence);
-  assert.equal(sim.contact.hexHolder, sim.levels.settlements.holder);
+  assert.equal(sim.war.settle, sim.levels.settlements, 'war reads walls and holders from the settlements');
   const st = sim.levels.settlements;
   for (let y = 0; y < 150; y++) {
     sim.tick();

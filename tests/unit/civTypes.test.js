@@ -35,9 +35,9 @@ test('RULES.md "Civ types": the setup screen text is the type\'s sentence, then 
   assert.equal(civTypeText('expansionist'),
     'Moves on early: its people set out once their hex holds 30% of its food capacity, long before it is crowded at 50%. '
     + 'Starts with heat tolerance 0.55, cold tolerance 0.55; other traits 0.5.');
-  assert.equal(civTypeText('aggressive'), 'Always fights any civ it shares a hex with. Starts with aggression 0.7, strength 0.65; other traits 0.5.');
+  assert.equal(civTypeText('aggressive'), 'Declares war on any civ it borders. Starts with aggression 0.7, strength 0.65; other traits 0.5.');
   assert.equal(civTypeText('cooperative'),
-    'Never starts a fight, and its people leave it for another civ half as often as others do. Starts with cooperation 0.7; other traits 0.5.');
+    'Never declares war and only fights for its own land, and its people leave it for another civ half as often as others do. Starts with cooperation 0.7; other traits 0.5.');
   assert.equal(civTypeText('isolationist'),
     'Keeps to itself: when its hex is crowded, its people only move to land with no other civ in or next to it. Starts with life expectancy 0.6; other traits 0.5.');
   assert.equal(civTypeText('nomadic'),
