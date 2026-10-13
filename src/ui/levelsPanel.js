@@ -80,7 +80,7 @@ export function renderLevels(el, stats) {
 
 const share = (work, years) => `${years > 0 ? Math.floor((work / years) * 100) : 0}%`;
 
-const BUILDING_STATUS = { none: 'not built', building: 'building', standing: 'standing' };
+const BUILDING_STATUS = { building: 'building', standing: 'standing' };
 
 /** The wonder chase in plain words: free, gathering, building x%, owned, taken by Civ N. */
 export function wonderStatus(w) {
@@ -91,10 +91,13 @@ export function wonderStatus(w) {
   return 'free';
 }
 
-/** A civ's era buildings, its current era's wonder and any it is going for or owns, and its total bonuses. */
+/**
+ * A civ's era buildings and wonders that stand or are under way, and its total bonuses.
+ * Ones it has not started are left out: listing them for every civ made the sheet long and noisy.
+ */
 function buildingsBlock(c) {
   const { eras, bonusText } = c.buildings;
-  const items = eras.map((e) => {
+  const items = eras.filter((e) => e.building.status !== 'none').map((e) => {
     const b = e.building;
     const status = b.status === 'building' ? `building ${share(b.work, b.years)}` : BUILDING_STATUS[b.status];
     const lost = b.destroyed ? `, lost ${b.destroyed === 1 ? 'once' : `${b.destroyed} times`}` : '';
@@ -102,7 +105,7 @@ function buildingsBlock(c) {
       h('span', { class: 'b-name' }, `${e.era} ${b.name}`), h('span', { class: 'b-status' }, `${status}${lost}`),
       h('small', {}, b.bonuses.join('; ')));
   });
-  const wonders = eras.filter((e) => e.era === c.level || ['owned', 'building', 'gathering'].includes(e.wonder.status)).map((e) => {
+  const wonders = eras.filter((e) => ['owned', 'building', 'gathering'].includes(e.wonder.status)).map((e) => {
     const w = e.wonder;
     return h('li', { 'data-era': e.era, 'data-status': w.status },
       h('span', { class: 'b-name' }, w.name), h('span', { class: 'b-status' }, wonderStatus(w)),
@@ -110,7 +113,7 @@ function buildingsBlock(c) {
   });
   return h('div', { class: 'level-buildings' },
     h('p', { class: 'b-head' }, 'Buildings'),
-    h('ul', { class: 'b-list' }, items),
+    items.length ? h('ul', { class: 'b-list' }, items) : h('p', { class: 'muted' }, 'None built or under way yet.'),
     wonders.length ? h('p', { class: 'b-head' }, 'Wonders') : null,
     wonders.length ? h('ul', { class: 'b-list wonders' }, wonders) : null,
     h('p', { class: 'b-bonus' }, h('span', { class: 'p-label' }, 'Bonuses: '), bonusText.length ? bonusText.join('; ') : 'none yet'));
