@@ -35,7 +35,7 @@ jobs:
       - name: Collect the static site, code under a per-release address so phones never mix cached old files with new ones
         run: node tools/build-site.js _site
       - uses: actions/configure-pages@v6
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
       - id: deployment
