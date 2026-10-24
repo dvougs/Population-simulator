@@ -22,6 +22,13 @@
   <canvas id="menu-bg" class="menu-bg" aria-hidden="true"></canvas>
 
   <section id="home" class="screen home" aria-labelledby="home-title">
+    <!-- The POP SIM logo across the top: the wide version on landscape and desktop, the stacked one on portrait phones (icons/logo/). -->
+    <h1 id="home-title" class="home-logo enter" style="--i:0">
+      <picture>
+        <source media="(orientation: landscape), (min-width: 700px)" srcset="icons/logo/web.svg" width="1600" height="400">
+        <img src="icons/logo/mobile.svg" alt="POP SIM: Population Simulator" width="390" height="290" decoding="async">
+      </picture>
+    </h1>
     <div class="home-layout">
       <figure class="home-world">
         <canvas id="home-canvas" role="img" aria-label="A small world, alive: civilisations spreading across a hex map"></canvas>
@@ -31,7 +38,6 @@
       </figure>
       <div class="home-text">
         <p class="home-kicker enter" style="--i:0"><span class="kicker-dot" aria-hidden="true"></span>A civilisation sandbox</p>
-        <h1 id="home-title" class="enter" style="--i:1">Population Simulator</h1>
         <p class="home-tagline enter" style="--i:2">Shape a world of hexes, seed it with peoples, and watch every single person in it live, wander, fight and build, year after year.</p>
         <div class="home-actions enter" style="--i:3">
           <button id="btn-new-game" class="btn primary" type="button"><span>New game</span><span class="btn-arrow" aria-hidden="true">&#8594;</span></button>

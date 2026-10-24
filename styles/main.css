@@ -223,9 +223,12 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 6px 
 @media (prefers-reduced-motion: reduce) { .civ-editor { transition: none; } }
 
 /* ---------- Home page ---------- */
-.home { overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+.home { --logo-h: min(26vh, 285px); display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
   padding: calc(16px + var(--safe-top)) calc(18px + var(--safe-right)) calc(20px + var(--safe-bottom)) calc(18px + var(--safe-left)); }
-.home-layout { min-height: 100%; max-width: 1140px; margin: 0 auto; display: grid; gap: 22px; align-content: center; }
+.home-layout { flex: 1 0 auto; width: 100%; max-width: 1140px; margin: 0 auto; display: grid; gap: 22px; align-content: center; }
+/* The POP SIM logo spans the page: full width on portrait phones, capped by --logo-h on landscape and desktop so the world still fits below. */
+.home-logo { flex: 0 0 auto; width: 100%; max-width: 1140px; margin: 0 auto 6px; line-height: 0; font-size: 0; }
+.home-logo img { display: block; width: 100%; height: auto; margin: 0 auto; -webkit-user-select: none; user-select: none; pointer-events: none; }
 .home-world { position: relative; margin: 0 auto; width: min(100%, calc(48vh * 7 / 6)); aspect-ratio: 7 / 6; border-radius: 26px;
   background: rgb(13 38 62); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.07), 0 0 80px rgba(95, 179, 255, 0.12);
   transition: background-color 0.6s, box-shadow 0.6s; }
@@ -271,8 +274,6 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 6px 
   border: 1px solid rgba(95, 179, 255, 0.35); background: rgba(95, 179, 255, 0.1);
   color: #a9d8ff; font-weight: 700; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.14em; }
 .kicker-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
-.home-text h1 { margin: 0; font-size: clamp(2.3rem, 10vw, 4rem); line-height: 1; letter-spacing: -0.035em; font-weight: 850;
-  background: var(--grad-text); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .home-tagline { margin: 14px 0 22px; font-size: 1.08rem; line-height: 1.55; color: #b4bfcf; text-wrap: pretty; }
 .home-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .home-actions .btn { min-height: 56px; font-size: 1.08rem; font-weight: 700; border-radius: 16px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
@@ -290,18 +291,19 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 6px 
 /* Landscape and desktop: the living world on the left, the words on the right. */
 @media (orientation: landscape) and (min-width: 560px) {
   .home-layout { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: center; gap: 32px; }
-  .home-world { width: min(100%, calc((100vh - 40px - var(--safe-top) - var(--safe-bottom)) * 7 / 6)); }
-  .home-text h1 { font-size: clamp(2rem, 5.4vw, 4.2rem); }
+  .home-logo img { width: min(100%, calc(var(--logo-h) * 4)); }
+  .home-world { width: min(100%, calc((100vh - 46px - var(--logo-h) - var(--safe-top) - var(--safe-bottom)) * 7 / 6)); }
 }
 @media (max-width: 480px) { .how-intro { font-size: 1.04rem; } }
 @media (orientation: landscape) and (max-height: 500px) {
   .home { padding-top: calc(10px + var(--safe-top)); padding-bottom: calc(10px + var(--safe-bottom)); }
-  .home-world { width: min(100%, calc((100vh - 24px - var(--safe-top) - var(--safe-bottom)) * 7 / 6)); }
+  .home { --logo-h: 18vh; }
+  .home-logo { margin-bottom: 2px; }
+  .home-world { width: min(100%, calc((100vh - 26px - var(--logo-h) - var(--safe-top) - var(--safe-bottom)) * 7 / 6)); }
   .home-kicker { margin-bottom: 6px; padding-top: 4px; padding-bottom: 4px; }
   .home-points li { display: block; font-size: 0.78rem; }
   .home-points .point-icon { display: none; }
   .home-points strong { display: block; font-size: 0.85rem; }
-  .home-text h1 { font-size: clamp(1.8rem, 4.6vw, 2.6rem); }
   .home-tagline { margin: 8px 0 14px; font-size: 0.95rem; }
   .home-actions .btn { min-height: 48px; }
   .home-points { margin-top: 12px; gap: 8px; }
@@ -309,7 +311,6 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 6px 
 }
 /* Very short landscape phones: the points shrink to their headlines so the whole page fits without scrolling. */
 @media (orientation: landscape) and (max-height: 420px) {
-  .home-text h1 { font-size: 2rem; }
   .home-tagline { font-size: 0.9rem; line-height: 1.45; margin-bottom: 12px; }
   .home-points { gap: 6px; margin-top: 10px; }
   .home-points li > span:last-child { display: none; }
